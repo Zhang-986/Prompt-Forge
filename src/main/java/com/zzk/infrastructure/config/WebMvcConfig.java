@@ -1,0 +1,47 @@
+package com.zzk.infrastructure.config;
+
+import com.zzk.infrastructure.interceptor.LoginInterceptor;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+/**
+ * Web MVC 配置
+ * 
+ * @author zzk
+ * @since 1.0.0
+ */
+@Configuration
+@RequiredArgsConstructor
+public class WebMvcConfig implements WebMvcConfigurer {
+
+    private final LoginInterceptor loginInterceptor;
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(loginInterceptor)
+                // 需要拦截的路径
+                .addPathPatterns("/api/**")
+                // 排除的路径（不需要登录）
+                .excludePathPatterns(
+                    // 用户登录注册
+                    "/api/users/login",
+                    "/api/users/register",
+                    // 获取模型列表（公开）
+                    "/api/arena/models",
+                    // Swagger 文档
+                    "/swagger-ui/**",
+                    "/v3/api-docs/**",
+                    // 静态资源
+                    "/",
+                    "/index.html",
+                    "/login.html",
+                    "/*.html",
+                    "/css/**",
+                    "/js/**",
+                    "/favicon.ico",
+                    "/error"
+                );
+    }
+}

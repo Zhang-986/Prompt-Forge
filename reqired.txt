@@ -1,0 +1,341 @@
+# 📋 Prompt-Forge 深度业务逻辑限定版 Prompt（大厂增强版）
+
+---
+
+## 📌 复制以下内容给 AI
+
+```markdown
+# Role
+你现在的身份是 Google 和阿里 P8 级别的资深 Java 架构师。你需要辅佐我开发一个名为 "Prompt-Forge" (企业级 Prompt 协同平台) 的后端系统。
+基础包路径必须严格为: `com.zzk`
+
+# Project Goal
+这是一个**高复杂度的 PromptOps 系统**，核心目标是帮助开发者通过"控制变量法"和"并行竞技"来迭代 Prompt。
+**切记：这不是一个简单的聊天 Demo，请严格按照以下复杂的业务逻辑生成代码。**
+**必须体现：高并发、高可用、可扩展的大厂级别架构设计。**
+
+---
+
+# Architecture: DDD (Domain-Driven Design)
+为了承载复杂的业务逻辑，必须采用 DDD 分层架构：
+
+| 层级 | 包路径 | 职责 |
+|------|--------|------|
+| Interface Layer | `com.zzk.interfaces` | Web Controller、DTO、参数校验 |
+| Application Layer | `com.zzk.application` | 业务编排、事务控制、DTO 转换、防腐层 |
+| Domain Layer | `com.zzk.domain` | **核心业务逻辑**、充血模型、领域服务、领域事件 |
+| Infrastructure Layer | `com.zzk.infrastructure` | AI 调用、数据库持久化、缓存、消息队列、外部服务集成 |
+
+---
+
+# ====== 核心功能模块 ======
+
+## Core Feature 1: The Arena（多模型竞技场）- 深度逻辑约束
+
+### 业务背景
+用户输入一套 Prompt 模板（含变量 `{{topic}}`、`{{style}}` 等）和一组变量值，系统需要让 DeepSeek、GPT-4、Claude 等多个模型**同时作答**，供用户对比评估。
+
+### 必须实现的逻辑流 (Strict Flow)
+
+#### Step 1: 输入解析与模板渲染
+- `ArenaAppService` 接收请求后，调用 `PromptTemplateEngine` 工具类
+- 使用**正则表达式**解析 Prompt 模板中的 `{{xxx}}` 变量占位符
+- 用用户传入的 `Map<String, Object>` 进行变量替换，生成最终 Prompt
+- **边界处理**：变量缺失时抛出 `VariableMissingException`
+
+#### Step 2: 策略模式路由 (Strategy Pattern)
+- 在 `infrastructure` 层定义 `LlmGenerationStrategy` 接口：
+  ```java
+  public interface LlmGenerationStrategy {
+      String getModelId();
+      Flux<String> generate(String prompt, GenerationConfig config);
+  }
+  ```
+- 必须实现至少三个策略类：
+  - `OpenAiStrategy` (GPT-4/GPT-4o)
+  - `DeepSeekStrategy`
+  - `ClaudeStrategy`
+- **禁止**使用 `if (type.equals("gpt"))` 这种硬编码写法
+- 必须使用 `Map<String, LlmGenerationStrategy>` 或 Spring 的 `@Qualifier` + 自动注入实现路由
+
+#### Step 3: 并行编排与资源隔离 (Concurrency)
+- **严禁**在循环中串行调用模型（面试红线！）
+- 必须创建**自定义线程池** `ThreadPoolExecutor`：
+  ```java
+  @Bean("arenaExecutor")
+  public ThreadPoolExecutor arenaExecutor() {
+      return new ThreadPoolExecutor(
+          10, 50, 60L, TimeUnit.SECONDS,
+          new LinkedBlockingQueue<>(200),
+          new ThreadFactoryBuilder().setNameFormat("arena-pool-%d").build(),
+          new CallerRunsPolicy() // 拒绝策略：调用者执行
+      );
+  }
+  ```
+- 使用 `CompletableFuture.supplyAsync(task, arenaExecutor)` 发起 N 个模型调用
+- 使用 `CompletableFuture.allOf(...)` 等待所有结果，或流式聚合
+
+#### Step 4: 熔断降级与限流 (Resilience)
+- 集成 **Resilience4j** 实现熔断：
+  ```java
+  @CircuitBreaker(name = "llmService", fallbackMethod = "generateFallback")
+  @RateLimiter(name = "llmService", fallbackMethod = "rateLimitFallback")
+  @Retry(name = "llmService", maxAttempts = 3)
+  public Flux<String> generate(String prompt) { ... }
+  ```
+- 熔断配置：失败率 > 50% 时熔断，等待 30s 后半开
+- 限流配置：每秒最多 100 次请求
+- **降级兜底**：返回友好提示 "【模型繁忙，请稍后重试】"
+
+#### Step 5: 流式分发 (SSE Streaming)
+- Controller 必须返回 `SseEmitter` 或 `Flux<ServerSentEvent<T>>`
+- 当任意模型产生输出时，封装为 Event 实时推送：
+  ```json
+  {
+    "modelId": "gpt-4",
+    "content": "这是",
+    "sequence": 1,
+    "finished": false
+  }
+  ```
+- 实现"多窗口同时打字"的实时效果
+- 支持客户端主动断开连接的优雅处理
+
+---
+
+## Core Feature 2: The Versioning（Prompt 版本树）- 深度逻辑约束
+
+### 业务背景
+Prompt 需要像 Git 一样管理。修改不是覆盖，而是"提交（commit）"。支持版本回溯、分支对比。
+
+### 必须实现的逻辑流 (Strict Flow)
+
+#### Step 1: 聚合根设计 (Aggregate)
+- **Prompt** (Aggregate Root)：
+  ```java
+  public class Prompt {
+      private Long id;
+      private String name;
+      private Long latestVersionId;  // HEAD 指针
+      private Long creatorId;
+      private LocalDateTime createdAt;
+  }
+  ```
+- **PromptVersion** (Entity)：
+  ```java
+  public class PromptVersion {
+      private Long id;
+      private Long promptId;
+      private String content;
+      private String variables;  // JSON: {"topic": "string", "style": "enum"}
+      private Long parentId;     // 父版本 ID，形成链式结构
+      private String commitMessage;
+      private Long authorId;
+      private LocalDateTime createdAt;
+  }
+  ```
+
+#### Step 2: 提交逻辑 (commit operation)
+- 调用 `PromptDomainService.commit(promptId, newContent, parentVersionId, commitMessage)`
+- **Diff 检查**：对比 `newContent` 与 `parentVersion.content`
+  - 如果完全一致 → 抛出 `NoChangeException("内容无变化，无需提交")`
+  - 可选：生成 Diff 摘要存储（便于展示变更历史）
+- **分布式锁**：使用 Redis 分布式锁防止并发提交冲突
+  ```java
+  @DistributedLock(key = "'prompt:commit:' + #promptId", waitTime = 5, leaseTime = 30)
+  public PromptVersion commit(...) { ... }
+  ```
+- **链式存储**：INSERT 新记录，设置 `parentId`
+- **HEAD 更新**：更新 `prompts.latestVersionId` 指向新版本
+
+#### Step 3: 数据不可变性 (Immutability)
+- `prompt_versions` 表数据**绝对禁止 UPDATE**，只能 INSERT
+- 这是 Event Sourcing 思想的体现，便于审计追溯
+
+#### Step 4: 版本树查询
+- 支持 `getVersionHistory(promptId)` 获取完整版本链
+- 支持 `getVersionDiff(versionId1, versionId2)` 对比两个版本差异
+- 支持 `rollback(promptId, targetVersionId)` 回滚（本质是创建新版本指向旧内容）
+
+---
+
+## Core Feature 3: 缓存架构（Redis 多级缓存）- 新增亮点
+
+### 业务背景
+Prompt 模板会被高频读取，需要高性能缓存架构。
+
+### 必须实现的逻辑
+
+#### 多级缓存设计
+```
+请求 → Caffeine 本地缓存(L1) → Redis 分布式缓存(L2) → MySQL
+```
+
+- **L1 本地缓存**：Caffeine，容量 1000，过期时间 5 分钟
+- **L2 分布式缓存**：Redis，过期时间 30 分钟
+- 使用 `@Cacheable` + 自定义 `CacheManager` 实现
+
+#### 缓存一致性
+- 写操作时使用 **Cache-Aside 模式**：先更新 DB，再删除缓存
+- 防止缓存击穿：热点 Key 使用互斥锁
+- 防止缓存穿透：布隆过滤器 or 缓存空值
+- 防止缓存雪崩：过期时间加随机值
+
+---
+
+## Core Feature 4: 用户与权限（多租户隔离）- 新增亮点
+
+### 业务背景
+企业级平台需要支持多团队协作，数据隔离。
+
+### 必须实现的逻辑
+
+#### RBAC 权限模型
+- **用户(User)** → **角色(Role)** → **权限(Permission)**
+- 预设角色：`ADMIN`（管理员）、`MEMBER`（成员）、`VIEWER`（只读）
+
+#### 多租户设计
+- 每个 Prompt 归属于一个 **Workspace（工作空间）**
+- 使用 `TenantContext` (ThreadLocal) 存储当前租户 ID
+- MyBatis-Plus 拦截器自动填充租户条件
+
+#### 接口权限校验
+```java
+@PreAuthorize("hasPermission(#promptId, 'PROMPT', 'WRITE')")
+public void updatePrompt(Long promptId, UpdatePromptCmd cmd) { ... }
+```
+
+---
+
+## Core Feature 5: 任务队列与异步处理 - 新增亮点
+
+### 业务背景
+批量测试、大规模评估等耗时任务需要异步处理。
+
+### 必须实现的逻辑
+
+#### 消息队列集成
+- 使用 **RocketMQ** 或 **Redis Stream** 作为任务队列
+- 任务类型：`BATCH_ARENA`（批量竞技）、`EXPORT_REPORT`（导出报告）
+
+#### 任务状态机
+```
+PENDING → RUNNING → SUCCESS / FAILED
+```
+- 提供 `getTaskStatus(taskId)` 查询接口
+- 支持任务取消、重试
+
+---
+
+# ====== 技术栈约束 ======
+
+| 类别 | 技术选型 | 版本 |
+|------|----------|------|
+| 语言 | Java | 17+ |
+| 框架 | Spring Boot | 3.3.x |
+| AI | Spring AI | 1.0.0-M1+ |
+| ORM | MyBatis-Plus | 3.5.x |
+| 缓存 | Redis + Caffeine | - |
+| 熔断 | Resilience4j | 2.x |
+| 分布式锁 | Redisson | 3.x |
+| JSON | FastJson2 | 2.x |
+| 工具 | Lombok, MapStruct | - |
+| API 文档 | SpringDoc OpenAPI | 2.x |
+
+---
+
+# ====== 数据库设计要求 ======
+
+请自行设计数据库表结构，必须包含：
+1. `users` - 用户表
+2. `workspaces` - 工作空间表
+3. `prompts` - Prompt 主表（聚合根）
+4. `prompt_versions` - 版本表（链式结构）
+5. `arena_sessions` - 竞技场会话表
+6. `arena_results` - 竞技场结果表
+7. `async_tasks` - 异步任务表
+
+---
+
+# ====== 第一次交互 ======
+
+**请不要一次性生成所有代码。**
+
+请先扮演架构师角色，完成以下任务：
+
+1. **分析业务难点**：针对上述 5 个 Feature，分析每个功能的技术难点和风险点
+
+2. **列出核心类清单**：按 DDD 分层列出你准备创建的核心 Java 类（包含完整包路径），格式如下：
+   ```
+   ## Interface Layer
+   - com.zzk.interfaces.controller.ArenaController
+   - ...
+
+   ## Application Layer
+   - com.zzk.application.service.ArenaAppService
+   - ...
+
+   ## Domain Layer
+   - com.zzk.domain.model.Prompt
+   - com.zzk.domain.service.PromptDomainService
+   - ...
+
+   ## Infrastructure Layer
+   - com.zzk.infrastructure.ai.strategy.OpenAiStrategy
+   - ...
+   ```
+
+3. **确认技术方案**：列出你对关键技术点的实现思路（线程池配置、缓存策略、分布式锁实现等）
+
+等我确认结构后，再分模块生成代码。
+```
+
+---
+
+## 💡 使用说明
+
+### 为什么这个版本更强？
+
+| 升级点 | 说明 |
+|--------|------|
+| ✅ **熔断降级** | 集成 Resilience4j，面试必问的高可用设计 |
+| ✅ **多级缓存** | Caffeine + Redis 二级缓存，体现性能优化能力 |
+| ✅ **分布式锁** | Redisson 实现，解决并发提交冲突 |
+| ✅ **多租户隔离** | RBAC + 工作空间，体现企业级架构思维 |
+| ✅ **异步任务** | 消息队列 + 状态机，体现解耦和削峰能力 |
+| ✅ **DDD 规范化** | 分层更清晰，聚合根、领域服务定义明确 |
+
+### 🚀 你的操作步骤
+
+1. **复制上面 markdown 代码块中的内容给 AI**
+2. AI 会先列出核心类清单和技术分析
+3. 你确认后说：**"结构没问题，先帮我生成 Feature 1 (Arena) 的核心代码"**
+4. 逐步迭代其他模块
+
+### 🎯 面试话术预备
+
+当面试官问到这个项目时，你可以这样描述：
+
+> "这是我独立设计的企业级 Prompt 管理平台，采用 DDD 架构。核心亮点包括：
+> 1. **多模型竞技场**：使用策略模式 + CompletableFuture 实现多 AI 模型并行调用，通过 SSE 实现流式推送
+> 2. **类 Git 版本控制**：使用链式存储结构实现 Prompt 版本树，支持 Diff 对比和回滚
+> 3. **高可用设计**：集成 Resilience4j 实现熔断降级限流，Caffeine+Redis 二级缓存，Redisson 分布式锁
+> 4. **企业级特性**：RBAC 权限控制，多租户数据隔离，异步任务队列"
+
+---
+
+## 📊 项目亮点雷达图
+
+```
+          技术深度
+             ⭐⭐⭐⭐⭐
+            /         \
+   高可用设计           业务复杂度
+   ⭐⭐⭐⭐⭐             ⭐⭐⭐⭐
+          \            /
+           \          /
+            架构设计
+            ⭐⭐⭐⭐⭐
+```
+
+这个版本足以冲刺：**字节、阿里、腾讯、美团、快手** 等一线大厂！

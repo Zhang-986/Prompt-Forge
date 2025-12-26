@@ -1,0 +1,198 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: prompt-forge
+
+  profiles:
+    active: dev
+
+  # ==================== 数据源配置 ====================
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://43.137.99.180:20611/prompt_forge?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: ZZk20050920
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 30000
+      pool-name: PromptForgeHikariPool
+      max-lifetime: 1800000
+      connection-timeout: 30000
+
+  # ==================== Redis 配置 ====================
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      timeout: 10000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-wait: -1ms
+          max-idle: 10
+          min-idle: 5
+
+  # ==================== Spring AI 配置 ====================
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:sk-your-api-key}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      chat:
+        options:
+          model: gpt-4
+          temperature: 0.7
+
+# ==================== MyBatis-Plus 配置 ====================
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.zzk.domain.model
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# ==================== Redisson 分布式锁配置 ====================
+redisson:
+  single-server-config:
+    address: redis://localhost:6379
+    database: 0
+    connection-minimum-idle-size: 5
+    connection-pool-size: 20
+
+# ==================== Resilience4j 熔断配置 ====================
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
+      llmService:
+        base-config: default
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+      arenaService:
+        base-config: default
+        failure-rate-threshold: 60
+
+  ratelimiter:
+    configs:
+      default:
+        limit-for-period: 100
+        limit-refresh-period: 1s
+        timeout-duration: 5s
+    instances:
+      llmService:
+        base-config: default
+        limit-for-period: 50
+      arenaService:
+        base-config: default
+        limit-for-period: 20
+
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 1s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+    instances:
+      llmService:
+        base-config: default
+        max-attempts: 3
+
+# ==================== 线程池配置 ====================
+thread-pool:
+  arena:
+    core-size: 10
+    max-size: 50
+    queue-capacity: 200
+    keep-alive-seconds: 60
+    thread-name-prefix: arena-pool-
+  async:
+    core-size: 5
+    max-size: 20
+    queue-capacity: 100
+    keep-alive-seconds: 60
+    thread-name-prefix: async-pool-
+
+# ==================== 缓存配置 ====================
+cache:
+  caffeine:
+    prompt:
+      initial-capacity: 100
+      maximum-size: 1000
+      expire-after-write-minutes: 5
+    user:
+      initial-capacity: 50
+      maximum-size: 500
+      expire-after-write-minutes: 10
+  redis:
+    prompt:
+      expire-minutes: 30
+    user:
+      expire-minutes: 60
+
+# ==================== AI 模型配置 ====================
+llm:
+  models:
+    openai:
+      enabled: true
+      api-key: ${OPENAI_API_KEY:sk-your-api-key}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      model: gpt-4
+      timeout-seconds: 60
+    deepseek:
+      enabled: true
+      api-key: ${DEEPSEEK_API_KEY:sk-your-api-key}
+      base-url: https://api.deepseek.com
+      model: deepseek-chat
+      timeout-seconds: 60
+    claude:
+      enabled: false
+      api-key: ${CLAUDE_API_KEY:sk-your-api-key}
+      base-url: https://api.anthropic.com
+      model: claude-3-opus-20240229
+      timeout-seconds: 60
+
+# ==================== API 文档配置 ====================
+springdoc:
+  api-docs:
+    enabled: true
+    path: /api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  info:
+    title: Prompt-Forge API
+    description: 企业级 Prompt 协同平台 API 文档
+    version: 1.0.0
+
+# ==================== 日志配置 ====================
+logging:
+  level:
+    root: INFO
+    com.zzk: DEBUG
+    org.springframework.ai: DEBUG
+    io.github.resilience4j: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
