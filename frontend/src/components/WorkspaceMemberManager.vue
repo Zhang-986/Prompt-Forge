@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
-import { getWorkspaceMembers, addWorkspaceMember, removeWorkspaceMember, type WorkspaceMember } from '../api/workspace'
+import { getWorkspaceMembers, addWorkspaceMember, removeWorkspaceMember, updateMemberRole, type WorkspaceMember } from '../api/workspace'
 import { searchUser } from '../api/user'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { message, Modal } from 'ant-design-vue'
+import { DeleteOutlined } from '@ant-design/icons-vue'
 
 const props = defineProps<{
   workspaceId: number
@@ -41,7 +42,7 @@ const loadMembers = async () => {
 // 搜索用户
 const handleSearch = async () => {
   if (!searchUsername.value.trim()) {
-    ElMessage.warning('请输入用户名')
+    message.warning('请输入用户名')
     return
   }
   
@@ -53,15 +54,15 @@ const handleSearch = async () => {
       // 检查是否已经是成员
       const exists = members.value.some(m => m.userId === res.data.id)
       if (exists) {
-        ElMessage.warning('该用户已经是成员')
+        message.warning('该用户已经是成员')
         return
       }
       searchResult.value = res.data
     } else {
-      ElMessage.error(res.message || '未找到用户')
+      message.error(res.message || '未找到用户')
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '搜索失败')
+    message.error(error.response?.data?.message || '搜索失败')
   } finally {
     searchLoading.value = false
   }
@@ -77,38 +78,50 @@ const handleInvite = async () => {
       role: selectedRole.value
     })
     if (res.code === 200) {
-      ElMessage.success('邀请成功')
+      message.success('邀请成功')
       searchUsername.value = ''
       searchResult.value = null
       await loadMembers()
     } else {
-      ElMessage.error(res.message || '邀请失败')
+      message.error(res.message || '邀请失败')
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '邀请失败')
+    message.error(error.response?.data?.message || '邀请失败')
   }
 }
 
 // 移除成员
-const handleRemove = async (member: WorkspaceMember) => {
+const handleRemove = (member: WorkspaceMember) => {
+  Modal.confirm({
+    title: '确认移除',
+    content: `确定要移除成员 "${member.username}" 吗？`,
+    okType: 'danger',
+    onOk: async () => {
+      const res = await removeWorkspaceMember(props.workspaceId, member.userId)
+      if (res.code === 200) {
+        message.success('移除成功')
+        await loadMembers()
+      } else {
+        message.error(res.message || '移除失败')
+      }
+    }
+  })
+}
+
+// 修改成员角色
+const handleRoleChange = async (member: WorkspaceMember, newRole: 'ADMIN' | 'MEMBER' | 'VIEWER') => {
+  if (member.role === newRole) return
+  
   try {
-    await ElMessageBox.confirm(
-      `确定要移除成员 "${member.username}" 吗？`,
-      '确认移除',
-      { type: 'warning' }
-    )
-    
-    const res = await removeWorkspaceMember(props.workspaceId, member.userId)
+    const res = await updateMemberRole(props.workspaceId, member.userId, newRole)
     if (res.code === 200) {
-      ElMessage.success('移除成功')
+      message.success('角色更新成功')
       await loadMembers()
     } else {
-      ElMessage.error(res.message || '移除失败')
+      message.error(res.message || '更新失败')
     }
   } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.message || '移除失败')
-    }
+    message.error(error.response?.data?.message || '更新失败')
   }
 }
 
@@ -197,9 +210,16 @@ onMounted(() => {
           <div v-for="member in members" :key="member.id" class="member-item">
             <div class="member-info">
               <span class="member-name">{{ member.username }}</span>
-              <span class="member-role" :style="{ color: getRoleColor(member.role) }">
-                {{ getRoleName(member.role) }}
-              </span>
+              <select 
+                class="role-select-inline" 
+                :value="member.role"
+                @change="handleRoleChange(member, ($event.target as HTMLSelectElement).value as any)"
+                :style="{ color: getRoleColor(member.role) }"
+              >
+                <option value="ADMIN">管理员</option>
+                <option value="MEMBER">成员</option>
+                <option value="VIEWER">观察者</option>
+              </select>
             </div>
             <button 
               v-if="member.role !== 'ADMIN'" 
@@ -207,7 +227,7 @@ onMounted(() => {
               @click="handleRemove(member)"
               title="移除成员"
             >
-              🗑️
+              <DeleteOutlined />
             </button>
           </div>
           <div v-if="members.length === 0" class="empty">暂无成员</div>
@@ -383,6 +403,25 @@ onMounted(() => {
   padding: 2px 8px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 4px;
+}
+
+.role-select-inline {
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.role-select-inline:hover {
+  border-color: #5e6ad2;
+}
+
+.role-select-inline option {
+  background: #1a1a2e;
+  color: #fff;
 }
 
 .remove-btn {

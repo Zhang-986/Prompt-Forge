@@ -1,5 +1,5 @@
 import axios, { AxiosError } from 'axios'
-import { ElMessage, ElNotification } from 'element-plus'
+import { message, notification } from 'ant-design-vue'
 
 // 错误码映射
 const ERROR_MESSAGES: Record<number, string> = {
@@ -54,7 +54,7 @@ request.interceptors.response.use(
         // 业务层面的错误 (code !== 200)
         if (data && data.code && data.code !== 200) {
             const errorMessage = data.message || BUSINESS_ERROR_CODES[data.code] || '操作失败'
-            ElMessage.error(errorMessage)
+            message.error(errorMessage)
             // 记录 traceId 用于问题排查
             if (data.traceId) {
                 console.error(`[TraceId: ${data.traceId}] ${errorMessage}`)
@@ -67,18 +67,16 @@ request.interceptors.response.use(
         // 网络错误
         if (!error.response) {
             if (error.code === 'ECONNABORTED') {
-                ElNotification({
-                    title: '请求超时',
-                    message: '服务器响应超时，请检查网络连接后重试',
-                    type: 'error',
-                    duration: 5000
+                notification.error({
+                    message: '请求超时',
+                    description: '服务器响应超时，请检查网络连接后重试',
+                    duration: 5
                 })
             } else {
-                ElNotification({
-                    title: '网络错误',
-                    message: '无法连接到服务器，请检查网络连接',
-                    type: 'error',
-                    duration: 5000
+                notification.error({
+                    message: '网络错误',
+                    description: '无法连接到服务器，请检查网络连接',
+                    duration: 5
                 })
             }
             return Promise.reject(error)
@@ -91,7 +89,7 @@ request.interceptors.response.use(
         if (status === 401) {
             localStorage.removeItem('token')
             localStorage.removeItem('user')
-            ElMessage.warning('登录已过期，请重新登录')
+            message.warning('登录已过期，请重新登录')
             setTimeout(() => {
                 window.location.href = '/login'
             }, 1500)
@@ -100,18 +98,17 @@ request.interceptors.response.use(
 
         // 429 请求过于频繁
         if (status === 429) {
-            ElNotification({
-                title: '请求频繁',
-                message: '您的操作过于频繁，请稍后再试',
-                type: 'warning',
-                duration: 5000
+            notification.warning({
+                message: '请求频繁',
+                description: '您的操作过于频繁，请稍后再试',
+                duration: 5
             })
             return Promise.reject(error)
         }
 
         // 其他 HTTP 错误
         const errorMessage = data?.message || ERROR_MESSAGES[status] || `请求失败 (${status})`
-        ElMessage.error(errorMessage)
+        message.error(errorMessage)
 
         // 记录 traceId 用于问题排查
         if (data?.traceId) {

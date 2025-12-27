@@ -106,3 +106,8 @@ export const getVersionDiff = (versionId1: number, versionId2: number) => {
         params: { versionId1, versionId2 }
     })
 }
+
+// 更新 Prompt 信息
+export const updatePrompt = (id: number, data: { name: string; description?: string }) => {
+    return request.put<any, { code: number; data: Prompt; message: string }>(`/prompts/${id}`, data)
+}

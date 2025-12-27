@@ -2,7 +2,11 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getPrompt, getVersionHistory, commitVersion, rollbackVersion, getVersionDiff, type Prompt, type PromptVersion, type DiffResult } from '../api/prompt'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { message, Modal } from 'ant-design-vue'
+import { ArrowLeftOutlined, EditOutlined, RobotOutlined, HistoryOutlined, SwapOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { optimizePrompt } from '../api/optimize'
+import { getAvailableModels } from '../api/arena'
+
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +21,61 @@ const expandedVersions = ref<Set<number>>(new Set())
 const newContent = ref('')
 const commitMessage = ref('')
 const committing = ref(false)
+const optimizing = ref(false)
+
+// AI 优化模型选择
+const showModelSelectModal = ref(false)
+const availableModels = ref<string[]>([])
+const selectedOptimizeModel = ref<string>('')
+const loadingModels = ref(false)
+
+const openOptimizeModal = async () => {
+  if (!newContent.value.trim()) {
+    message.warning('请先输入一些内容作为基础，AI 才能帮你优化')
+    return
+  }
+
+  // 加载可用模型
+  loadingModels.value = true
+  try {
+    const res = await getAvailableModels()
+    if (res.code === 200 && res.data.length > 0) {
+      availableModels.value = res.data
+      selectedOptimizeModel.value = res.data[0] // 默认选第一个
+      showModelSelectModal.value = true
+    } else {
+      message.error('请先在模型配置中添加至少一个 AI 模型')
+    }
+  } catch (error) {
+    message.error('加载模型列表失败')
+  } finally {
+    loadingModels.value = false
+  }
+}
+
+const handleOptimize = async () => {
+  if (!selectedOptimizeModel.value) {
+    message.warning('请选择一个模型')
+    return
+  }
+
+  showModelSelectModal.value = false
+  optimizing.value = true
+  try {
+    const res = await optimizePrompt(newContent.value, selectedOptimizeModel.value)
+    if (res.code === 200) {
+      newContent.value = res.data
+      message.success('优化完成，请检查内容')
+    } else {
+      message.error(res.message || '优化失败')
+    }
+  } catch (error) {
+    message.error('AI 服务暂时不可用，请确保已配置模型')
+  } finally {
+    optimizing.value = false
+  }
+}
+
 
 // Diff 相关状态
 const showDiffModal = ref(false)
@@ -33,7 +92,7 @@ const loadPrompt = async () => {
       prompt.value = res.data
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '加载 Prompt 失败')
+    message.error(error.response?.data?.message || '加载 Prompt 失败')
   }
 }
 
@@ -49,10 +108,10 @@ const loadVersions = async () => {
         newContent.value = res.data[0].content
       }
     } else {
-      ElMessage.error(res.message || '加载版本历史失败')
+      message.error(res.message || '加载版本历史失败')
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '加载版本历史失败')
+    message.error(error.response?.data?.message || '加载版本历史失败')
   } finally {
     loading.value = false
   }
@@ -61,11 +120,11 @@ const loadVersions = async () => {
 // 提交新版本
 const handleCommit = async () => {
   if (!newContent.value.trim()) {
-    ElMessage.warning('请输入内容')
+    message.warning('请输入内容')
     return
   }
   if (!commitMessage.value.trim()) {
-    ElMessage.warning('请输入提交说明')
+    message.warning('请输入提交说明')
     return
   }
 
@@ -78,40 +137,35 @@ const handleCommit = async () => {
       commitMessage: commitMessage.value
     })
     if (res.code === 200) {
-      ElMessage.success('提交成功')
+      message.success('提交成功')
       commitMessage.value = ''
       loadVersions()
     } else {
-      ElMessage.error(res.message || '提交失败')
+      message.error(res.message || '提交失败')
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '提交失败')
+    message.error(error.response?.data?.message || '提交失败')
   } finally {
     committing.value = false
   }
 }
 
 // 回滚版本
-const handleRollback = async (version: PromptVersion) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要回滚到 v${version.versionNumber} 吗？这将创建一个新版本。`,
-      '确认回滚',
-      { type: 'warning' }
-    )
-
-    const res = await rollbackVersion(promptId.value, version.id)
-    if (res.code === 200) {
-      ElMessage.success('回滚成功')
-      loadVersions()
-    } else {
-      ElMessage.error(res.message || '回滚失败')
+const handleRollback = (version: PromptVersion) => {
+  Modal.confirm({
+    title: '确认回滚',
+    content: `确定要回滚到 v${version.versionNumber} 吗？这将创建一个新版本。`,
+    okType: 'danger',
+    onOk: async () => {
+      const res = await rollbackVersion(promptId.value, version.id)
+      if (res.code === 200) {
+        message.success('回滚成功')
+        loadVersions()
+      } else {
+        message.error(res.message || '回滚失败')
+      }
     }
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.message || '回滚失败')
-    }
-  }
+  })
 }
 
 // 切换展开
@@ -127,9 +181,9 @@ const toggleExpand = (versionId: number) => {
 const copyContent = async (content: string) => {
   try {
     await navigator.clipboard.writeText(content)
-    ElMessage.success('已复制')
+    message.success('已复制')
   } catch {
-    ElMessage.error('复制失败')
+    message.error('复制失败')
   }
 }
 
@@ -137,7 +191,7 @@ const copyContent = async (content: string) => {
 const loadLatest = () => {
   if (versions.value.length > 0) {
     newContent.value = versions.value[0].content
-    ElMessage.success('已加载最新版本')
+    message.success('已加载最新版本')
   }
 }
 
@@ -147,7 +201,7 @@ const loadLatest = () => {
 const enterCompareMode = () => {
   compareMode.value = true
   selectedVersions.value = []
-  ElMessage.info('请选择两个版本进行对比')
+  message.info('请选择两个版本进行对比')
 }
 
 // 退出对比模式
@@ -159,7 +213,7 @@ const exitCompareMode = () => {
 // 选择版本进行对比
 const selectVersionForCompare = (versionId: number) => {
   if (!compareMode.value) return
-  
+
   const index = selectedVersions.value.indexOf(versionId)
   if (index > -1) {
     // 已选中，取消选择
@@ -172,7 +226,7 @@ const selectVersionForCompare = (versionId: number) => {
     selectedVersions.value.shift()
     selectedVersions.value.push(versionId)
   }
-  
+
   // 如果选中了两个版本，自动开始对比
   if (selectedVersions.value.length === 2) {
     performDiff()
@@ -187,13 +241,13 @@ const isVersionSelected = (versionId: number) => {
 // 执行 Diff
 const performDiff = async () => {
   if (selectedVersions.value.length !== 2) {
-    ElMessage.warning('请选择两个版本')
+    message.warning('请选择两个版本')
     return
   }
 
   diffLoading.value = true
   showDiffModal.value = true
-  
+
   try {
     // 确保较小的版本ID在前（较老的版本）
     const sortedIds = [...selectedVersions.value].sort((a, b) => a - b)
@@ -201,11 +255,11 @@ const performDiff = async () => {
     if (res.code === 200) {
       diffResult.value = res.data
     } else {
-      ElMessage.error(res.message || '获取差异失败')
+      message.error(res.message || '获取差异失败')
       showDiffModal.value = false
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '获取差异失败')
+    message.error(error.response?.data?.message || '获取差异失败')
     showDiffModal.value = false
   } finally {
     diffLoading.value = false
@@ -222,10 +276,10 @@ const closeDiffModal = () => {
 // 快速对比：与上一个版本对比
 const compareWithPrevious = async (version: PromptVersion, index: number) => {
   if (index >= versions.value.length - 1) {
-    ElMessage.warning('这是最早的版本，无法对比')
+    message.warning('这是最早的版本，无法对比')
     return
   }
-  
+
   const previousVersion = versions.value[index + 1]
   selectedVersions.value = [previousVersion.id, version.id]
   await performDiff()
@@ -242,8 +296,13 @@ onMounted(() => {
     <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <button class="back-btn" @click="router.push('/prompts')">← 返回</button>
-        <span class="logo-icon">⬡</span>
+        <a-button @click="router.push('/prompts')">
+          <template #icon>
+            <ArrowLeftOutlined />
+          </template>
+          返回
+        </a-button>
+        <img src="/vite.svg" alt="Logo" class="logo-icon" />
         <span class="logo-text">Prompt-Forge</span>
       </div>
     </header>
@@ -258,21 +317,25 @@ onMounted(() => {
 
       <!-- Commit Section -->
       <div class="commit-section">
-        <h3>📝 提交新版本</h3>
+        <h3>
+          <EditOutlined /> 提交新版本
+        </h3>
         <form @submit.prevent="handleCommit">
           <div class="form-group">
-            <textarea 
-              v-model="newContent" 
-              rows="8" 
-              placeholder="输入新的 Prompt 内容..."
-            ></textarea>
+            <div class="editor-header">
+              <label>内容</label>
+              <a-button size="small" @click="openOptimizeModal" :loading="optimizing || loadingModels"
+                :disabled="!newContent.trim()">
+                <template #icon>
+                  <RobotOutlined />
+                </template>
+                AI 优化
+              </a-button>
+            </div>
+            <textarea v-model="newContent" rows="8" placeholder="输入或者粘贴你的 Prompt，点击 'AI 优化' 让 AI 帮你重写..."></textarea>
           </div>
           <div class="form-row">
-            <input 
-              v-model="commitMessage" 
-              type="text" 
-              placeholder="提交说明（如：优化变量结构）" 
-            />
+            <input v-model="commitMessage" type="text" placeholder="提交说明（如：优化变量结构）" />
             <div class="form-actions">
               <button type="button" class="secondary-btn" @click="loadLatest">加载最新</button>
               <button type="submit" class="submit-btn" :disabled="committing">
@@ -286,15 +349,16 @@ onMounted(() => {
       <!-- Version Timeline -->
       <div class="version-section">
         <div class="version-section-header">
-          <h3>📜 版本历史</h3>
+          <h3>
+            <HistoryOutlined /> 版本历史
+          </h3>
           <div class="compare-controls">
-            <button 
-              v-if="!compareMode && versions.length > 1" 
-              class="compare-btn" 
-              @click="enterCompareMode"
-            >
-              🔀 版本对比
-            </button>
+            <a-button v-if="!compareMode && versions.length > 1" @click="enterCompareMode">
+              <template #icon>
+                <SwapOutlined />
+              </template>
+              版本对比
+            </a-button>
             <template v-if="compareMode">
               <span class="compare-hint">
                 已选择 {{ selectedVersions.length }}/2 个版本
@@ -303,25 +367,19 @@ onMounted(() => {
             </template>
           </div>
         </div>
-        
+
         <div v-if="loading" class="loading">加载中...</div>
-        
+
         <div v-else-if="versions.length === 0" class="empty">暂无版本历史</div>
-        
+
         <div v-else class="timeline">
-          <div 
-            v-for="(version, index) in versions" 
-            :key="version.id" 
-            class="version-item"
-            :class="{ 
-              current: index === 0,
-              'compare-mode': compareMode,
-              'selected': isVersionSelected(version.id)
-            }"
-            @click="compareMode && selectVersionForCompare(version.id)"
-          >
+          <div v-for="(version, index) in versions" :key="version.id" class="version-item" :class="{
+            current: index === 0,
+            'compare-mode': compareMode,
+            'selected': isVersionSelected(version.id)
+          }" @click="compareMode && selectVersionForCompare(version.id)">
             <div class="version-marker"></div>
-            
+
             <div class="version-content">
               <div class="version-header">
                 <div class="version-badges">
@@ -333,30 +391,23 @@ onMounted(() => {
                 </div>
                 <span class="version-date">{{ new Date(version.createdAt).toLocaleString() }}</span>
               </div>
-              
+
               <p class="commit-message">{{ version.commitMessage || '无提交说明' }}</p>
-              
+
               <div v-if="expandedVersions.has(version.id)" class="version-code">
                 <pre>{{ version.content }}</pre>
               </div>
-              
+
               <div class="version-actions" v-if="!compareMode">
                 <button class="action-btn" @click.stop="toggleExpand(version.id)">
                   {{ expandedVersions.has(version.id) ? '收起' : '查看内容' }}
                 </button>
                 <button class="action-btn" @click.stop="copyContent(version.content)">复制</button>
-                <button 
-                  v-if="index < versions.length - 1" 
-                  class="action-btn diff"
-                  @click.stop="compareWithPrevious(version, index)"
-                >
+                <button v-if="index < versions.length - 1" class="action-btn diff"
+                  @click.stop="compareWithPrevious(version, index)">
                   对比上一版
                 </button>
-                <button 
-                  v-if="index !== 0" 
-                  class="action-btn primary" 
-                  @click.stop="handleRollback(version)"
-                >
+                <button v-if="index !== 0" class="action-btn primary" @click.stop="handleRollback(version)">
                   回滚到此版本
                 </button>
               </div>
@@ -370,14 +421,16 @@ onMounted(() => {
     <div v-if="showDiffModal" class="diff-modal-overlay" @click.self="closeDiffModal">
       <div class="diff-modal">
         <div class="diff-modal-header">
-          <h3>🔍 版本对比</h3>
+          <h3>
+            <SearchOutlined /> 版本对比
+          </h3>
           <button class="close-btn" @click="closeDiffModal">✕</button>
         </div>
-        
+
         <div v-if="diffLoading" class="diff-loading">
           加载中...
         </div>
-        
+
         <template v-else-if="diffResult">
           <div class="diff-stats">
             <span class="stat-item">
@@ -386,14 +439,9 @@ onMounted(() => {
             <span class="stat-added">+{{ diffResult.addedLines }} 新增</span>
             <span class="stat-deleted">-{{ diffResult.deletedLines }} 删除</span>
           </div>
-          
+
           <div class="diff-content">
-            <div 
-              v-for="(line, idx) in diffResult.lines" 
-              :key="idx" 
-              class="diff-line"
-              :class="line.type.toLowerCase()"
-            >
+            <div v-for="(line, idx) in diffResult.lines" :key="idx" class="diff-line" :class="line.type.toLowerCase()">
               <span class="line-number source">{{ line.sourceLineNumber ?? '' }}</span>
               <span class="line-number target">{{ line.targetLineNumber ?? '' }}</span>
               <span class="line-type">
@@ -405,14 +453,72 @@ onMounted(() => {
         </template>
       </div>
     </div>
+
+    <!-- Model Selection Modal for AI Optimize -->
+    <a-modal v-model:open="showModelSelectModal" title="选择优化模型" :footer="null" width="400px">
+      <div class="model-select-content">
+        <p class="model-hint">请选择用于优化 Prompt 的 AI 模型：</p>
+        <a-radio-group v-model:value="selectedOptimizeModel" class="model-radio-group">
+          <a-radio v-for="model in availableModels" :key="model" :value="model" class="model-radio-item">
+            {{ model }}
+          </a-radio>
+        </a-radio-group>
+        <div class="modal-actions">
+          <a-button @click="showModelSelectModal = false">取消</a-button>
+          <a-button type="primary" @click="handleOptimize" :loading="optimizing">
+            开始优化
+          </a-button>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
 <style scoped>
+/* Page container styling */
 .page-container {
   min-height: 100vh;
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
+}
+
+/* Modal Styling */
+.model-select-content {
+  padding: 20px 0;
+}
+
+.model-hint {
+  margin-bottom: 16px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+}
+
+.model-radio-group {
+  display: flex !important;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.model-radio-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.model-radio-item:hover {
+  border-color: var(--color-primary);
+  background: var(--color-bg-secondary);
+}
+
+.modal-actions {
+  margin-top: 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
 /* 深色主题渐变 */
@@ -450,6 +556,8 @@ onMounted(() => {
 }
 
 .logo-icon {
+  width: 32px;
+  height: 32px;
   font-size: 24px;
   color: var(--color-primary);
 }
@@ -534,25 +642,7 @@ onMounted(() => {
   border-color: var(--color-primary);
 }
 
-.form-row {
-  display: flex;
-  gap: 12px;
-  margin-top: 12px;
-}
 
-.form-row input {
-  flex: 1;
-  padding: 12px 14px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: #fff;
-  outline: none;
-}
-
-.form-row input:focus {
-  border-color: #5e6ad2;
-}
 
 .form-actions {
   display: flex;
@@ -628,7 +718,8 @@ onMounted(() => {
   font-size: 12px;
 }
 
-.loading, .empty {
+.loading,
+.empty {
   text-align: center;
   padding: 40px;
   color: #888;
@@ -804,6 +895,40 @@ onMounted(() => {
 
 .action-btn.diff:hover {
   background: rgba(245, 158, 11, 0.3);
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.editor-header label {
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.ai-btn {
+  background: linear-gradient(90deg, #6366f1, #ec4899);
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.3);
+}
+
+.ai-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ai-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  box-shadow: 0 4px 8px rgba(99, 102, 241, 0.4);
 }
 
 /* Diff Modal */

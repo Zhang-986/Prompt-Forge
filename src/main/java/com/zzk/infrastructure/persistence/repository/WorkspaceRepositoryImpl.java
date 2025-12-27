@@ -155,4 +155,14 @@ public class WorkspaceRepositoryImpl implements WorkspaceRepository {
                 .createdAt(po.getCreatedAt())
                 .build();
     }
+
+    @Override
+    public void updateMemberRole(Long workspaceId, Long userId, String newRole) {
+        com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<WorkspaceMemberPO> wrapper = 
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();
+        wrapper.eq(WorkspaceMemberPO::getWorkspaceId, workspaceId)
+               .eq(WorkspaceMemberPO::getUserId, userId)
+               .set(WorkspaceMemberPO::getRole, newRole);
+        memberMapper.update(null, wrapper);
+    }
 }

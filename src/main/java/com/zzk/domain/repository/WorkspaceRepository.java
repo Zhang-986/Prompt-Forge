@@ -63,4 +63,9 @@ public interface WorkspaceRepository {
      * 获取用户在工作空间中的角色
      */
     Optional<String> getMemberRole(Long workspaceId, Long userId);
+
+    /**
+     * 更新成员角色
+     */
+    void updateMemberRole(Long workspaceId, Long userId, String newRole);
 }

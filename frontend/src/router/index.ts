@@ -37,6 +37,11 @@ const router = createRouter({
             path: '/settings/models',
             name: 'ModelSettings',
             component: () => import('../views/ModelSettings.vue')
+        },
+        {
+            path: '/plaza',
+            name: 'Plaza',
+            component: () => import('../views/PromptPlaza.vue')
         }
     ]
 })

@@ -38,11 +38,10 @@ public class WorkspaceController {
      */
     @PostMapping
     @Operation(summary = "创建工作空间", description = "创建一个新的工作空间")
-    public Result<Workspace> createWorkspace(@Valid @RequestBody CreateWorkspaceRequest request) {
-        log.info("创建工作空间: name={}", request.getName());
-
-        // TODO: 从 JWT 中获取用户 ID
-        Long userId = 1L;
+    public Result<Workspace> createWorkspace(
+            @RequestAttribute("userId") Long userId,
+            @Valid @RequestBody CreateWorkspaceRequest request) {
+        log.info("创建工作空间: name={}, userId={}", request.getName(), userId);
 
         Workspace workspace = workspaceAppService.createWorkspace(
                 request.getName(),
@@ -58,10 +57,7 @@ public class WorkspaceController {
      */
     @GetMapping
     @Operation(summary = "获取工作空间列表", description = "获取当前用户可访问的所有工作空间")
-    public Result<List<Workspace>> getWorkspaces() {
-        // TODO: 从 JWT 中获取用户 ID
-        Long userId = 1L;
-
+    public Result<List<Workspace>> getWorkspaces(@RequestAttribute("userId") Long userId) {
         return Result.success(workspaceAppService.getWorkspacesForUser(userId));
     }
 
@@ -71,10 +67,8 @@ public class WorkspaceController {
     @GetMapping("/{id}")
     @Operation(summary = "获取工作空间详情")
     public Result<Workspace> getWorkspace(
+            @RequestAttribute("userId") Long userId,
             @Parameter(description = "工作空间 ID") @PathVariable Long id) {
-        // TODO: 从 JWT 中获取用户 ID
-        Long userId = 1L;
-
         return Result.success(workspaceAppService.getWorkspaceById(id, userId));
     }
 
@@ -84,12 +78,10 @@ public class WorkspaceController {
     @PutMapping("/{id}")
     @Operation(summary = "更新工作空间", description = "更新工作空间名称和描述")
     public Result<Workspace> updateWorkspace(
+            @RequestAttribute("userId") Long userId,
             @Parameter(description = "工作空间 ID") @PathVariable Long id,
             @Valid @RequestBody UpdateWorkspaceRequest request) {
-        log.info("更新工作空间: id={}", id);
-
-        // TODO: 从 JWT 中获取用户 ID
-        Long userId = 1L;
+        log.info("更新工作空间: id={}, userId={}", id, userId);
 
         Workspace workspace = workspaceAppService.updateWorkspace(
                 id,
@@ -107,11 +99,9 @@ public class WorkspaceController {
     @DeleteMapping("/{id}")
     @Operation(summary = "删除工作空间", description = "删除工作空间及其所有成员关系")
     public Result<Void> deleteWorkspace(
+            @RequestAttribute("userId") Long userId,
             @Parameter(description = "工作空间 ID") @PathVariable Long id) {
-        log.info("删除工作空间: id={}", id);
-
-        // TODO: 从 JWT 中获取用户 ID
-        Long userId = 1L;
+        log.info("删除工作空间: id={}, userId={}", id, userId);
 
         workspaceAppService.deleteWorkspace(id, userId);
         return Result.success("删除成功", null);
@@ -123,10 +113,8 @@ public class WorkspaceController {
     @GetMapping("/{id}/members")
     @Operation(summary = "获取成员列表")
     public Result<List<WorkspaceMember>> getMembers(
+            @RequestAttribute("userId") Long userId,
             @Parameter(description = "工作空间 ID") @PathVariable Long id) {
-        // TODO: 从 JWT 中获取用户 ID
-        Long userId = 1L;
-
         return Result.success(workspaceAppService.getMembers(id, userId));
     }
 
@@ -136,12 +124,10 @@ public class WorkspaceController {
     @PostMapping("/{id}/members")
     @Operation(summary = "添加成员", description = "将用户添加到工作空间")
     public Result<Void> addMember(
+            @RequestAttribute("userId") Long operatorId,
             @Parameter(description = "工作空间 ID") @PathVariable Long id,
             @Valid @RequestBody AddMemberRequest request) {
-        log.info("添加成员: workspaceId={}, userId={}", id, request.getUserId());
-
-        // TODO: 从 JWT 中获取用户 ID
-        Long operatorId = 1L;
+        log.info("添加成员: workspaceId={}, targetUserId={}, operatorId={}", id, request.getUserId(), operatorId);
 
         workspaceAppService.addMember(id, request.getUserId(), request.getRole(), operatorId);
         return Result.success("添加成功", null);
@@ -150,18 +136,33 @@ public class WorkspaceController {
     /**
      * 移除成员
      */
-    @DeleteMapping("/{id}/members/{userId}")
+    @DeleteMapping("/{id}/members/{targetUserId}")
     @Operation(summary = "移除成员", description = "将用户从工作空间移除")
     public Result<Void> removeMember(
+            @RequestAttribute("userId") Long operatorId,
             @Parameter(description = "工作空间 ID") @PathVariable Long id,
-            @Parameter(description = "用户 ID") @PathVariable Long userId) {
-        log.info("移除成员: workspaceId={}, userId={}", id, userId);
+            @Parameter(description = "目标用户 ID") @PathVariable Long targetUserId) {
+        log.info("移除成员: workspaceId={}, targetUserId={}, operatorId={}", id, targetUserId, operatorId);
 
-        // TODO: 从 JWT 中获取用户 ID
-        Long operatorId = 1L;
-
-        workspaceAppService.removeMember(id, userId, operatorId);
+        workspaceAppService.removeMember(id, targetUserId, operatorId);
         return Result.success("移除成功", null);
+    }
+
+    /**
+     * 更新成员角色
+     */
+    @PutMapping("/{id}/members/{targetUserId}")
+    @Operation(summary = "更新成员角色", description = "修改工作空间成员的角色")
+    public Result<Void> updateMemberRole(
+            @RequestAttribute("userId") Long operatorId,
+            @Parameter(description = "工作空间 ID") @PathVariable Long id,
+            @Parameter(description = "目标用户 ID") @PathVariable Long targetUserId,
+            @Valid @RequestBody UpdateRoleRequest request) {
+        log.info("更新成员角色: workspaceId={}, targetUserId={}, newRole={}, operatorId={}", 
+                id, targetUserId, request.getRole(), operatorId);
+
+        workspaceAppService.updateMemberRole(id, targetUserId, request.getRole(), operatorId);
+        return Result.success("角色更新成功", null);
     }
 
     // ==================== DTO ====================
@@ -184,5 +185,11 @@ public class WorkspaceController {
     public static class AddMemberRequest {
         private Long userId;
         private String role = "MEMBER";
+    }
+
+    @Data
+    public static class UpdateRoleRequest {
+        @NotBlank(message = "角色不能为空")
+        private String role;
     }
 }

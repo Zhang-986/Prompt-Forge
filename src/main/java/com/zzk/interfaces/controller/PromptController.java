@@ -5,6 +5,7 @@ import com.zzk.domain.model.aggregate.Prompt;
 import com.zzk.domain.model.entity.PromptVersion;
 import com.zzk.interfaces.dto.request.CommitVersionRequest;
 import com.zzk.interfaces.dto.request.CreatePromptRequest;
+import com.zzk.interfaces.dto.request.UpdatePromptRequest;
 import com.zzk.interfaces.dto.response.DiffResult;
 import com.zzk.interfaces.dto.response.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -72,8 +73,9 @@ public class PromptController {
     @GetMapping
     @Operation(summary = "获取 Prompt 列表", description = "按工作空间获取 Prompt 列表")
     public Result<List<Prompt>> getPromptsByWorkspace(
+            @RequestAttribute("userId") Long userId,
             @Parameter(description = "工作空间 ID") @RequestParam Long workspaceId) {
-        return Result.success(promptAppService.getPromptsByWorkspace(workspaceId));
+        return Result.success(promptAppService.getPromptsByWorkspace(workspaceId, userId));
     }
 
     /**
@@ -135,6 +137,26 @@ public class PromptController {
 
         PromptVersion version = promptAppService.rollbackToVersion(promptId, targetVersionId, userId);
         return Result.success("回滚成功", version);
+    }
+
+    /**
+     * 更新 Prompt 信息
+     */
+    @PutMapping("/{promptId}")
+    @Operation(summary = "更新 Prompt", description = "更新 Prompt 的名称和描述")
+    public Result<Prompt> updatePrompt(
+            @RequestAttribute("userId") Long userId,
+            @Parameter(description = "Prompt ID") @PathVariable Long promptId,
+            @Valid @RequestBody UpdatePromptRequest request) {
+        log.info("更新 Prompt: promptId={}, name={}", promptId, request.getName());
+
+        Prompt prompt = promptAppService.updatePromptInfo(
+                promptId,
+                request.getName(),
+                request.getDescription(),
+                userId
+        );
+        return Result.success("更新成功", prompt);
     }
 
     /**

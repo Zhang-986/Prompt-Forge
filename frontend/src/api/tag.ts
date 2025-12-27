@@ -20,12 +20,12 @@ interface Result<T> {
 }
 
 // 获取工作空间所有标签
-export function getTags(workspaceId: number = 1) {
+export function getTags(workspaceId: number) {
     return request.get<any, Result<Tag[]>>(`/tags?workspaceId=${workspaceId}`)
 }
 
 // 创建标签
-export function createTag(data: CreateTagRequest, workspaceId: number = 1) {
+export function createTag(data: CreateTagRequest, workspaceId: number) {
     return request.post<any, Result<Tag>>(`/tags?workspaceId=${workspaceId}`, data)
 }
 

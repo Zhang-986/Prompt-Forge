@@ -12,7 +12,8 @@ import {
   type ModelConfig,
   type CreateConfigRequest
 } from '../api/modelConfig'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { message, Modal } from 'ant-design-vue'
+import { ArrowLeftOutlined, SettingOutlined, BulbOutlined, PlusOutlined } from '@ant-design/icons-vue'
 
 const router = useRouter()
 
@@ -87,16 +88,9 @@ const getProviderInfo = (providerId: string) => {
   return providers.value.find(p => p.id === providerId)
 }
 
-// 获取提供商图标
-const getProviderIcon = (providerId: string) => {
-  const icons: Record<string, string> = {
-    'google': '🌐',
-    'zhipu': '🧠',
-    'deepseek': '🔍',
-    'openai': '🤖',
-    'claude': '🎭'
-  }
-  return icons[providerId] || '💬'
+// 获取提供商图标 - 返回空字符串，使用组件渲染图标
+const getProviderIcon = (_providerId: string) => {
+  return '' // 不再使用 emoji
 }
 
 // 选择提供商时填充默认值
@@ -122,21 +116,21 @@ const openAddDialog = () => {
 // 添加配置
 const handleAdd = async () => {
   if (!addForm.value.provider || !addForm.value.apiKey) {
-    ElMessage.warning('请填写必填项')
+    message.warning('请填写必填项')
     return
   }
 
   try {
     const res = await createConfig(addForm.value)
     if (res.code === 200) {
-      ElMessage.success('添加成功')
+      message.success('添加成功')
       showAddDialog.value = false
       loadData()
     } else {
-      ElMessage.error(res.message || '添加失败')
+      message.error(res.message || '添加失败')
     }
   } catch (error) {
-    ElMessage.error('添加失败')
+    message.error('添加失败')
   }
 }
 
@@ -159,14 +153,14 @@ const handleUpdate = async () => {
   try {
     const res = await updateConfig(editingConfig.value.id, editForm.value)
     if (res.code === 200) {
-      ElMessage.success('更新成功')
+      message.success('更新成功')
       showEditDialog.value = false
       loadData()
     } else {
-      ElMessage.error(res.message || '更新失败')
+      message.error(res.message || '更新失败')
     }
   } catch (error) {
-    ElMessage.error('更新失败')
+    message.error('更新失败')
   }
 }
 
@@ -175,32 +169,30 @@ const handleToggle = async (config: ModelConfig) => {
   try {
     const res = await toggleConfig(config.id)
     if (res.code === 200) {
-      ElMessage.success(res.data.enabled ? '已启用' : '已禁用')
+      message.success(res.data.enabled ? '已启用' : '已禁用')
       loadData()
     }
   } catch (error) {
-    ElMessage.error('操作失败')
+    message.error('操作失败')
   }
 }
 
 // 删除配置
-const handleDelete = async (config: ModelConfig) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除 ${getProviderInfo(config.provider)?.name} 的配置吗？`,
-      '删除确认',
-      { type: 'warning' }
-    )
-    const res = await deleteConfig(config.id)
-    if (res.code === 200) {
-      ElMessage.success('删除成功')
-      loadData()
+const handleDelete = (config: ModelConfig) => {
+  Modal.confirm({
+    title: '删除确认',
+    content: `确定要删除 ${getProviderInfo(config.provider)?.name} 的配置吗？`,
+    okType: 'danger',
+    onOk: async () => {
+      const res = await deleteConfig(config.id)
+      if (res.code === 200) {
+        message.success('删除成功')
+        loadData()
+      } else {
+        message.error('删除失败')
+      }
     }
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
-  }
+  })
 }
 
 // 返回
@@ -218,8 +210,11 @@ onMounted(() => {
     <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <button class="back-btn" @click="goBack">← 返回</button>
-        <span class="logo-icon">⚙️</span>
+        <a-button @click="goBack">
+          <template #icon><ArrowLeftOutlined /></template>
+          返回
+        </a-button>
+        <SettingOutlined class="logo-icon" />
         <span class="page-title">模型配置</span>
       </div>
     </header>
@@ -227,7 +222,7 @@ onMounted(() => {
     <main class="main-content">
       <!-- 说明卡片 -->
       <div class="info-card">
-        <h3>💡 配置说明</h3>
+        <h3><BulbOutlined /> 配置说明</h3>
         <p>在这里配置您自己的 AI 模型 API Key，配置后将在竞技场中使用您的配置调用模型。</p>
         <p>如果没有配置某个提供商，系统将使用默认配置（如果可用）。</p>
       </div>
@@ -236,9 +231,10 @@ onMounted(() => {
       <div class="config-section">
         <div class="section-header">
           <h3>已配置的模型</h3>
-          <button class="add-btn" @click="openAddDialog" :disabled="availableProviders.length === 0">
-            ➕ 添加配置
-          </button>
+          <a-button type="primary" @click="openAddDialog" :disabled="availableProviders.length === 0">
+            <template #icon><PlusOutlined /></template>
+            添加配置
+          </a-button>
         </div>
 
         <div v-if="loading" class="loading">加载中...</div>

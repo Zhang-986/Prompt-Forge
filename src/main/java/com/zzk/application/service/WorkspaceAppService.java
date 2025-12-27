@@ -183,4 +183,41 @@ public class WorkspaceAppService {
 
         return workspaceRepository.getMembers(workspaceId);
     }
+
+    /**
+     * 更新成员角色
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void updateMemberRole(Long workspaceId, Long targetUserId, String newRole, Long operatorId) {
+        log.info("更新成员角色: workspaceId={}, targetUserId={}, newRole={}", workspaceId, targetUserId, newRole);
+
+        Workspace workspace = workspaceRepository.findById(workspaceId)
+                .orElseThrow(() -> new BusinessException("工作空间不存在: " + workspaceId));
+
+        // 不能修改所有者角色
+        if (workspace.isOwner(targetUserId)) {
+            throw new BusinessException("不能修改工作空间所有者的角色");
+        }
+
+        // 检查目标用户是否是成员
+        if (!workspaceRepository.isMember(workspaceId, targetUserId)) {
+            throw new BusinessException("用户不是工作空间成员");
+        }
+
+        // 检查操作者权限
+        if (!workspace.isOwner(operatorId)) {
+            String operatorRole = workspaceRepository.getMemberRole(workspaceId, operatorId)
+                    .orElse(null);
+            if (!"ADMIN".equals(operatorRole)) {
+                throw new BusinessException("没有修改成员角色的权限");
+            }
+        }
+
+        // 验证角色值
+        if (!List.of("ADMIN", "MEMBER", "VIEWER").contains(newRole)) {
+            throw new BusinessException("无效的角色: " + newRole);
+        }
+
+        workspaceRepository.updateMemberRole(workspaceId, targetUserId, newRole);
+    }
 }

@@ -3,7 +3,8 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getPrompts, getVersionHistory, type Prompt, type PromptVersion } from '../api/prompt'
 import { getAvailableModels, type ArenaEvent } from '../api/arena'
-import { ElMessage } from 'element-plus'
+import { message } from 'ant-design-vue'
+import { ArrowLeftOutlined, ThunderboltOutlined, HistoryOutlined, PlayCircleOutlined, PauseCircleOutlined, WarningOutlined, CheckCircleOutlined, LoadingOutlined, CloseCircleOutlined, ClockCircleOutlined, BarChartOutlined } from '@ant-design/icons-vue'
 import { marked } from 'marked'
 
 // 配置 marked
@@ -111,11 +112,11 @@ const renderMarkdown = (content: string) => {
 // 开始竞技
 const startCompete = () => {
   if (!selectedVersionId.value) {
-    ElMessage.warning('请选择一个 Prompt 版本')
+    message.warning('请选择一个 Prompt 版本')
     return
   }
   if (selectedModels.value.length === 0) {
-    ElMessage.warning('请至少选择一个模型')
+    message.warning('请至少选择一个模型')
     return
   }
 
@@ -128,8 +129,8 @@ const startCompete = () => {
   isCompeting.value = true
 
   const token = localStorage.getItem('token')
-  const baseUrl = 'http://localhost:8080/api/arena/compete'
-  
+  const baseUrl = '/api/arena/compete'
+
   fetch(baseUrl, {
     method: 'POST',
     headers: {
@@ -170,7 +171,7 @@ const startCompete = () => {
     read()
   }).catch(error => {
     console.error('SSE 连接失败:', error)
-    ElMessage.error('连接失败，请检查后端是否启动')
+    message.error('连接失败，请检查后端是否启动')
     isCompeting.value = false
   })
 }
@@ -248,7 +249,7 @@ const getModelIcon = (modelId: string) => {
 onMounted(() => {
   loadPrompts()
   loadModels()
-  
+
   const promptId = route.query.promptId
   if (promptId) {
     selectedPromptId.value = Number(promptId)
@@ -266,12 +267,22 @@ onUnmounted(() => {
     <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <button class="back-btn" @click="goBack">← 返回</button>
-        <span class="logo-icon">⚔️</span>
+        <a-button @click="goBack">
+          <template #icon>
+            <ArrowLeftOutlined />
+          </template>
+          返回
+        </a-button>
+        <ThunderboltOutlined class="logo-icon" />
         <span class="page-title">多模型竞技场</span>
       </div>
       <div class="header-right">
-        <button class="history-btn" @click="router.push('/arena/history')">📋 竞技历史</button>
+        <a-button @click="router.push('/arena/history')">
+          <template #icon>
+            <HistoryOutlined />
+          </template>
+          竞技历史
+        </a-button>
       </div>
     </header>
 
@@ -291,7 +302,8 @@ onUnmounted(() => {
           <!-- 版本选择 -->
           <div class="config-item">
             <label>选择版本</label>
-            <select v-model="selectedVersionId" @change="onVersionChange(selectedVersionId!)" :disabled="!selectedPromptId">
+            <select v-model="selectedVersionId" @change="onVersionChange(selectedVersionId!)"
+              :disabled="!selectedPromptId">
               <option :value="null" disabled>请选择版本</option>
               <option v-for="v in versions" :key="v.id" :value="v.id">
                 v{{ v.versionNumber }} - {{ v.commitMessage || '无描述' }}
@@ -321,7 +333,9 @@ onUnmounted(() => {
         <div class="models-section">
           <label>选择模型 (可多选)</label>
           <div v-if="models.length === 0" class="empty-models">
-            <p>⚠️ 您还没有配置任何模型</p>
+            <p>
+              <WarningOutlined /> 您还没有配置任何模型
+            </p>
             <p>请先前往 <router-link to="/settings/models">模型配置</router-link> 添加您的 API Key</p>
           </div>
           <div v-else class="models-grid">
@@ -335,20 +349,27 @@ onUnmounted(() => {
 
         <!-- 开始按钮 -->
         <div class="action-row">
-          <button 
-            class="compete-btn" 
-            @click="startCompete" 
-            :disabled="isCompeting || !selectedVersionId"
-          >
-            {{ isCompeting ? '🔄 对比中...' : '🚀 开始对比' }}
-          </button>
-          <button v-if="isCompeting" class="stop-btn" @click="stopCompete">⏹ 停止</button>
+          <a-button type="primary" size="large" @click="startCompete" :disabled="isCompeting || !selectedVersionId"
+            :loading="isCompeting">
+            <template #icon>
+              <PlayCircleOutlined />
+            </template>
+            {{ isCompeting ? '对比中...' : '开始对比' }}
+          </a-button>
+          <a-button v-if="isCompeting" danger @click="stopCompete">
+            <template #icon>
+              <PauseCircleOutlined />
+            </template>
+            停止
+          </a-button>
         </div>
       </div>
 
       <!-- 结果展示区 - 改进的卡片布局 -->
       <div v-if="Object.keys(modelOutputs).length > 0" class="results-section">
-        <h3>📊 对比结果</h3>
+        <h3>
+          <BarChartOutlined /> 对比结果
+        </h3>
         <div class="results-grid">
           <div v-for="modelId in selectedModels" :key="modelId" class="result-card">
             <!-- 卡片头部 -->
@@ -357,23 +378,27 @@ onUnmounted(() => {
                 <span class="model-icon-large">{{ getModelIcon(modelId) }}</span>
                 <span class="model-name">{{ getModelDisplayName(modelId) }}</span>
               </div>
-              <div class="status-badge" :class="{ done: modelOutputs[modelId]?.finished, loading: !modelOutputs[modelId]?.finished }">
-                <span v-if="modelOutputs[modelId]?.finished">✓ 完成</span>
+              <div class="status-badge"
+                :class="{ done: modelOutputs[modelId]?.finished, loading: !modelOutputs[modelId]?.finished }">
+                <span v-if="modelOutputs[modelId]?.finished">
+                  <CheckCircleOutlined /> 完成
+                </span>
                 <span v-else class="loading-dots">生成中<span class="dots"></span></span>
               </div>
             </div>
-            
+
             <!-- 卡片内容 - Markdown 渲染 -->
             <div class="result-content">
               <div v-if="modelOutputs[modelId]?.error" class="error-message">
-                ❌ {{ modelOutputs[modelId].error }}
+                <CloseCircleOutlined /> {{ modelOutputs[modelId].error }}
               </div>
-              <div v-else-if="modelOutputs[modelId]?.content" 
-                   class="markdown-body" 
-                   v-html="renderMarkdown(modelOutputs[modelId]?.content || '')">
+              <div v-else-if="modelOutputs[modelId]?.content" class="markdown-body"
+                v-html="renderMarkdown(modelOutputs[modelId]?.content || '')">
               </div>
               <div v-else class="waiting-message">
-                <span class="typing-indicator">⏳ 等待输出...</span>
+                <span class="typing-indicator">
+                  <ClockCircleOutlined /> 等待输出...
+                </span>
               </div>
             </div>
           </div>
@@ -484,9 +509,9 @@ onUnmounted(() => {
 }
 
 .config-item label,
-.variables-section > label,
-.models-section > label,
-.prompt-preview > label {
+.variables-section>label,
+.models-section>label,
+.prompt-preview>label {
   display: block;
   margin-bottom: 8px;
   font-size: 14px;
@@ -699,10 +724,24 @@ onUnmounted(() => {
 }
 
 @keyframes dots {
-  0%, 20% { content: ''; }
-  40% { content: '.'; }
-  60% { content: '..'; }
-  80%, 100% { content: '...'; }
+
+  0%,
+  20% {
+    content: '';
+  }
+
+  40% {
+    content: '.';
+  }
+
+  60% {
+    content: '..';
+  }
+
+  80%,
+  100% {
+    content: '...';
+  }
 }
 
 .result-content {
@@ -745,10 +784,21 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.markdown-body :deep(h1) { font-size: 1.5em; }
-.markdown-body :deep(h2) { font-size: 1.3em; }
-.markdown-body :deep(h3) { font-size: 1.15em; }
-.markdown-body :deep(h4) { font-size: 1em; }
+.markdown-body :deep(h1) {
+  font-size: 1.5em;
+}
+
+.markdown-body :deep(h2) {
+  font-size: 1.3em;
+}
+
+.markdown-body :deep(h3) {
+  font-size: 1.15em;
+}
+
+.markdown-body :deep(h4) {
+  font-size: 1em;
+}
 
 .markdown-body :deep(p) {
   margin-bottom: 1em;
@@ -860,7 +910,7 @@ onUnmounted(() => {
   .config-row {
     grid-template-columns: 1fr;
   }
-  
+
   .results-grid {
     grid-template-columns: 1fr;
   }

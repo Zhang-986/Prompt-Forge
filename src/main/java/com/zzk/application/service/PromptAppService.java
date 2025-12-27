@@ -2,6 +2,7 @@ package com.zzk.application.service;
 
 import com.zzk.domain.model.aggregate.Prompt;
 import com.zzk.domain.model.entity.PromptVersion;
+import com.zzk.domain.model.entity.Workspace;
 import com.zzk.domain.repository.PromptRepository;
 import com.zzk.domain.repository.PromptVersionRepository;
 import com.zzk.domain.service.PromptDomainService;
@@ -33,6 +34,7 @@ public class PromptAppService {
     private final PromptRepository promptRepository;
     private final PromptVersionRepository versionRepository;
     private final PromptDomainService promptDomainService;
+    private final com.zzk.domain.repository.WorkspaceRepository workspaceRepository;
 
     /**
      * 创建 Prompt
@@ -85,7 +87,15 @@ public class PromptAppService {
     /**
      * 获取 Prompt 列表（按工作空间）
      */
-    public List<Prompt> getPromptsByWorkspace(Long workspaceId) {
+    public List<Prompt> getPromptsByWorkspace(Long workspaceId, Long userId) {
+        // 检查权限
+        Workspace workspace = workspaceRepository.findById(workspaceId)
+                .orElseThrow(() -> new BusinessException("工作空间不存在"));
+                
+        if (!workspace.isOwner(userId) && !workspaceRepository.isMember(workspaceId, userId)) {
+            throw new BusinessException("无权访问该工作空间");
+        }
+
         List<Prompt> prompts = promptRepository.findByWorkspaceId(workspaceId);
         
         // 填充版本号
@@ -134,6 +144,15 @@ public class PromptAppService {
     public PromptVersion getLatestVersion(Long promptId) {
         Prompt prompt = getPromptById(promptId);
         if (prompt.getLatestVersionId() == null) {
+            // 尝试查找最新版本（容错处理，用于修复旧数据或克隆失败的数据）
+            List<PromptVersion> versions = versionRepository.findByPromptIdOrderByVersionNumberDesc(promptId);
+            if (!versions.isEmpty()) {
+                PromptVersion latest = versions.get(0);
+                // 自动修复
+                prompt.setLatestVersionId(latest.getId());
+                promptRepository.save(prompt);
+                return latest;
+            }
             throw new BusinessException("Prompt 没有版本: " + promptId);
         }
         return versionRepository.findById(prompt.getLatestVersionId())

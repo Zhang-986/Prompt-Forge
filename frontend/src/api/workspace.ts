@@ -72,3 +72,8 @@ export const addWorkspaceMember = (workspaceId: number, data: AddMemberData) => 
 export const removeWorkspaceMember = (workspaceId: number, userId: number) => {
     return request.delete<any, { code: number; message: string }>(`/workspaces/${workspaceId}/members/${userId}`)
 }
+
+// 更新成员角色
+export const updateMemberRole = (workspaceId: number, userId: number, role: 'ADMIN' | 'MEMBER' | 'VIEWER') => {
+    return request.put<any, { code: number; message: string }>(`/workspaces/${workspaceId}/members/${userId}`, { role })
+}

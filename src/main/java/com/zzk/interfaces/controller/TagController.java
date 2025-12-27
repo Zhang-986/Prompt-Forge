@@ -28,7 +28,7 @@ public class TagController {
      */
     @GetMapping
     public Result<List<TagDTO>> getTags(@RequestAttribute("userId") Long userId,
-                                        @RequestParam(defaultValue = "1") Long workspaceId) {
+                                        @RequestParam Long workspaceId) {
         List<TagDTO> tags = tagAppService.getTagsByWorkspace(workspaceId);
         return Result.success(tags);
     }
@@ -38,7 +38,7 @@ public class TagController {
      */
     @PostMapping
     public Result<TagDTO> createTag(@RequestAttribute("userId") Long userId,
-                                    @RequestParam(defaultValue = "1") Long workspaceId,
+                                    @RequestParam Long workspaceId,
                                     @Valid @RequestBody CreateTagRequest request) {
         TagDTO tag = tagAppService.createTag(request, userId, workspaceId);
         return Result.success(tag);

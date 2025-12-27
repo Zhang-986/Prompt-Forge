@@ -2,8 +2,8 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getArenaHistory, getArenaHistoryDetail, type ArenaHistoryItem, type ArenaHistoryDetail } from '../api/arenaHistory'
-import { ElMessage } from 'element-plus'
-import ThemeToggle from '../components/ThemeToggle.vue'
+import { message } from 'ant-design-vue'
+import { ArrowLeftOutlined, HistoryOutlined, FileTextOutlined, DollarOutlined, ClockCircleOutlined } from '@ant-design/icons-vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -34,7 +34,7 @@ const viewDetail = async (sessionId: number) => {
       showDetailDialog.value = true
     }
   } catch {
-    ElMessage.error('加载详情失败')
+    message.error('加载详情失败')
   }
 }
 
@@ -78,13 +78,18 @@ onMounted(() => {
     <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <button class="back-btn" @click="router.push('/arena')">← 返回竞技场</button>
-        <span class="logo-icon">⬡</span>
+        <a-button @click="router.push('/arena')">
+          <template #icon><ArrowLeftOutlined /></template>
+          返回竞技场
+        </a-button>
+        <HistoryOutlined class="logo-icon" />
         <span class="page-title">竞技历史</span>
       </div>
       <div class="header-right">
-        <ThemeToggle />
-        <button class="nav-btn" @click="router.push('/prompts')">📝 Prompts</button>
+        <a-button @click="router.push('/prompts')">
+          <template #icon><FileTextOutlined /></template>
+          Prompts
+        </a-button>
       </div>
     </header>
 
@@ -177,10 +182,10 @@ onMounted(() => {
                 <!-- Stats Bar -->
                 <div class="result-stats">
                   <span class="stat" title="Token 消耗">
-                    🪙 {{ result.tokensUsed || 0 }}
+                    <DollarOutlined /> {{ result.tokensUsed || 0 }}
                   </span>
                   <span class="stat" title="响应时间">
-                    ⏱️ {{ result.latencyMs || 0 }}ms
+                    <ClockCircleOutlined /> {{ result.latencyMs || 0 }}ms
                   </span>
                 </div>
 

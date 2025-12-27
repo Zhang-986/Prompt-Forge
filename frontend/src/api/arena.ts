@@ -11,7 +11,7 @@ export const buildCompeteUrl = (params: {
     variables: Record<string, any>
     modelIds: string[]
 }): string => {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
     const queryParams = new URLSearchParams()
     queryParams.append('promptVersionId', params.promptVersionId.toString())
     queryParams.append('variables', JSON.stringify(params.variables))
