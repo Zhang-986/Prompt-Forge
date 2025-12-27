@@ -1,0 +1,281 @@
+package com.zzk.infrastructure.ai.factory;
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import com.zzk.domain.model.entity.UserModelConfig;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 动态 LLM 客户端工厂
+ * 
+ * <p>根据用户配置动态创建 LLM 调用客户端
+ * 
+ * @author zzk
+ * @since 1.0.0
+ */
+@Slf4j
+@Component
+public class DynamicLlmClientFactory {
+
+    private final WebClient.Builder webClientBuilder;
+
+    public DynamicLlmClientFactory(WebClient.Builder webClientBuilder) {
+        this.webClientBuilder = webClientBuilder;
+    }
+
+    /**
+     * 使用用户配置创建流式生成
+     */
+    public Flux<String> generateStream(UserModelConfig config, String prompt) {
+        return switch (config.getProvider()) {
+            case "google" -> generateGoogleStream(config, prompt);
+            case "zhipu", "deepseek", "openai" -> generateOpenAICompatibleStream(config, prompt);
+            case "claude" -> generateClaudeStream(config, prompt);
+            default -> Flux.error(new RuntimeException("不支持的提供商: " + config.getProvider()));
+        };
+    }
+
+    /**
+     * Google Gemini 流式生成
+     */
+    private Flux<String> generateGoogleStream(UserModelConfig config, String prompt) {
+        String baseUrl = config.getEffectiveBaseUrl();
+        String model = config.getEffectiveModelName();
+        String url = String.format("%s/v1beta/models/%s:streamGenerateContent?key=%s&alt=sse", 
+                baseUrl, model, config.getApiKey());
+
+        log.info("[Google] 调用 API: model={}", model);
+
+        JSONObject requestBody = new JSONObject();
+        JSONObject part = new JSONObject();
+        part.put("text", prompt);
+        JSONObject content = new JSONObject();
+        content.put("parts", List.of(part));
+        requestBody.put("contents", List.of(content));
+
+        return webClientBuilder.build()
+                .post()
+                .uri(url)
+                .bodyValue(requestBody)
+                .retrieve()
+                .onStatus(status -> status.value() == 429, response -> {
+                    log.warn("[Google] 触发速率限制 (429)，请稍后重试");
+                    return response.bodyToMono(String.class)
+                            .flatMap(body -> reactor.core.publisher.Mono.error(
+                                    new RuntimeException("API 请求过于频繁，请等待几秒后重试")));
+                })
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(), response -> {
+                    return response.bodyToMono(String.class)
+                            .flatMap(body -> {
+                                log.error("[Google] API 错误: status={}, body={}", response.statusCode(), body);
+                                return reactor.core.publisher.Mono.error(
+                                        new RuntimeException("API 调用失败: " + response.statusCode()));
+                            });
+                })
+                .bodyToFlux(String.class)
+                .retryWhen(reactor.util.retry.Retry.backoff(2, java.time.Duration.ofSeconds(2))
+                        .filter(e -> e.getMessage() != null && e.getMessage().contains("429")))
+                .flatMap(this::parseGoogleResponse);
+    }
+
+    /**
+     * OpenAI 兼容格式流式生成 (适用于 Zhipu, DeepSeek, OpenAI)
+     */
+    private Flux<String> generateOpenAICompatibleStream(UserModelConfig config, String prompt) {
+        String baseUrl = config.getEffectiveBaseUrl();
+        String model = config.getEffectiveModelName();
+
+        log.info("[{}] 调用 API: model={}", config.getProvider(), model);
+
+        Map<String, Object> requestBody = Map.of(
+                "model", model,
+                "messages", List.of(Map.of("role", "user", "content", prompt)),
+                "stream", true
+        );
+
+        String chatEndpoint = config.getProvider().equals("zhipu") ? "/chat/completions" : "/v1/chat/completions";
+
+        return webClientBuilder.build()
+                .post()
+                .uri(baseUrl + chatEndpoint)
+                .header("Authorization", "Bearer " + config.getApiKey())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .onStatus(status -> status.value() == 429, response -> {
+                    log.warn("[{}] 触发速率限制 (429)", config.getProvider());
+                    return response.bodyToMono(String.class)
+                            .flatMap(body -> reactor.core.publisher.Mono.error(
+                                    new RuntimeException("API 请求过于频繁，请等待几秒后重试")));
+                })
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(), response -> {
+                    return response.bodyToMono(String.class)
+                            .flatMap(body -> {
+                                log.error("[{}] API 错误: status={}, body={}", config.getProvider(), response.statusCode(), body);
+                                return reactor.core.publisher.Mono.error(
+                                        new RuntimeException("API 调用失败: " + response.statusCode()));
+                            });
+                })
+                .bodyToFlux(String.class)
+                .retryWhen(reactor.util.retry.Retry.backoff(2, java.time.Duration.ofSeconds(2))
+                        .filter(e -> e.getMessage() != null && e.getMessage().contains("429")))
+                .filter(chunk -> !chunk.equals("[DONE]") && !chunk.trim().isEmpty())
+                .map(this::parseOpenAIContent)
+                .filter(content -> content != null && !content.isEmpty());
+    }
+
+    /**
+     * Claude 流式生成
+     */
+    private Flux<String> generateClaudeStream(UserModelConfig config, String prompt) {
+        String baseUrl = config.getEffectiveBaseUrl();
+        String model = config.getEffectiveModelName();
+
+        log.info("[Claude] 调用 API: model={}", model);
+
+        Map<String, Object> requestBody = Map.of(
+                "model", model,
+                "messages", List.of(Map.of("role", "user", "content", prompt)),
+                "max_tokens", 4096,
+                "stream", true
+        );
+
+        return webClientBuilder.build()
+                .post()
+                .uri(baseUrl + "/v1/messages")
+                .header("x-api-key", config.getApiKey())
+                .header("anthropic-version", "2023-06-01")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .onStatus(status -> status.value() == 429, response -> {
+                    log.warn("[Claude] 触发速率限制 (429)");
+                    return response.bodyToMono(String.class)
+                            .flatMap(body -> reactor.core.publisher.Mono.error(
+                                    new RuntimeException("API 请求过于频繁，请等待几秒后重试")));
+                })
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(), response -> {
+                    return response.bodyToMono(String.class)
+                            .flatMap(body -> {
+                                log.error("[Claude] API 错误: status={}, body={}", response.statusCode(), body);
+                                return reactor.core.publisher.Mono.error(
+                                        new RuntimeException("API 调用失败: " + response.statusCode()));
+                            });
+                })
+                .bodyToFlux(String.class)
+                .retryWhen(reactor.util.retry.Retry.backoff(2, java.time.Duration.ofSeconds(2))
+                        .filter(e -> e.getMessage() != null && e.getMessage().contains("429")))
+                .filter(chunk -> !chunk.trim().isEmpty())
+                .map(this::parseClaudeContent)
+                .filter(content -> content != null && !content.isEmpty());
+    }
+
+    /**
+     * 解析 Google 响应
+     */
+    private Flux<String> parseGoogleResponse(String chunk) {
+        if (chunk == null || chunk.isEmpty()) {
+            return Flux.empty();
+        }
+
+        String trimmed = chunk.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            String content = extractGoogleContent(trimmed);
+            return content.isEmpty() ? Flux.empty() : Flux.just(content);
+        }
+
+        // SSE 格式
+        String[] lines = chunk.split("\n");
+        return Flux.fromArray(lines)
+                .map(String::trim)
+                .filter(line -> line.startsWith("data:"))
+                .map(line -> line.substring(5).trim())
+                .filter(json -> !json.equals("[DONE]"))
+                .map(this::extractGoogleContent)
+                .filter(content -> !content.isEmpty());
+    }
+
+    private String extractGoogleContent(String jsonResponse) {
+        try {
+            if (jsonResponse.trim().startsWith("{")) {
+                JSONObject response = JSON.parseObject(jsonResponse);
+                JSONArray candidates = response.getJSONArray("candidates");
+                if (candidates != null && !candidates.isEmpty()) {
+                    JSONObject candidate = candidates.getJSONObject(0);
+                    JSONObject content = candidate.getJSONObject("content");
+                    if (content != null) {
+                        JSONArray parts = content.getJSONArray("parts");
+                        if (parts != null && !parts.isEmpty()) {
+                            return parts.getJSONObject(0).getString("text");
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("解析 Google 响应失败: {}", e.getMessage());
+        }
+        return "";
+    }
+
+    /**
+     * 解析 OpenAI 兼容格式响应
+     */
+    private String parseOpenAIContent(String chunk) {
+        try {
+            String jsonStr = chunk;
+            if (chunk.startsWith("data:")) {
+                jsonStr = chunk.substring(5).trim();
+            }
+            if (jsonStr.isEmpty() || jsonStr.equals("[DONE]")) {
+                return "";
+            }
+
+            JSONObject json = JSON.parseObject(jsonStr);
+            JSONArray choices = json.getJSONArray("choices");
+            if (choices != null && !choices.isEmpty()) {
+                JSONObject delta = choices.getJSONObject(0).getJSONObject("delta");
+                if (delta != null && delta.containsKey("content")) {
+                    return delta.getString("content");
+                }
+            }
+        } catch (Exception e) {
+            log.warn("解析 OpenAI 响应失败: {}", e.getMessage());
+        }
+        return "";
+    }
+
+    /**
+     * 解析 Claude 响应
+     */
+    private String parseClaudeContent(String chunk) {
+        try {
+            String jsonStr = chunk;
+            if (chunk.startsWith("data:")) {
+                jsonStr = chunk.substring(5).trim();
+            }
+            if (jsonStr.isEmpty()) {
+                return "";
+            }
+
+            JSONObject json = JSON.parseObject(jsonStr);
+            String type = json.getString("type");
+            if ("content_block_delta".equals(type)) {
+                JSONObject delta = json.getJSONObject("delta");
+                if (delta != null) {
+                    return delta.getString("text");
+                }
+            }
+        } catch (Exception e) {
+            log.warn("解析 Claude 响应失败: {}", e.getMessage());
+        }
+        return "";
+    }
+}

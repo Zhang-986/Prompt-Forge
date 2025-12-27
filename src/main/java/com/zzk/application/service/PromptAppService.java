@@ -6,6 +6,7 @@ import com.zzk.domain.repository.PromptRepository;
 import com.zzk.domain.repository.PromptVersionRepository;
 import com.zzk.domain.service.PromptDomainService;
 import com.zzk.infrastructure.exception.BusinessException;
+import com.zzk.interfaces.dto.response.DiffResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -192,5 +193,16 @@ public class PromptAppService {
         promptRepository.save(prompt);
 
         return prompt;
+    }
+
+    /**
+     * 获取两个版本之间的 Diff
+     * 
+     * @param versionId1 版本 1 ID（源版本）
+     * @param versionId2 版本 2 ID（目标版本）
+     * @return Diff 结果
+     */
+    public DiffResult getVersionDiff(Long versionId1, Long versionId2) {
+        return promptDomainService.getVersionDiff(versionId1, versionId2);
     }
 }

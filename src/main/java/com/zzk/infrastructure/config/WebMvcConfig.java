@@ -28,8 +28,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
                     // 用户登录注册
                     "/api/users/login",
                     "/api/users/register",
-                    // 获取模型列表（公开）
-                    "/api/arena/models",
                     // Swagger 文档
                     "/swagger-ui/**",
                     "/v3/api-docs/**",
@@ -43,5 +41,15 @@ public class WebMvcConfig implements WebMvcConfigurer {
                     "/favicon.ico",
                     "/error"
                 );
+    }
+
+    @Override
+    public void addCorsMappings(org.springframework.web.servlet.config.annotation.CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOriginPatterns("*")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedHeaders("*")
+                .allowCredentials(true)
+                .maxAge(3600);
     }
 }

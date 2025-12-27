@@ -22,6 +22,21 @@ const router = createRouter({
             path: '/prompts/:id/versions',
             name: 'VersionHistory',
             component: () => import('../views/VersionHistory.vue')
+        },
+        {
+            path: '/arena',
+            name: 'Arena',
+            component: () => import('../views/Arena.vue')
+        },
+        {
+            path: '/arena/history',
+            name: 'ArenaHistory',
+            component: () => import('../views/ArenaHistory.vue')
+        },
+        {
+            path: '/settings/models',
+            name: 'ModelSettings',
+            component: () => import('../views/ModelSettings.vue')
         }
     ]
 })

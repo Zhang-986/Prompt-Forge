@@ -1,18 +1,24 @@
 package com.zzk.domain.service;
 
 import cn.hutool.crypto.digest.DigestUtil;
+import com.github.difflib.DiffUtils;
+import com.github.difflib.patch.AbstractDelta;
+import com.github.difflib.patch.Patch;
 import com.zzk.domain.model.aggregate.Prompt;
 import com.zzk.domain.model.entity.PromptVersion;
 import com.zzk.domain.repository.PromptRepository;
 import com.zzk.domain.repository.PromptVersionRepository;
 import com.zzk.infrastructure.exception.BusinessException;
 import com.zzk.infrastructure.lock.DistributedLock;
+import com.zzk.interfaces.dto.response.DiffResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -162,20 +168,125 @@ public class PromptDomainService {
     /**
      * 获取两个版本之间的 Diff
      * 
-     * @param versionId1 版本 1 ID
-     * @param versionId2 版本 2 ID
+     * <p>使用 Myers Diff 算法计算两个版本内容的差异
+     * 
+     * @param versionId1 版本 1 ID（源版本）
+     * @param versionId2 版本 2 ID（目标版本）
      * @return Diff 结果
      */
-    public String getVersionDiff(Long versionId1, Long versionId2) {
+    public DiffResult getVersionDiff(Long versionId1, Long versionId2) {
         PromptVersion v1 = versionRepository.findById(versionId1)
                 .orElseThrow(() -> new BusinessException("版本不存在: " + versionId1));
         PromptVersion v2 = versionRepository.findById(versionId2)
                 .orElseThrow(() -> new BusinessException("版本不存在: " + versionId2));
 
-        // TODO: 实现详细的 Diff 算法（如 Myers Diff）
-        // 这里简单返回两个版本的内容
-        return String.format("=== Version %d ===\n%s\n\n=== Version %d ===\n%s",
-                v1.getVersionNumber(), v1.getContent(),
-                v2.getVersionNumber(), v2.getContent());
+        // 将内容按行分割
+        List<String> sourceLines = Arrays.asList(v1.getContent().split("\n", -1));
+        List<String> targetLines = Arrays.asList(v2.getContent().split("\n", -1));
+
+        // 使用 Myers Diff 算法计算差异
+        Patch<String> patch = DiffUtils.diff(sourceLines, targetLines);
+
+        // 构建差异行列表
+        List<DiffResult.DiffLine> diffLines = new ArrayList<>();
+        int sourceLineNum = 1;
+        int targetLineNum = 1;
+        int addedCount = 0;
+        int deletedCount = 0;
+
+        // 获取所有变更块
+        List<AbstractDelta<String>> deltas = patch.getDeltas();
+        int deltaIndex = 0;
+        AbstractDelta<String> currentDelta = deltaIndex < deltas.size() ? deltas.get(deltaIndex) : null;
+
+        int maxLines = Math.max(sourceLines.size(), targetLines.size());
+        int i = 0;
+
+        while (sourceLineNum <= sourceLines.size() || targetLineNum <= targetLines.size()) {
+            // 检查是否到达一个变更块
+            if (currentDelta != null && sourceLineNum == currentDelta.getSource().getPosition() + 1) {
+                // 处理变更块
+                switch (currentDelta.getType()) {
+                    case DELETE:
+                        // 删除的行
+                        for (String line : currentDelta.getSource().getLines()) {
+                            diffLines.add(DiffResult.DiffLine.builder()
+                                    .type("DELETE")
+                                    .sourceLineNumber(sourceLineNum++)
+                                    .targetLineNumber(null)
+                                    .content(line)
+                                    .build());
+                            deletedCount++;
+                        }
+                        break;
+                    case INSERT:
+                        // 新增的行
+                        for (String line : currentDelta.getTarget().getLines()) {
+                            diffLines.add(DiffResult.DiffLine.builder()
+                                    .type("INSERT")
+                                    .sourceLineNumber(null)
+                                    .targetLineNumber(targetLineNum++)
+                                    .content(line)
+                                    .build());
+                            addedCount++;
+                        }
+                        break;
+                    case CHANGE:
+                        // 修改 = 删除旧行 + 新增新行
+                        for (String line : currentDelta.getSource().getLines()) {
+                            diffLines.add(DiffResult.DiffLine.builder()
+                                    .type("DELETE")
+                                    .sourceLineNumber(sourceLineNum++)
+                                    .targetLineNumber(null)
+                                    .content(line)
+                                    .build());
+                            deletedCount++;
+                        }
+                        for (String line : currentDelta.getTarget().getLines()) {
+                            diffLines.add(DiffResult.DiffLine.builder()
+                                    .type("INSERT")
+                                    .sourceLineNumber(null)
+                                    .targetLineNumber(targetLineNum++)
+                                    .content(line)
+                                    .build());
+                            addedCount++;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                // 移动到下一个变更块
+                deltaIndex++;
+                currentDelta = deltaIndex < deltas.size() ? deltas.get(deltaIndex) : null;
+            } else if (sourceLineNum <= sourceLines.size()) {
+                // 相同的行
+                diffLines.add(DiffResult.DiffLine.builder()
+                        .type("EQUAL")
+                        .sourceLineNumber(sourceLineNum)
+                        .targetLineNumber(targetLineNum)
+                        .content(sourceLines.get(sourceLineNum - 1))
+                        .build());
+                sourceLineNum++;
+                targetLineNum++;
+            } else {
+                break;
+            }
+
+            // 安全检查，防止无限循环
+            if (++i > maxLines * 3) {
+                log.warn("Diff 计算超过最大迭代次数，提前终止");
+                break;
+            }
+        }
+
+        return DiffResult.builder()
+                .sourceVersionId(versionId1)
+                .sourceVersionNumber(v1.getVersionNumber())
+                .targetVersionId(versionId2)
+                .targetVersionNumber(v2.getVersionNumber())
+                .lines(diffLines)
+                .addedLines(addedCount)
+                .deletedLines(deletedCount)
+                .build();
     }
 }

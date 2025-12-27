@@ -85,7 +85,7 @@ public class ThreadPoolConfig {
                 TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(arenaQueueCapacity),
                 new ThreadFactoryBuilder()
-                        .setNamePrefix(arenaThreadNamePrefix + "%d")
+                        .setNamePrefix(arenaThreadNamePrefix )
                         .setUncaughtExceptionHandler((t, e) -> 
                                 log.error("Arena 线程异常: thread={}, error={}", t.getName(), e.getMessage(), e))
                         .build(),

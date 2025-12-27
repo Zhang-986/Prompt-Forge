@@ -6,6 +6,7 @@ export interface Prompt {
     description: string
     workspaceId: number
     latestVersionId: number
+    latestVersionNumber?: number
     creatorId: number
     isPublic: boolean
     status: number
@@ -79,4 +80,29 @@ export const commitVersion = (promptId: number, data: CommitVersionData) => {
 // 回滚版本
 export const rollbackVersion = (promptId: number, versionId: number) => {
     return request.post<any, { code: number; data: PromptVersion; message: string }>(`/prompts/${promptId}/rollback/${versionId}`)
+}
+
+// Diff 结果
+export interface DiffLine {
+    type: 'EQUAL' | 'INSERT' | 'DELETE'
+    sourceLineNumber: number | null
+    targetLineNumber: number | null
+    content: string
+}
+
+export interface DiffResult {
+    sourceVersionId: number
+    sourceVersionNumber: number
+    targetVersionId: number
+    targetVersionNumber: number
+    lines: DiffLine[]
+    addedLines: number
+    deletedLines: number
+}
+
+// 获取版本 Diff
+export const getVersionDiff = (versionId1: number, versionId2: number) => {
+    return request.get<any, { code: number; data: DiffResult; message: string }>('/prompts/diff', {
+        params: { versionId1, versionId2 }
+    })
 }

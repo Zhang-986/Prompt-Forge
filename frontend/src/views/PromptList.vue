@@ -1,14 +1,34 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getPrompts, createPrompt, deletePrompt, type Prompt } from '../api/prompt'
+import { getTags, createTag, deleteTag, getPromptTags, setPromptTags, TAG_COLORS, type Tag } from '../api/tag'
+import { exportPrompt, importPromptFile } from '../api/promptExport'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import WorkspaceSelector from '../components/WorkspaceSelector.vue'
+import ThemeToggle from '../components/ThemeToggle.vue'
+import type { Workspace } from '../api/workspace'
 
 const router = useRouter()
 const loading = ref(false)
 const prompts = ref<Prompt[]>([])
 const showCreateDialog = ref(false)
 const creating = ref(false)
+const currentWorkspaceId = ref(1)
+
+// 标签相关状态
+const tags = ref<Tag[]>([])
+const selectedTagFilter = ref<number | null>(null)
+const showTagDialog = ref(false)
+const newTagName = ref('')
+const newTagColor = ref(TAG_COLORS[0])
+const creatingTag = ref(false)
+const showTagManagerForPrompt = ref<Prompt | null>(null)
+const promptTags = ref<Tag[]>([])
+const selectedPromptTags = ref<number[]>([])
+
+// Prompt -> TagIds 的映射 (使用对象以保证 Vue 响应式)
+const promptTagsMap = ref<Record<number, number[]>>({})
 
 const newPrompt = ref({
   name: '',
@@ -16,18 +36,166 @@ const newPrompt = ref({
   content: ''
 })
 
+// 过滤后的 Prompts
+const filteredPrompts = computed(() => {
+  if (!selectedTagFilter.value) return prompts.value
+  // 根据标签过滤
+  return prompts.value.filter(prompt => {
+    const tagIds = promptTagsMap.value[prompt.id]
+    return tagIds && tagIds.includes(selectedTagFilter.value!)
+  })
+})
+
+// 加载所有 Prompt 的标签
+const loadAllPromptTags = async () => {
+  const newMap: Record<number, number[]> = {}
+  for (const prompt of prompts.value) {
+    try {
+      const res = await getPromptTags(prompt.id)
+      if (res.code === 200) {
+        newMap[prompt.id] = res.data.map((t: Tag) => t.id)
+      }
+    } catch {}
+  }
+  // 整体赋值以触发响应式更新
+  promptTagsMap.value = newMap
+}
+
+// 工作空间切换处理
+const handleWorkspaceChange = (workspace: Workspace) => {
+  currentWorkspaceId.value = workspace.id
+  loadPrompts()
+  loadTags()
+}
+
+// 加载标签
+const loadTags = async () => {
+  try {
+    const res = await getTags(currentWorkspaceId.value)
+    if (res.code === 200) {
+      tags.value = res.data
+    }
+  } catch {}
+}
+
+// 创建标签
+const handleCreateTag = async () => {
+  if (!newTagName.value.trim()) {
+    ElMessage.warning('请输入标签名称')
+    return
+  }
+  creatingTag.value = true
+  try {
+    const res = await createTag({ name: newTagName.value.trim(), color: newTagColor.value }, currentWorkspaceId.value)
+    if (res.code === 200) {
+      ElMessage.success('标签创建成功')
+      newTagName.value = ''
+      newTagColor.value = TAG_COLORS[0]
+      showTagDialog.value = false
+      loadTags()
+    }
+  } catch {} finally {
+    creatingTag.value = false
+  }
+}
+
+// 删除标签
+const handleDeleteTag = async (tag: Tag) => {
+  try {
+    await ElMessageBox.confirm(`确定要删除标签 "${tag.name}" 吗？`, '确认删除', { type: 'warning' })
+    const res = await deleteTag(tag.id)
+    if (res.code === 200) {
+      ElMessage.success('删除成功')
+      loadTags()
+    }
+  } catch {}
+}
+
+// 打开标签管理弹窗
+const openTagManager = async (prompt: Prompt) => {
+  showTagManagerForPrompt.value = prompt
+  try {
+    const res = await getPromptTags(prompt.id)
+    if (res.code === 200) {
+      promptTags.value = res.data
+      selectedPromptTags.value = res.data.map((t: Tag) => t.id)
+    }
+  } catch {}
+}
+
+// 保存 Prompt 标签
+const savePromptTags = async () => {
+  if (!showTagManagerForPrompt.value) return
+  const promptId = showTagManagerForPrompt.value.id
+  try {
+    const res = await setPromptTags(promptId, selectedPromptTags.value)
+    if (res.code === 200) {
+      // 立即更新本地 promptTagsMap，无需刷新页面
+      promptTagsMap.value = {
+        ...promptTagsMap.value,
+        [promptId]: [...selectedPromptTags.value]
+      }
+      ElMessage.success('标签已更新')
+      showTagManagerForPrompt.value = null
+    }
+  } catch {}
+}
+
+// ==================== 导入/导出 ====================
+const showImportDialog = ref(false)
+const importFileInput = ref<HTMLInputElement | null>(null)
+const importing = ref(false)
+
+// 导出 Prompt
+const handleExport = async (prompt: Prompt) => {
+  try {
+    await exportPrompt(prompt.id)
+    ElMessage.success('导出成功')
+  } catch (err) {
+    ElMessage.error('导出失败')
+  }
+}
+
+// 触发文件选择
+const triggerImportFile = () => {
+  importFileInput.value?.click()
+}
+
+// 处理文件导入
+const handleImportFile = async (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  
+  importing.value = true
+  try {
+    const res = await importPromptFile(file, currentWorkspaceId.value)
+    if (res.code === 200) {
+      ElMessage.success(`导入成功：${res.data.name}`)
+      showImportDialog.value = false
+      loadPrompts()
+    }
+  } catch (err) {
+    ElMessage.error('导入失败')
+  } finally {
+    importing.value = false
+    // 清空文件选择
+    target.value = ''
+  }
+}
+
 // 加载 Prompt 列表
 const loadPrompts = async () => {
   loading.value = true
   try {
-    const res = await getPrompts(1)
+    const res = await getPrompts(currentWorkspaceId.value)
     if (res.code === 200) {
       prompts.value = res.data
-    } else {
-      ElMessage.error(res.message || '加载失败')
+      // 加载所有 Prompt 的标签用于筛选
+      await loadAllPromptTags()
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '加载失败，请检查后端是否启动')
+    // 错误已由 request.ts 全局处理
   } finally {
     loading.value = false
   }
@@ -46,18 +214,16 @@ const handleCreate = async () => {
       name: newPrompt.value.name,
       description: newPrompt.value.description,
       content: newPrompt.value.content,
-      workspaceId: 1
+      workspaceId: currentWorkspaceId.value
     })
     if (res.code === 200) {
       ElMessage.success('创建成功')
       showCreateDialog.value = false
       newPrompt.value = { name: '', description: '', content: '' }
       loadPrompts()
-    } else {
-      ElMessage.error(res.message || '创建失败')
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '创建失败')
+    // 错误已由 request.ts 全局处理
   } finally {
     creating.value = false
   }
@@ -74,12 +240,10 @@ const handleDelete = async (prompt: Prompt) => {
     if (res.code === 200) {
       ElMessage.success('删除成功')
       loadPrompts()
-    } else {
-      ElMessage.error(res.message || '删除失败')
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.message || '删除失败')
+      // 错误已由 request.ts 全局处理
     }
   }
 }
@@ -107,6 +271,7 @@ try {
 
 onMounted(() => {
   loadPrompts()
+  loadTags()
 })
 </script>
 
@@ -117,8 +282,15 @@ onMounted(() => {
       <div class="header-left">
         <span class="logo-icon">⬡</span>
         <span class="logo-text">Prompt-Forge</span>
+        <WorkspaceSelector 
+          v-model="currentWorkspaceId" 
+          @change="handleWorkspaceChange" 
+        />
       </div>
       <div class="header-right">
+        <ThemeToggle />
+        <button class="arena-btn" @click="router.push('/arena')">⚔️ 竞技场</button>
+        <button class="settings-btn" @click="router.push('/settings/models')">⚙️ 模型配置</button>
         <span class="username">{{ currentUser?.username }}</span>
         <button class="logout-btn" @click="handleLogout">退出</button>
       </div>
@@ -131,8 +303,41 @@ onMounted(() => {
           <h1 class="page-title">Prompt 库</h1>
           <p class="page-desc">管理和版本控制您的 Prompt 模板</p>
         </div>
-        <button class="create-btn" @click="showCreateDialog = true">
-          + 新建 Prompt
+        <div class="header-actions">
+          <button class="import-btn" @click="triggerImportFile">📥 导入</button>
+          <input 
+            ref="importFileInput"
+            type="file" 
+            accept=".json" 
+            style="display: none" 
+            @change="handleImportFile"
+          />
+          <button class="tag-manage-btn" @click="showTagDialog = true">🏷️ 管理标签</button>
+          <button class="create-btn" @click="showCreateDialog = true">
+            + 新建 Prompt
+          </button>
+        </div>
+      </div>
+
+      <!-- 标签筛选栏 -->
+      <div v-if="tags.length > 0" class="tag-filter-bar">
+        <span class="filter-label">标签筛选：</span>
+        <button 
+          class="tag-filter-item" 
+          :class="{ active: !selectedTagFilter }"
+          @click="selectedTagFilter = null"
+        >
+          全部
+        </button>
+        <button 
+          v-for="tag in tags" 
+          :key="tag.id"
+          class="tag-filter-item"
+          :class="{ active: selectedTagFilter === tag.id }"
+          :style="{ '--tag-color': tag.color }"
+          @click="selectedTagFilter = tag.id"
+        >
+          {{ tag.name }}
         </button>
       </div>
 
@@ -140,7 +345,7 @@ onMounted(() => {
       <div v-if="loading" class="loading">加载中...</div>
 
       <!-- Empty State -->
-      <div v-else-if="prompts.length === 0" class="empty-state">
+      <div v-else-if="filteredPrompts.length === 0" class="empty-state">
         <p>暂无 Prompt</p>
         <button class="create-btn" @click="showCreateDialog = true">创建第一个</button>
       </div>
@@ -148,7 +353,7 @@ onMounted(() => {
       <!-- Prompt List -->
       <div v-else class="prompt-grid">
         <div 
-          v-for="prompt in prompts" 
+          v-for="prompt in filteredPrompts" 
           :key="prompt.id" 
           class="prompt-card"
         >
@@ -160,6 +365,12 @@ onMounted(() => {
           <div class="card-footer">
             <span class="date">{{ new Date(prompt.createdAt).toLocaleDateString() }}</span>
             <div class="actions">
+              <button class="action-btn" @click="handleExport(prompt)" title="导出">
+                📤
+              </button>
+              <button class="action-btn" @click="openTagManager(prompt)" title="标签">
+                🏷️
+              </button>
               <button class="action-btn" @click="viewVersions(prompt)" title="版本历史">
                 📜
               </button>
@@ -202,14 +413,82 @@ onMounted(() => {
         </form>
       </div>
     </div>
+
+    <!-- 标签管理弹窗 -->
+    <div v-if="showTagDialog" class="dialog-overlay" @click.self="showTagDialog = false">
+      <div class="dialog tag-dialog">
+        <h3>🏷️ 标签管理</h3>
+        <div class="tag-create-form">
+          <input v-model="newTagName" type="text" placeholder="新标签名称" />
+          <div class="color-picker">
+            <button 
+              v-for="color in TAG_COLORS" 
+              :key="color"
+              class="color-option"
+              :class="{ active: newTagColor === color }"
+              :style="{ backgroundColor: color }"
+              @click="newTagColor = color"
+            ></button>
+          </div>
+          <button class="add-tag-btn" @click="handleCreateTag" :disabled="creatingTag">
+            {{ creatingTag ? '...' : '添加' }}
+          </button>
+        </div>
+        <div class="tag-list">
+          <div v-for="tag in tags" :key="tag.id" class="tag-item">
+            <span class="tag-badge" :style="{ backgroundColor: tag.color }">{{ tag.name }}</span>
+            <button class="delete-tag-btn" @click="handleDeleteTag(tag)">×</button>
+          </div>
+          <p v-if="tags.length === 0" class="empty-tags">暂无标签</p>
+        </div>
+        <div class="dialog-actions">
+          <button class="cancel-btn" @click="showTagDialog = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Prompt 标签设置弹窗 -->
+    <div v-if="showTagManagerForPrompt" class="dialog-overlay" @click.self="showTagManagerForPrompt = null">
+      <div class="dialog tag-dialog">
+        <h3>🏷️ 设置标签 - {{ showTagManagerForPrompt.name }}</h3>
+        <div class="tag-selection">
+          <label 
+            v-for="tag in tags" 
+            :key="tag.id" 
+            class="tag-checkbox"
+            :style="{ '--tag-color': tag.color }"
+          >
+            <input 
+              type="checkbox" 
+              :value="tag.id" 
+              v-model="selectedPromptTags"
+            />
+            <span class="tag-label" :style="{ backgroundColor: tag.color }">{{ tag.name }}</span>
+          </label>
+          <p v-if="tags.length === 0" class="empty-tags">
+            请先<a href="#" @click.prevent="showTagDialog = true; showTagManagerForPrompt = null">创建标签</a>
+          </p>
+        </div>
+        <div class="dialog-actions">
+          <button class="cancel-btn" @click="showTagManagerForPrompt = null">取消</button>
+          <button class="submit-btn" @click="savePromptTags">保存</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .page-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
-  color: #fff;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+/* 深色主题梯度背景 */
+[data-theme="dark"] .page-container,
+:root:not([data-theme="light"]) .page-container {
+  background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-tertiary) 100%);
 }
 
 .header {
@@ -217,7 +496,8 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 32px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
 }
 
 .header-left {
@@ -228,12 +508,13 @@ onMounted(() => {
 
 .logo-icon {
   font-size: 24px;
-  color: #5e6ad2;
+  color: var(--color-primary);
 }
 
 .logo-text {
   font-size: 18px;
   font-weight: 600;
+  color: var(--color-text-primary);
 }
 
 .header-right {
@@ -243,22 +524,52 @@ onMounted(() => {
 }
 
 .username {
-  color: #888;
+  color: var(--color-text-tertiary);
 }
 
 .logout-btn {
   padding: 8px 16px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  color: #888;
+  color: var(--color-text-tertiary);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .logout-btn:hover {
-  border-color: #5e6ad2;
-  color: #5e6ad2;
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.arena-btn {
+  padding: 8px 16px;
+  background: var(--color-primary-gradient);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.arena-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(94, 106, 210, 0.4);
+}
+
+.settings-btn {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.settings-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .main-content {
@@ -278,15 +589,16 @@ onMounted(() => {
   font-size: 28px;
   font-weight: 600;
   margin-bottom: 8px;
+  color: var(--color-text-primary);
 }
 
 .page-desc {
-  color: #888;
+  color: var(--color-text-tertiary);
 }
 
 .create-btn {
   padding: 12px 24px;
-  background: #5e6ad2;
+  background: var(--color-primary);
   border: none;
   border-radius: 8px;
   color: #fff;
@@ -297,13 +609,13 @@ onMounted(() => {
 }
 
 .create-btn:hover {
-  background: #4c5bb5;
+  background: var(--color-primary-hover);
 }
 
 .loading, .empty-state {
   text-align: center;
   padding: 60px 20px;
-  color: #888;
+  color: var(--color-text-tertiary);
 }
 
 .prompt-grid {
@@ -314,15 +626,16 @@ onMounted(() => {
 
 .prompt-card {
   padding: 20px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   transition: all 0.2s;
 }
 
 .prompt-card:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--color-border-hover);
   transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .card-header {
@@ -335,17 +648,19 @@ onMounted(() => {
 .prompt-name {
   font-size: 16px;
   font-weight: 600;
+  color: var(--color-text-primary);
 }
 
 .version-badge {
   padding: 4px 8px;
-  background: #5e6ad2;
+  background: var(--color-primary);
   border-radius: 4px;
   font-size: 12px;
+  color: #fff;
 }
 
 .prompt-desc {
-  color: #888;
+  color: var(--color-text-tertiary);
   font-size: 14px;
   margin-bottom: 16px;
   display: -webkit-box;
@@ -362,7 +677,7 @@ onMounted(() => {
 
 .date {
   font-size: 12px;
-  color: #666;
+  color: var(--color-text-muted);
 }
 
 .actions {
@@ -372,7 +687,7 @@ onMounted(() => {
 
 .action-btn {
   padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-tertiary);
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -381,11 +696,11 @@ onMounted(() => {
 }
 
 .action-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--color-primary-light);
 }
 
 .action-btn.danger:hover {
-  background: rgba(239, 68, 68, 0.3);
+  background: var(--color-danger-light);
 }
 
 /* Dialog */
@@ -402,14 +717,15 @@ onMounted(() => {
 .dialog {
   width: 500px;
   padding: 24px;
-  background: #1a1a2e;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
 }
 
 .dialog h3 {
   margin-bottom: 20px;
   font-size: 18px;
+  color: var(--color-text-primary);
 }
 
 .form-group {
@@ -420,24 +736,24 @@ onMounted(() => {
   display: block;
   margin-bottom: 6px;
   font-size: 14px;
-  color: #888;
+  color: var(--color-text-tertiary);
 }
 
 .form-group input,
 .form-group textarea {
   width: 100%;
   padding: 12px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  color: #fff;
+  color: var(--color-text-primary);
   font-size: 14px;
   outline: none;
 }
 
 .form-group input:focus,
 .form-group textarea:focus {
-  border-color: #5e6ad2;
+  border-color: var(--color-primary);
 }
 
 .dialog-actions {
@@ -450,22 +766,265 @@ onMounted(() => {
 .cancel-btn {
   padding: 10px 20px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  color: #888;
+  color: var(--color-text-tertiary);
   cursor: pointer;
+}
+
+.cancel-btn:hover {
+  border-color: var(--color-border-hover);
 }
 
 .submit-btn {
   padding: 10px 20px;
-  background: #5e6ad2;
+  background: var(--color-primary);
   border: none;
   border-radius: 8px;
   color: #fff;
   cursor: pointer;
 }
 
+.submit-btn:hover {
+  background: var(--color-primary-hover);
+}
+
 .submit-btn:disabled {
   opacity: 0.6;
+}
+
+/* ==================== 标签相关样式 ==================== */
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.tag-manage-btn {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tag-manage-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.import-btn {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.import-btn:hover {
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.tag-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.filter-label {
+  color: var(--color-text-tertiary);
+  font-size: 14px;
+}
+
+.tag-filter-item {
+  padding: 6px 14px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tag-filter-item:hover {
+  border-color: var(--tag-color, var(--color-primary));
+  color: var(--tag-color, var(--color-primary));
+}
+
+.tag-filter-item.active {
+  background: var(--tag-color, var(--color-primary));
+  border-color: var(--tag-color, var(--color-primary));
+  color: #fff;
+}
+
+.tag-dialog {
+  width: 450px;
+  max-width: 90vw;
+}
+
+.tag-create-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.tag-create-form input {
+  flex: 1;
+  min-width: 150px;
+  padding: 10px 12px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+.color-picker {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.color-option {
+  width: 28px;
+  height: 28px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.color-option.active {
+  border-color: #fff;
+  transform: scale(1.1);
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+.add-tag-btn {
+  padding: 10px 20px;
+  background: var(--color-primary);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.color-option.active {
+  border-color: #fff;
+  transform: scale(1.1);
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+.add-tag-btn {
+  padding: 10px 16px;
+  background: var(--color-primary);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.add-tag-btn:disabled {
+  opacity: 0.6;
+}
+
+.tag-list {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+.tag-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tag-item:last-child {
+  border-bottom: none;
+}
+
+.tag-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 13px;
+}
+
+.delete-tag-btn {
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-tertiary);
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.delete-tag-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.empty-tags {
+  color: var(--color-text-tertiary);
+  text-align: center;
+  padding: 20px;
+}
+
+.empty-tags a {
+  color: var(--color-primary);
+}
+
+.tag-selection {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.tag-checkbox {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.tag-checkbox input {
+  display: none;
+}
+
+.tag-checkbox .tag-label {
+  padding: 6px 14px;
+  border-radius: 16px;
+  color: #fff;
+  font-size: 13px;
+  opacity: 0.5;
+  transition: all 0.2s;
+}
+
+.tag-checkbox input:checked + .tag-label {
+  opacity: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 </style>

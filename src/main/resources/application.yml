@@ -151,26 +151,9 @@ cache:
       expire-minutes: 60
 
 # ==================== AI 模型配置 ====================
-llm:
-  models:
-    openai:
-      enabled: true
-      api-key: ${OPENAI_API_KEY:sk-your-api-key}
-      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
-      model: gpt-4
-      timeout-seconds: 60
-    deepseek:
-      enabled: true
-      api-key: ${DEEPSEEK_API_KEY:sk-your-api-key}
-      base-url: https://api.deepseek.com
-      model: deepseek-chat
-      timeout-seconds: 60
-    claude:
-      enabled: false
-      api-key: ${CLAUDE_API_KEY:sk-your-api-key}
-      base-url: https://api.anthropic.com
-      model: claude-3-opus-20240229
-      timeout-seconds: 60
+# 注意：系统已采用用户自主配置模式
+# 用户需要在"模型配置"页面添加自己的 API Key 才能使用竞技场功能
+# 支持的提供商: google, zhipu, deepseek, openai, claude
 
 # ==================== API 文档配置 ====================
 springdoc:

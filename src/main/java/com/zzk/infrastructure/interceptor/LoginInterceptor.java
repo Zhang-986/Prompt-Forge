@@ -1,38 +1,45 @@
 package com.zzk.infrastructure.interceptor;
 
 import com.alibaba.fastjson2.JSON;
+import com.zzk.infrastructure.util.JwtUtil;
 import com.zzk.interfaces.dto.response.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.io.IOException;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 登录拦截器
+ * 登录拦截器 - 使用 JWT 验证
  * 
  * @author zzk
  * @since 1.0.0
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class LoginInterceptor implements HandlerInterceptor {
 
-    // Token 存储（与 UserController 共享，生产环境应使用 Redis）
-    public static final Map<String, Long> TOKEN_STORE = new ConcurrentHashMap<>();
+    private final JwtUtil jwtUtil;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        // 放行 OPTIONS 请求 (CORS 预检)
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
+
         // 获取 Authorization Header
         String authorization = request.getHeader("Authorization");
         
         if (authorization != null && authorization.startsWith("Bearer ")) {
             String token = authorization.substring(7);
-            Long userId = TOKEN_STORE.get(token);
+            
+            // 使用 JWT 验证 Token
+            Long userId = jwtUtil.getUserIdFromToken(token);
             
             if (userId != null) {
                 // Token 有效，将用户 ID 放入 request

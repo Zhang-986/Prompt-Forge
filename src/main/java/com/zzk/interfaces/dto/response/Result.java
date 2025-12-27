@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.UUID;
+
 /**
  * 统一响应结果
  * 
@@ -36,6 +38,18 @@ public class Result<T> {
      * 时间戳
      */
     private long timestamp;
+
+    /**
+     * 请求追踪 ID，用于问题排查
+     */
+    private String traceId;
+
+    /**
+     * 生成追踪 ID
+     */
+    private static String generateTraceId() {
+        return UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+    }
 
     /**
      * 成功响应
@@ -76,7 +90,22 @@ public class Result<T> {
                 .code(code)
                 .message(message)
                 .timestamp(System.currentTimeMillis())
+                .traceId(generateTraceId())
                 .build();
+    }
+
+    /**
+     * 失败响应（使用 ErrorCode 枚举）
+     */
+    public static <T> Result<T> error(ErrorCode errorCode) {
+        return error(errorCode.getCode(), errorCode.getMessage());
+    }
+
+    /**
+     * 失败响应（使用 ErrorCode 枚举 + 自定义消息）
+     */
+    public static <T> Result<T> error(ErrorCode errorCode, String message) {
+        return error(errorCode.getCode(), message);
     }
 
     /**

@@ -45,12 +45,10 @@ public class ArenaController {
      */
     @PostMapping(value = "/compete", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(summary = "启动竞技场对比", description = "同时调用多个 AI 模型，SSE 流式返回结果")
-    public SseEmitter compete(@Valid @RequestBody ArenaCompeteRequest request) {
-        log.info("收到竞技场对比请求: versionId={}, models={}", 
-                request.getPromptVersionId(), request.getModelIds());
-
-        // TODO: 从 JWT 中获取用户 ID
-        Long userId = 1L;
+    public SseEmitter compete(@RequestAttribute("userId") Long userId,
+                               @Valid @RequestBody ArenaCompeteRequest request) {
+        log.info("收到竞技场对比请求: versionId={}, models={}, userId={}", 
+                request.getPromptVersionId(), request.getModelIds(), userId);
 
         return arenaAppService.compete(
                 request.getPromptVersionId(),
@@ -61,11 +59,11 @@ public class ArenaController {
     }
 
     /**
-     * 获取可用的模型列表
+     * 获取用户可用的模型列表（只返回用户已配置的模型）
      */
     @GetMapping("/models")
-    @Operation(summary = "获取可用模型列表", description = "返回当前已启用的 AI 模型列表")
-    public Result<List<String>> getAvailableModels() {
-        return Result.success(arenaAppService.getAvailableModels());
+    @Operation(summary = "获取可用模型列表", description = "返回用户已配置的 AI 模型列表")
+    public Result<List<String>> getAvailableModels(@RequestAttribute("userId") Long userId) {
+        return Result.success(arenaAppService.getAvailableModels(userId));
     }
 }

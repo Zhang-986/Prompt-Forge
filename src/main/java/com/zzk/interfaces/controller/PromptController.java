@@ -5,6 +5,7 @@ import com.zzk.domain.model.aggregate.Prompt;
 import com.zzk.domain.model.entity.PromptVersion;
 import com.zzk.interfaces.dto.request.CommitVersionRequest;
 import com.zzk.interfaces.dto.request.CreatePromptRequest;
+import com.zzk.interfaces.dto.response.DiffResult;
 import com.zzk.interfaces.dto.response.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -150,5 +151,17 @@ public class PromptController {
 
         promptAppService.deletePrompt(promptId, userId);
         return Result.success("删除成功", null);
+    }
+
+    /**
+     * 获取版本 Diff
+     */
+    @GetMapping("/diff")
+    @Operation(summary = "获取版本 Diff", description = "对比两个版本之间的差异")
+    public Result<DiffResult> getVersionDiff(
+            @Parameter(description = "版本 1 ID（源版本）") @RequestParam Long versionId1,
+            @Parameter(description = "版本 2 ID（目标版本）") @RequestParam Long versionId2) {
+        log.info("获取版本 Diff: versionId1={}, versionId2={}", versionId1, versionId2);
+        return Result.success(promptAppService.getVersionDiff(versionId1, versionId2));
     }
 }

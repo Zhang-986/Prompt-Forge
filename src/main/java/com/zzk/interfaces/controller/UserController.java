@@ -3,6 +3,7 @@ package com.zzk.interfaces.controller;
 import com.zzk.domain.model.aggregate.User;
 import com.zzk.domain.repository.UserRepository;
 import com.zzk.infrastructure.exception.BusinessException;
+import com.zzk.infrastructure.util.JwtUtil;
 import com.zzk.interfaces.dto.response.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,8 +17,6 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 用户控制器
@@ -33,9 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class UserController {
 
     private final UserRepository userRepository;
-
-    // 使用共享的 Token 存储（与 LoginInterceptor 共享）
-    private static final Map<String, Long> TOKEN_STORE = com.zzk.infrastructure.interceptor.LoginInterceptor.TOKEN_STORE;
+    private final JwtUtil jwtUtil;
 
     /**
      * 用户注册
@@ -69,8 +66,8 @@ public class UserController {
         userRepository.save(user);
         log.info("用户注册成功: id={}", user.getId());
 
-        // 生成 Token
-        String token = generateToken(user.getId());
+        // 生成 JWT Token
+        String token = jwtUtil.generateToken(user.getId(), user.getUsername());
 
         Map<String, Object> data = new HashMap<>();
         data.put("token", token);
@@ -101,8 +98,8 @@ public class UserController {
             throw new BusinessException("账号已被禁用");
         }
 
-        // 生成 Token
-        String token = generateToken(user.getId());
+        // 生成 JWT Token
+        String token = jwtUtil.generateToken(user.getId(), user.getUsername());
 
         Map<String, Object> data = new HashMap<>();
         data.put("token", token);
@@ -117,15 +114,9 @@ public class UserController {
      */
     @GetMapping("/me")
     @Operation(summary = "获取当前用户信息")
-    public Result<Map<String, Object>> getCurrentUser(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        Long userId = parseToken(authorization);
-        if (userId == null) {
-            throw new BusinessException(401, "请先登录");
-        }
-
+    public Result<Map<String, Object>> getCurrentUser(@RequestAttribute("userId") Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException("用户不存在"));
-
         return Result.success(buildUserInfo(user));
     }
 
@@ -134,11 +125,8 @@ public class UserController {
      */
     @PostMapping("/logout")
     @Operation(summary = "退出登录")
-    public Result<Void> logout(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        if (authorization != null && authorization.startsWith("Bearer ")) {
-            String token = authorization.substring(7);
-            TOKEN_STORE.remove(token);
-        }
+    public Result<Void> logout() {
+        // JWT 无状态，客户端删除 Token 即可
         return Result.success("退出成功", null);
     }
 
@@ -148,13 +136,8 @@ public class UserController {
     @PostMapping("/change-password")
     @Operation(summary = "修改密码")
     public Result<Void> changePassword(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestAttribute("userId") Long userId,
             @Valid @RequestBody ChangePasswordRequest request) {
-        
-        Long userId = parseToken(authorization);
-        if (userId == null) {
-            throw new BusinessException(401, "请先登录");
-        }
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException("用户不存在"));
@@ -172,37 +155,33 @@ public class UserController {
         return Result.success("密码修改成功", null);
     }
 
+    /**
+     * 搜索用户（用于邀请成员）
+     */
+    @GetMapping("/search")
+    @Operation(summary = "搜索用户", description = "通过用户名搜索用户")
+    public Result<Map<String, Object>> searchUser(@RequestParam String username) {
+        User user = userRepository.findByUsername(username).orElse(null);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        return Result.success(buildUserInfo(user));
+    }
+
     // ==================== 辅助方法 ====================
 
-    private String generateToken(Long userId) {
-        String token = UUID.randomUUID().toString().replace("-", "");
-        TOKEN_STORE.put(token, userId);
-        return token;
-    }
-
-    private Long parseToken(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            return null;
-        }
-        String token = authorization.substring(7);
-        return TOKEN_STORE.get(token);
-    }
-
     private String hashPassword(String password) {
-        // 使用 BCrypt 加密
         org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder encoder = 
             new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
         return encoder.encode(password);
     }
 
     private boolean verifyPassword(String rawPassword, String hashedPassword) {
-        // 如果数据库密码是 BCrypt 格式（以 $2a$ 开头）
         if (hashedPassword != null && hashedPassword.startsWith("$2a$")) {
             org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder encoder = 
                 new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
             return encoder.matches(rawPassword, hashedPassword);
         }
-        // 兼容简单的 hashCode（旧版本）
         return String.valueOf(rawPassword.hashCode()).equals(hashedPassword);
     }
 

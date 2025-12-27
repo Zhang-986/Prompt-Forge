@@ -42,3 +42,10 @@ export const getCurrentUser = () => {
 export const logout = () => {
     return request.post('/users/logout')
 }
+
+// 搜索用户（用于邀请成员）
+export const searchUser = (username: string) => {
+    return request.get<any, { code: number; data: User; message: string }>('/users/search', {
+        params: { username }
+    })
+}

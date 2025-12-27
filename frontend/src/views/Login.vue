@@ -153,14 +153,20 @@ const handleRegister = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
+  background: var(--color-bg-primary);
+}
+
+/* 深色主题渐变 */
+[data-theme="dark"] .login-container,
+:root:not([data-theme="light"]) .login-container {
+  background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-tertiary) 100%);
 }
 
 .login-card {
   width: 400px;
   padding: 40px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: 16px;
   backdrop-filter: blur(10px);
 }
@@ -175,38 +181,38 @@ const handleRegister = async () => {
 
 .logo-icon {
   font-size: 28px;
-  color: #5e6ad2;
+  color: var(--color-primary);
 }
 
 .logo-text {
   font-size: 20px;
   font-weight: 600;
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .tabs {
   display: flex;
   margin-bottom: 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .tab {
   flex: 1;
   padding: 12px;
   text-align: center;
-  color: #888;
+  color: var(--color-text-tertiary);
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: all 0.2s;
 }
 
 .tab:hover {
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .tab.active {
-  color: #5e6ad2;
-  border-bottom-color: #5e6ad2;
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
 }
 
 .form {
@@ -223,28 +229,28 @@ const handleRegister = async () => {
 
 .form-group label {
   font-size: 14px;
-  color: #888;
+  color: var(--color-text-tertiary);
 }
 
 .form-group input {
   padding: 12px 14px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  color: #fff;
+  color: var(--color-text-primary);
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s;
 }
 
 .form-group input:focus {
-  border-color: #5e6ad2;
+  border-color: var(--color-primary);
 }
 
 .submit-btn {
   margin-top: 8px;
   padding: 14px;
-  background: #5e6ad2;
+  background: var(--color-primary);
   border: none;
   border-radius: 8px;
   color: #fff;
@@ -255,7 +261,7 @@ const handleRegister = async () => {
 }
 
 .submit-btn:hover:not(:disabled) {
-  background: #4c5bb5;
+  background: var(--color-primary-hover);
 }
 
 .submit-btn:disabled {
