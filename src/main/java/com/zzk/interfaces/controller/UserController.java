@@ -1,12 +1,18 @@
 package com.zzk.interfaces.controller;
 
 import com.zzk.domain.model.aggregate.User;
+import com.zzk.domain.model.entity.LoginAuditLog;
+import com.zzk.domain.model.valueobject.CaptchaResult;
+import com.zzk.domain.model.valueobject.LoginAttemptInfo;
+import com.zzk.domain.model.valueobject.LoginResult;
 import com.zzk.domain.repository.UserRepository;
+import com.zzk.domain.service.auth.LoginGuardService;
 import com.zzk.infrastructure.exception.BusinessException;
 import com.zzk.infrastructure.util.JwtUtil;
 import com.zzk.interfaces.dto.response.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
@@ -15,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -33,6 +40,7 @@ public class UserController {
 
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
+    private final LoginGuardService loginGuardService;
 
     /**
      * 用户注册
@@ -77,27 +85,83 @@ public class UserController {
     }
 
     /**
-     * 用户登录
+     * 用户登录（集成登录防护）
      */
     @PostMapping("/login")
     @Operation(summary = "用户登录")
-    public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest request) {
-        log.info("用户登录: username={}", request.getUsername());
+    public Result<Map<String, Object>> login(
+            HttpServletRequest httpRequest,
+            @Valid @RequestBody LoginRequest request) {
+        
+        String ip = getClientIp(httpRequest);
+        String username = request.getUsername();
+        String userAgent = httpRequest.getHeader("User-Agent");
+        
+        log.info("用户登录: username={}, ip={}", username, ip);
 
-        // 查找用户
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new BusinessException("用户名或密码错误"));
+        // 1. 登录前检查（封禁/验证码）
+        LoginAttemptInfo attemptInfo = loginGuardService.preLoginCheck(ip, username);
+        
+        if (attemptInfo.banned()) {
+            // 记录审计日志
+            loginGuardService.logAudit(LoginAuditLog.failure(
+                    username, ip, userAgent, LoginResult.BANNED, "账号被封禁"));
+            
+            String bannedUntilStr = attemptInfo.bannedUntil()
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            throw new BusinessException("账号已被临时封禁，解封时间：" + bannedUntilStr);
+        }
+        
+        // 2. 验证码校验（需要验证码时必须校验）
+        if (attemptInfo.captchaRequired()) {
+            if (request.getCaptchaKey() == null || request.getCaptchaCode() == null) {
+                throw new BusinessException(428, "需要输入验证码");
+            }
+            if (!loginGuardService.verifyCaptcha(request.getCaptchaKey(), request.getCaptchaCode())) {
+                // 记录审计日志
+                loginGuardService.logAudit(LoginAuditLog.failure(
+                        username, ip, userAgent, LoginResult.CAPTCHA_FAILED, "验证码错误"));
+                throw new BusinessException(428, "验证码错误或已过期");
+            }
+        }
 
-        // 验证密码
-        if (!verifyPassword(request.getPassword(), user.getPassword())) {
+        // 3. 查找用户
+        User user = userRepository.findByUsername(username).orElse(null);
+        if (user == null) {
+            loginGuardService.recordFailure(ip, username, "用户不存在");
+            loginGuardService.logAudit(LoginAuditLog.failure(
+                    username, ip, userAgent, LoginResult.USER_NOT_FOUND, "用户不存在"));
             throw new BusinessException("用户名或密码错误");
         }
 
-        // 检查状态
+        // 4. 验证密码
+        if (!verifyPassword(request.getPassword(), user.getPassword())) {
+            LoginAttemptInfo newAttempt = loginGuardService.recordFailure(ip, username, "密码错误");
+            loginGuardService.logAudit(LoginAuditLog.failure(
+                    username, ip, userAgent, LoginResult.FAILED_PASSWORD, "密码错误"));
+            
+            // 返回友好提示
+            if (newAttempt.banned()) {
+                String bannedUntilStr = newAttempt.bannedUntil()
+                        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                throw new BusinessException("登录失败次数过多，账号已被临时封禁至 " + bannedUntilStr);
+            } else if (newAttempt.captchaRequired()) {
+                throw new BusinessException(428, "密码错误，请输入验证码后重试");
+            }
+            throw new BusinessException("用户名或密码错误");
+        }
+
+        // 5. 检查账号状态
         if (user.getStatus() != 1) {
+            loginGuardService.logAudit(LoginAuditLog.failure(
+                    username, ip, userAgent, LoginResult.ACCOUNT_DISABLED, "账号已禁用"));
             throw new BusinessException("账号已被禁用");
         }
 
+        // 6. 登录成功
+        loginGuardService.recordSuccess(ip, username);
+        loginGuardService.logAudit(LoginAuditLog.success(username, ip, userAgent));
+        
         // 生成 JWT Token
         String token = jwtUtil.generateToken(user.getId(), user.getUsername());
 
@@ -107,6 +171,39 @@ public class UserController {
 
         log.info("用户登录成功: id={}", user.getId());
         return Result.success("登录成功", data);
+    }
+
+    /**
+     * 获取验证码
+     */
+    @GetMapping("/captcha")
+    @Operation(summary = "获取验证码", description = "用于登录失败次数过多时需要输入验证码")
+    public Result<CaptchaResult> getCaptcha() {
+        CaptchaResult captcha = loginGuardService.generateCaptcha();
+        return Result.success(captcha);
+    }
+
+    /**
+     * 检查登录状态（是否需要验证码）
+     */
+    @GetMapping("/login-check")
+    @Operation(summary = "检查登录状态", description = "检查指定用户名是否需要验证码")
+    public Result<Map<String, Object>> checkLoginStatus(
+            HttpServletRequest httpRequest,
+            @RequestParam String username) {
+        
+        String ip = getClientIp(httpRequest);
+        LoginAttemptInfo attemptInfo = loginGuardService.preLoginCheck(ip, username);
+        
+        Map<String, Object> data = new HashMap<>();
+        data.put("captchaRequired", attemptInfo.captchaRequired());
+        data.put("banned", attemptInfo.banned());
+        if (attemptInfo.banned() && attemptInfo.bannedUntil() != null) {
+            data.put("bannedUntil", attemptInfo.bannedUntil()
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        }
+        
+        return Result.success(data);
     }
 
     /**
@@ -170,6 +267,30 @@ public class UserController {
 
     // ==================== 辅助方法 ====================
 
+    /**
+     * 获取客户端真实 IP
+     */
+    private String getClientIp(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("X-Real-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("Proxy-Client-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("WL-Proxy-Client-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr();
+        }
+        // 多个代理时，取第一个 IP
+        if (ip != null && ip.contains(",")) {
+            ip = ip.split(",")[0].trim();
+        }
+        return ip;
+    }
+
     private String hashPassword(String password) {
         org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder encoder = 
             new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
@@ -216,6 +337,16 @@ public class UserController {
 
         @NotBlank(message = "密码不能为空")
         private String password;
+
+        /**
+         * 验证码Key（需要验证码时必填）
+         */
+        private String captchaKey;
+
+        /**
+         * 验证码值（需要验证码时必填）
+         */
+        private String captchaCode;
     }
 
     @Data

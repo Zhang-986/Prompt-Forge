@@ -71,6 +71,25 @@ redisson:
     connection-minimum-idle-size: 5
     connection-pool-size: 20
 
+# ==================== 登录防护配置 ====================
+# 阶梯式限流防御阈值，可根据需要调整
+login:
+  guard:
+    # 失败多少次后需要输入验证码
+    captcha-trigger-count: 3
+    # 失败多少次后短期封禁
+    short-ban-trigger-count: 5
+    # 失败多少次后长期封禁
+    long-ban-trigger-count: 10
+    # 短期封禁时长
+    short-ban-duration: 15m
+    # 长期封禁时长
+    long-ban-duration: 24h
+    # 失败计数器过期时间
+    counter-expiration: 24h
+    # 验证码有效期
+    captcha-expiration: 5m
+
 # ==================== Resilience4j 熔断配置 ====================
 resilience4j:
   circuitbreaker:

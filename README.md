@@ -10,12 +10,14 @@ Prompt-Forge 是一个高复杂度的 PromptOps 系统，帮助开发者通过"�
 
 | 特性 | 描述 |
 |------|------|
-| 🏟️ **多模型竞技场** | 同时调用 GPT-4、DeepSeek、Claude 等多个 AI 模型并行作答 |
-| 🌲 **类 Git 版本控制** | 链式存储结构，支持 Diff 对比、版本回溯 |
+| 🏟️ **多模型竞技场** | 同时调用 GPT-4、DeepSeek、Claude 等多个 AI 模型并行作答，支持 SSE 流式输出 |
+| 🌲 **类 Git 版本控制** | 链式存储结构，支持 Diff 对比、版本回溯、分支管理 |
+| 🏷️ **标签系统** | 按工作空间隔离的标签管理，支持多标签筛选 |
+| 🏢 **多租户工作空间** | 严格的数据隔离，支持多工作空间切换 |
+| 🌍 **局域网共享** | 内置 Host 0.0.0.0 配置，开箱即用的局域网访问支持 |
 | ⚡ **高可用设计** | Resilience4j 熔断降级、限流保护 |
 | 💾 **多级缓存** | Caffeine + Redis 二级缓存架构 |
-| 🔐 **企业级权限** | RBAC 权限控制 + 多租户数据隔离 |
-| 📊 **异步任务** | 消息队列 + 任务状态机 |
+| 🔐 **企业级权限** | RBAC 权限控制 + JWT 认证 |
 
 ---
 
@@ -86,9 +88,13 @@ mysql -u root -p < sql/init.sql
 mvn spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-### 5. 访问 API 文档
+### 5. 访问应用
 
-打开浏览器访问：http://localhost:8080/swagger-ui.html
+- **本地访问**: 浏览器打开 [http://localhost:5173](http://localhost:5173)
+- **局域网访问**: 浏览器打开 `http://<你的IP>:5173` (例如 `http://10.9.57.162:5173`)
+- **API 文档**: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
+
+> 💡 **Tip**: 前端已配置 `host: 0.0.0.0`，在同一局域网下的设备（如同宿舍室友）可以直接通过 IP 访问你的服务。
 
 ---
 

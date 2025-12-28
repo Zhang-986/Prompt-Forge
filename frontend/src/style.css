@@ -257,19 +257,34 @@ a:hover {
   border-color: var(--color-border) !important;
 }
 
-/* 输入框覆盖 */
-input,
-textarea,
-select {
+/* 输入框覆盖 - 排除 Ant Design 组件 */
+input:not(.ant-input):not([class*="ant-"]),
+textarea:not(.ant-input):not([class*="ant-"]),
+select:not([class*="ant-"]) {
   background: var(--color-bg-secondary) !important;
   border-color: var(--color-border) !important;
   color: var(--color-text-primary) !important;
 }
 
-input:focus,
-textarea:focus,
-select:focus {
+input:not(.ant-input):not([class*="ant-"]):focus,
+textarea:not(.ant-input):not([class*="ant-"]):focus,
+select:not([class*="ant-"]):focus {
   border-color: var(--color-primary) !important;
+}
+
+/* Ant Design 输入框暗色主题适配 */
+.ant-input,
+.ant-input-password .ant-input,
+.ant-input-affix-wrapper {
+  background: #1a1a2e !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #fff !important;
+}
+
+.ant-input-affix-wrapper:focus,
+.ant-input-affix-wrapper-focused {
+  border-color: #5e6ad2 !important;
+  box-shadow: 0 0 0 2px rgba(94, 106, 210, 0.2) !important;
 }
 
 /* 标签覆盖 */

@@ -28,6 +28,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
                     // 用户登录注册
                     "/api/users/login",
                     "/api/users/register",
+                    // 验证码相关（登录防护）
+                    "/api/users/captcha",
+                    "/api/users/login-check",
                     // Swagger 文档
                     "/swagger-ui/**",
                     "/v3/api-docs/**",
