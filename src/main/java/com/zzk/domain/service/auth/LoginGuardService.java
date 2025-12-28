@@ -36,6 +36,7 @@ public class LoginGuardService {
     private final LoginAuditLogRepository auditLogRepository;
     private final CaptchaService captchaService;
     private final LoginGuardConfig config;
+    private final IpGeoService ipGeoService;
 
     /**
      * 构建防护键
@@ -156,13 +157,21 @@ public class LoginGuardService {
     /**
      * 记录审计日志
      * 
+     * <p>自动根据 IP 地址填充地理位置信息。
+     * 
      * @param auditLog 审计日志
      */
     public void logAudit(LoginAuditLog auditLog) {
         try {
+            // 自动填充地理位置
+            if (auditLog.getGeoLocation() == null && auditLog.getIpAddress() != null) {
+                String geoLocation = ipGeoService.getFormattedLocation(auditLog.getIpAddress());
+                auditLog.setGeoLocation(geoLocation);
+            }
+            
             auditLogRepository.save(auditLog);
-            log.debug("审计日志已记录: username={}, result={}", 
-                    auditLog.getUsername(), auditLog.getResult());
+            log.debug("审计日志已记录: username={}, result={}, geoLocation={}", 
+                    auditLog.getUsername(), auditLog.getResult(), auditLog.getGeoLocation());
         } catch (Exception e) {
             // 审计日志记录失败不应影响主流程
             log.error("审计日志记录失败: {}", e.getMessage(), e);
