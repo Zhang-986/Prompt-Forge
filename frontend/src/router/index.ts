@@ -42,6 +42,11 @@ const router = createRouter({
             path: '/plaza',
             name: 'Plaza',
             component: () => import('../views/PromptPlaza.vue')
+        },
+        {
+            path: '/coach',
+            name: 'PromptCoach',
+            component: () => import('../views/PromptCoach.vue')
         }
     ]
 })

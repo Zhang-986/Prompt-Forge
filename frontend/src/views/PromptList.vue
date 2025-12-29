@@ -11,7 +11,8 @@ import { message, Modal } from 'ant-design-vue'
 import {
   PlusOutlined, ImportOutlined, TagsOutlined, ExportOutlined, SendOutlined,
   EditOutlined, HistoryOutlined, DeleteOutlined, LogoutOutlined,
-  AppstoreOutlined, ThunderboltOutlined, SettingOutlined, RobotOutlined
+  AppstoreOutlined, ThunderboltOutlined, SettingOutlined, RobotOutlined,
+  CommentOutlined
 } from '@ant-design/icons-vue'
 import WorkspaceSelector from '../components/WorkspaceSelector.vue'
 import type { Workspace } from '../api/workspace'
@@ -454,6 +455,14 @@ onMounted(() => {
                 <AppstoreOutlined />
               </template>
               广场
+            </a-button>
+          </a-tooltip>
+          <a-tooltip title="Prompt 教练">
+            <a-button type="text" @click="router.push('/coach')">
+              <template #icon>
+                <CommentOutlined />
+              </template>
+              教练
             </a-button>
           </a-tooltip>
           <a-tooltip title="竞技场">
