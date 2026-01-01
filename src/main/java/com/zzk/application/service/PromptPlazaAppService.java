@@ -6,6 +6,7 @@ import com.zzk.domain.model.entity.PromptVersion;
 import com.zzk.domain.repository.PromptRepository;
 import com.zzk.domain.repository.PromptTemplateRepository;
 import com.zzk.domain.repository.PromptVersionRepository;
+import com.zzk.infrastructure.annotation.SensitiveCheck;
 import com.zzk.infrastructure.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -94,6 +95,7 @@ public class PromptPlazaAppService {
     /**
      * 发布 Prompt 到广场
      */
+    @SensitiveCheck
     @Transactional(rollbackFor = Exception.class)
     public PromptTemplate publishToPlaza(Long promptId, String category, Long userId, String authorName) {
         log.info("发布到广场: promptId={}, category={}, userId={}", promptId, category, userId);

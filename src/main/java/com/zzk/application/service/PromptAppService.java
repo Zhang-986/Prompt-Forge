@@ -6,6 +6,7 @@ import com.zzk.domain.model.entity.Workspace;
 import com.zzk.domain.repository.PromptRepository;
 import com.zzk.domain.repository.PromptVersionRepository;
 import com.zzk.domain.service.PromptDomainService;
+import com.zzk.infrastructure.annotation.SensitiveCheck;
 import com.zzk.infrastructure.exception.BusinessException;
 import com.zzk.interfaces.dto.response.DiffResult;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +47,7 @@ public class PromptAppService {
      * @param userId 创建者 ID
      * @return 创建的 Prompt
      */
+    @SensitiveCheck
     @Transactional(rollbackFor = Exception.class)
     public Prompt createPrompt(String name, String description, String content, 
                                 Long workspaceId, Long userId) {
@@ -114,6 +116,7 @@ public class PromptAppService {
     /**
      * 提交新版本
      */
+    @SensitiveCheck
     @CacheEvict(value = "prompt", key = "#promptId")
     @Transactional(rollbackFor = Exception.class)
     public PromptVersion commitVersion(Long promptId, String content, 
@@ -196,6 +199,7 @@ public class PromptAppService {
     /**
      * 更新 Prompt 信息（名称、描述）
      */
+    @SensitiveCheck
     @CacheEvict(value = "prompt", key = "#promptId")
     @Transactional(rollbackFor = Exception.class)
     public Prompt updatePromptInfo(Long promptId, String name, String description, Long userId) {

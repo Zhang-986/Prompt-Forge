@@ -3,6 +3,7 @@ package com.zzk.application.service;
 import com.zzk.domain.model.entity.Workspace;
 import com.zzk.domain.model.entity.WorkspaceMember;
 import com.zzk.domain.repository.WorkspaceRepository;
+import com.zzk.infrastructure.annotation.SensitiveCheck;
 import com.zzk.infrastructure.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +31,7 @@ public class WorkspaceAppService {
     /**
      * 创建工作空间
      */
+    @SensitiveCheck
     @Transactional(rollbackFor = Exception.class)
     public Workspace createWorkspace(String name, String description, Long ownerId) {
         log.info("创建工作空间: name={}, ownerId={}", name, ownerId);

@@ -47,6 +47,12 @@ const router = createRouter({
             path: '/coach',
             name: 'PromptCoach',
             component: () => import('../views/PromptCoach.vue')
+        },
+        {
+            path: '/admin',
+            name: 'Admin',
+            component: () => import('../views/AdminDashboard.vue'),
+            meta: { requiresAdmin: true }
         }
     ]
 })
@@ -67,7 +73,28 @@ router.beforeEach((to, _from, next) => {
         return
     }
 
+    // 需要管理员权限的页面
+    if (to.meta.requiresAdmin) {
+        try {
+            const userStr = localStorage.getItem('user')
+            if (userStr) {
+                const user = JSON.parse(userStr)
+                if (user.role !== 'ADMIN') {
+                    next({ name: 'Prompts' })
+                    return
+                }
+            } else {
+                next({ name: 'Login' })
+                return
+            }
+        } catch {
+            next({ name: 'Login' })
+            return
+        }
+    }
+
     next()
 })
 
 export default router
+

@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 public class PromptTemplate {
     
     private Long id;
+    private Long promptId;
     private String name;
     private String description;
     private String content;
@@ -26,6 +27,8 @@ public class PromptTemplate {
     private Integer cloneCount;
     private Boolean isOfficial;
     private Boolean isActive;
+    private Integer status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
+

@@ -1,5 +1,8 @@
 package com.zzk.infrastructure.persistence.po;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,8 +20,10 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@TableName("arena_sessions")
 public class ArenaSessionPO {
     
+    @TableId(type = IdType.AUTO)
     private Long id;
     private Long promptVersionId;
     private String finalPrompt;
@@ -29,3 +34,4 @@ public class ArenaSessionPO {
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;
 }
+

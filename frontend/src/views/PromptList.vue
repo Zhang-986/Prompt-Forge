@@ -480,6 +480,14 @@ onMounted(() => {
               </template>
             </a-button>
           </a-tooltip>
+          <a-tooltip v-if="currentUser?.role === 'ADMIN'" title="管理后台">
+            <a-button type="text" @click="router.push('/admin')">
+              <template #icon>
+                <SettingOutlined />
+              </template>
+              管理
+            </a-button>
+          </a-tooltip>
           <span class="username">{{ currentUser?.username }}</span>
           <a-tooltip title="退出登录">
             <a-button type="text" danger @click="handleLogout">
@@ -615,14 +623,14 @@ onMounted(() => {
 
     <!-- Create Dialog -->
     <a-modal v-model:open="showCreateDialog" title="新建 Prompt" :footer="null" width="600px">
-      <a-form layout="vertical" @finish="handleCreate">
-        <a-form-item label="名称" required>
+      <a-form layout="vertical" :model="newPrompt" @finish="handleCreate">
+        <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入名称' }]">
           <a-input v-model:value="newPrompt.name" placeholder="输入 Prompt 名称" />
         </a-form-item>
-        <a-form-item label="描述">
+        <a-form-item label="描述" name="description">
           <a-input v-model:value="newPrompt.description" placeholder="简短描述" />
         </a-form-item>
-        <a-form-item label="内容" required>
+        <a-form-item label="内容" name="content" :rules="[{ required: true, message: '请输入内容' }]">
           <div class="editor-header">
             <a-button size="small" @click="openOptimizeModal" :loading="optimizing || loadingModels"
               :disabled="!newPrompt.content">

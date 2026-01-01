@@ -2,6 +2,7 @@ package com.zzk.application.service;
 
 import com.zzk.domain.model.entity.Tag;
 import com.zzk.domain.repository.TagRepository;
+import com.zzk.infrastructure.annotation.SensitiveCheck;
 import com.zzk.interfaces.dto.request.CreateTagRequest;
 import com.zzk.interfaces.dto.response.TagDTO;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class TagAppService {
     /**
      * 创建标签
      */
+    @SensitiveCheck
     @Transactional
     public TagDTO createTag(CreateTagRequest request, Long userId, Long workspaceId) {
         // 检查标签名是否已存在
