@@ -29,9 +29,14 @@ const BUSINESS_ERROR_CODES: Record<number, string> = {
     4003: 'AI 服务请求过于频繁'
 }
 
+// 根据环境选择 API 地址
+// 开发环境: '/api' -> Vite 代理到 localhost:8080
+// 生产环境: 'https://api.nmcp.tech/api'
+const baseURL = import.meta.env.DEV ? '/api' : 'https://api.nmcp.tech/api'
+
 // 创建 axios 实例
 const request = axios.create({
-    baseURL: 'https://api.nmcp.tech/api',
+    baseURL,
     timeout: 30000
 })
 

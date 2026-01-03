@@ -157,19 +157,23 @@ const doSave = async () => {
         return
     }
 
+    // 获取当前工作空间 ID（从 localStorage）
+    const workspaceId = localStorage.getItem('currentWorkspaceId')
+    if (!workspaceId) {
+        message.error('请先在主页选择或创建一个工作空间')
+        return
+    }
+
     saving.value = true
     try {
         // 导入 createPrompt
         const { createPrompt } = await import('../api/prompt')
         
-        // 获取当前工作空间 ID（从 localStorage）
-        const workspaceId = localStorage.getItem('currentWorkspaceId')
-        
         const res = await createPrompt({
             name: savePromptName.value.trim(),
             description: savePromptDesc.value.trim() || '由 Prompt 教练生成',
             content: session.value!.generatedPrompt!,
-            workspaceId: workspaceId ? parseInt(workspaceId) : 1
+            workspaceId: parseInt(workspaceId)
         })
 
         if (res.code === 200) {

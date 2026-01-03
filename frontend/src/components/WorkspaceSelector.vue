@@ -4,6 +4,7 @@ import { getWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace, type 
 import { message, Modal } from 'ant-design-vue'
 import { FolderOutlined, DownOutlined, PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined, CheckOutlined } from '@ant-design/icons-vue'
 import WorkspaceMemberManager from './WorkspaceMemberManager.vue'
+import WorkspaceOnboarding from './WorkspaceOnboarding.vue'
 
 const props = defineProps<{
   modelValue: number | undefined
@@ -26,6 +27,7 @@ const editForm = ref({ name: '', description: '' })
 const showMemberDialog = ref(false)
 const memberWorkspaceId = ref(0)
 const dropdownOpen = ref(false)
+const showOnboarding = ref(false)  // 全屏引导
 
 // 打开成员管理对话框
 const openMemberDialog = (ws: Workspace) => {
@@ -41,11 +43,20 @@ const loadWorkspaces = async () => {
     const res = await getWorkspaces()
     if (res.code === 200) {
       workspaces.value = res.data
+      
+      // 如果没有任何工作空间，显示全屏引导
+      if (workspaces.value.length === 0) {
+        showOnboarding.value = true
+        return
+      }
+      
       // 如果当前没有选中，默认选中第一个
       const firstWs = workspaces.value[0]
       if (firstWs && !props.modelValue) {
         emit('update:modelValue', firstWs.id)
         emit('change', firstWs)
+        // 保存到 localStorage 供其他页面使用
+        localStorage.setItem('currentWorkspaceId', String(firstWs.id))
       }
     }
   } catch (error: any) {
@@ -61,6 +72,8 @@ const selectWorkspace = (id: number) => {
   const workspace = workspaces.value.find(w => w.id === id)
   if (workspace) {
     emit('change', workspace)
+    // 保存到 localStorage 供其他页面使用
+    localStorage.setItem('currentWorkspaceId', String(id))
   }
   dropdownOpen.value = false
 }
@@ -153,6 +166,13 @@ const currentWorkspaceName = computed(() => {
   return ws?.name || '选择工作空间'
 })
 
+// 引导完成处理
+const onOnboardingCreated = async (workspaceId: number) => {
+  showOnboarding.value = false
+  await loadWorkspaces()
+  selectWorkspace(workspaceId)
+}
+
 onMounted(() => {
   loadWorkspaces()
 })
@@ -238,6 +258,9 @@ onMounted(() => {
 
     <!-- 成员管理对话框 -->
     <WorkspaceMemberManager v-model:visible="showMemberDialog" :workspace-id="memberWorkspaceId" />
+
+    <!-- 全屏引导组件 -->
+    <WorkspaceOnboarding v-if="showOnboarding" @created="onOnboardingCreated" />
   </div>
 </template>
 

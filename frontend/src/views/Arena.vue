@@ -33,8 +33,13 @@ const modelOutputs = ref<Record<string, { content: string; finished: boolean; er
 
 // 加载 Prompts
 const loadPrompts = async () => {
+  const workspaceId = localStorage.getItem('currentWorkspaceId')
+  if (!workspaceId) {
+    message.warning('请先在主页选择或创建一个工作空间')
+    return
+  }
   try {
-    const res = await getPrompts(1)
+    const res = await getPrompts(parseInt(workspaceId))
     if (res.code === 200) {
       prompts.value = res.data
     }
