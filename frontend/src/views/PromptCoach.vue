@@ -1,20 +1,18 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { SendOutlined, RobotOutlined, UserOutlined, CheckOutlined, ArrowLeftOutlined } from '@ant-design/icons-vue'
 import { 
     startCoachSession, 
     sendCoachMessage, 
     getCoachSession, 
-    confirmPrompt,
-    type CoachSession,
-    type DialogTurn 
+    type CoachSession
 } from '../api/promptCoach'
 import { getAvailableModels } from '../api/arena'
 
 const router = useRouter()
-const route = useRoute()
+// route 备用于后续功能
 
 // 状态
 const loading = ref(false)
@@ -171,7 +169,7 @@ const doSave = async () => {
             name: savePromptName.value.trim(),
             description: savePromptDesc.value.trim() || '由 Prompt 教练生成',
             content: session.value!.generatedPrompt!,
-            workspaceId: workspaceId ? parseInt(workspaceId) : undefined
+            workspaceId: workspaceId ? parseInt(workspaceId) : 1
         })
 
         if (res.code === 200) {

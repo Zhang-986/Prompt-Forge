@@ -64,7 +64,10 @@ const openOptimizeModal = async () => {
     const res = await getAvailableModels()
     if (res.code === 200 && res.data.length > 0) {
       availableModels.value = res.data
-      selectedOptimizeModel.value = res.data[0]
+      const firstModel = res.data[0]
+      if (firstModel) {
+        selectedOptimizeModel.value = firstModel
+      }
       showModelSelectModal.value = true
     } else {
       message.error('请先在模型配置中添加至少一个 AI 模型')

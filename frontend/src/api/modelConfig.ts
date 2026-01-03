@@ -44,47 +44,49 @@ export interface UpdateConfigRequest {
  * 获取支持的提供商列表
  */
 export function getProviders() {
-    return request.get<ProviderInfo[]>('/user/model-configs/providers')
+    return request.get<any, { code: number; data: ProviderInfo[]; message: string }>('/user/model-configs/providers')
 }
 
 /**
  * 获取当前用户的所有配置
  */
 export function getModelConfigs() {
-    return request.get<ModelConfig[]>('/user/model-configs')
+    return request.get<any, { code: number; data: ModelConfig[]; message: string }>('/user/model-configs')
 }
 
 /**
  * 获取当前用户启用的配置
  */
 export function getEnabledConfigs() {
-    return request.get<ModelConfig[]>('/user/model-configs/enabled')
+    return request.get<any, { code: number; data: ModelConfig[]; message: string }>('/user/model-configs/enabled')
 }
 
 /**
  * 创建配置
  */
 export function createConfig(data: CreateConfigRequest) {
-    return request.post<ModelConfig>('/user/model-configs', data)
+    return request.post<any, { code: number; data: ModelConfig; message: string }>('/user/model-configs', data)
 }
 
 /**
  * 更新配置
  */
 export function updateConfig(id: number, data: UpdateConfigRequest) {
-    return request.put<ModelConfig>(`/user/model-configs/${id}`, data)
+    return request.put<any, { code: number; data: ModelConfig; message: string }>(`/user/model-configs/${id}`, data)
 }
 
 /**
  * 删除配置
  */
 export function deleteConfig(id: number) {
-    return request.delete<void>(`/user/model-configs/${id}`)
+    return request.delete<any, { code: number; message: string }>(`/user/model-configs/${id}`)
 }
 
 /**
  * 切换启用状态
  */
 export function toggleConfig(id: number) {
-    return request.post<ModelConfig>(`/user/model-configs/${id}/toggle`)
+    return request.post<any, { code: number; data: ModelConfig; message: string }>(`/user/model-configs/${id}/toggle`)
 }
+
+

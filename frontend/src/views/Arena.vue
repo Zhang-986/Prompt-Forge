@@ -4,7 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { getPrompts, getVersionHistory, type Prompt, type PromptVersion } from '../api/prompt'
 import { getAvailableModels, type ArenaEvent } from '../api/arena'
 import { message } from 'ant-design-vue'
-import { ArrowLeftOutlined, ThunderboltOutlined, HistoryOutlined, PlayCircleOutlined, PauseCircleOutlined, WarningOutlined, CheckCircleOutlined, LoadingOutlined, CloseCircleOutlined, ClockCircleOutlined, BarChartOutlined } from '@ant-design/icons-vue'
+import { ArrowLeftOutlined, ThunderboltOutlined, HistoryOutlined, PlayCircleOutlined, PauseCircleOutlined, WarningOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, BarChartOutlined } from '@ant-design/icons-vue'
 import { marked } from 'marked'
 
 // 配置 marked
@@ -17,7 +17,7 @@ const router = useRouter()
 const route = useRoute()
 
 // 状态
-const loading = ref(false)
+// loading 状态由 isCompeting 管理
 const prompts = ref<Prompt[]>([])
 const versions = ref<PromptVersion[]>([])
 const models = ref<string[]>([])
@@ -49,9 +49,10 @@ const loadVersions = async (promptId: number) => {
     const res = await getVersionHistory(promptId)
     if (res.code === 200) {
       versions.value = res.data
-      if (versions.value.length > 0) {
-        selectedVersionId.value = versions.value[0].id
-        parseVariables(versions.value[0].content)
+      const firstVersion = versions.value[0]
+      if (firstVersion) {
+        selectedVersionId.value = firstVersion.id
+        parseVariables(firstVersion.content)
       }
     }
   } catch (error) {
@@ -78,7 +79,10 @@ const parseVariables = (content: string) => {
   const matches = content.matchAll(regex)
   const vars: Record<string, string> = {}
   for (const match of matches) {
-    vars[match[1]] = ''
+    const varName = match[1]
+    if (varName) {
+      vars[varName] = ''
+    }
   }
   variables.value = vars
 }
@@ -129,7 +133,7 @@ const startCompete = () => {
   isCompeting.value = true
 
   const token = localStorage.getItem('token')
-  const baseUrl = '/api/arena/compete'
+  const baseUrl = 'https://api.nmcp.tech/api/arena/compete'
 
   fetch(baseUrl, {
     method: 'POST',

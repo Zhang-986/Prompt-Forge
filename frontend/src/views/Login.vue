@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { login, register, getCaptcha, type LoginData, type RegisterData, type CaptchaResult } from '../api/user'
 import { message } from 'ant-design-vue'

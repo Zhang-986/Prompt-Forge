@@ -14,6 +14,7 @@ import com.zzk.infrastructure.persistence.converter.PromptTemplateConverter;
 import com.zzk.infrastructure.persistence.converter.WorkspaceConverter;
 import com.zzk.infrastructure.persistence.mapper.*;
 import com.zzk.infrastructure.persistence.po.*;
+import com.zzk.interfaces.dto.response.AdminPromptDTO;
 import com.zzk.interfaces.dto.response.AdminUserDTO;
 import com.zzk.interfaces.dto.response.DashboardStatsDTO;
 import lombok.RequiredArgsConstructor;
@@ -322,14 +323,43 @@ public class AdminAppService {
     /**
      * 获取所有 Prompt 列表（分页）
      */
-    public List<PromptPO> getAllPrompts(int page, int size) {
+    public List<AdminPromptDTO> getAllPrompts(int page, int size) {
         log.info("获取所有Prompt列表: page={}, size={}", page, size);
         
         Page<PromptPO> pageResult = promptMapper.selectPage(
                 new Page<>(page + 1, size),
                 new LambdaQueryWrapper<PromptPO>().orderByDesc(PromptPO::getId));
         
-        return pageResult.getRecords();
+        return pageResult.getRecords().stream()
+                .map(prompt -> {
+                    String workspaceName = "未知工作空间";
+                    WorkspacePO ws = workspaceMapper.selectById(prompt.getWorkspaceId());
+                    if (ws != null) {
+                        workspaceName = ws.getName();
+                    }
+                    
+                    String creatorName = "未知用户";
+                    UserPO user = userMapper.selectById(prompt.getCreatorId());
+                    if (user != null) {
+                        creatorName = user.getUsername();
+                    }
+                    
+                    return AdminPromptDTO.builder()
+                            .id(prompt.getId())
+                            .name(prompt.getName())
+                            .description(prompt.getDescription())
+                            .workspaceId(prompt.getWorkspaceId())
+                            .workspaceName(workspaceName)
+                            .creatorId(prompt.getCreatorId())
+                            .creatorName(creatorName)
+                            .latestVersionId(prompt.getLatestVersionId())
+                            .isPublic(prompt.getIsPublic())
+                            .status(prompt.getStatus())
+                            .createdAt(prompt.getCreatedAt())
+                            .updatedAt(prompt.getUpdatedAt())
+                            .build();
+                })
+                .collect(Collectors.toList());
     }
     
     /**

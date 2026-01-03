@@ -42,9 +42,10 @@ const loadWorkspaces = async () => {
     if (res.code === 200) {
       workspaces.value = res.data
       // 如果当前没有选中，默认选中第一个
-      if (workspaces.value.length > 0 && !props.modelValue) {
-        emit('update:modelValue', workspaces.value[0].id)
-        emit('change', workspaces.value[0]!)
+      const firstWs = workspaces.value[0]
+      if (firstWs && !props.modelValue) {
+        emit('update:modelValue', firstWs.id)
+        emit('change', firstWs)
       }
     }
   } catch (error: any) {
@@ -135,8 +136,9 @@ const handleDelete = (ws: Workspace) => {
       if (res.code === 200) {
         message.success('删除成功')
         await loadWorkspaces()
-        if (ws.id === props.modelValue && workspaces.value.length > 0) {
-          selectWorkspace(workspaces.value[0].id)
+        const firstWsAfterDelete = workspaces.value[0]
+        if (ws.id === props.modelValue && firstWsAfterDelete) {
+          selectWorkspace(firstWsAfterDelete.id)
         }
       } else {
         message.error(res.message || '删除失败')

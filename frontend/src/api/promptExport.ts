@@ -10,7 +10,7 @@ interface Result<T> {
 // 导出 Prompt 为 JSON (下载) - 使用认证
 export async function exportPrompt(promptId: number) {
     const token = localStorage.getItem('token')
-    const response = await fetch(`/api/prompts/${promptId}/export`, {
+    const response = await fetch(`https://api.nmcp.tech/api/prompts/${promptId}/export`, {
         method: 'GET',
         headers: {
             'Authorization': `Bearer ${token}`

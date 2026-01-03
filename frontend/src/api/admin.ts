@@ -150,8 +150,10 @@ export interface AdminPrompt {
     name: string
     description: string
     workspaceId: number
+    workspaceName: string
     latestVersionId: number
     creatorId: number
+    creatorName: string
     isPublic: boolean
     status: number
     createdAt: string

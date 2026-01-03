@@ -31,7 +31,7 @@ const BUSINESS_ERROR_CODES: Record<number, string> = {
 
 // 创建 axios 实例
 const request = axios.create({
-    baseURL: '/api',
+    baseURL: 'https://api.nmcp.tech/api',
     timeout: 30000
 })
 

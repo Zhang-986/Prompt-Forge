@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -733,8 +733,8 @@ onMounted(() => {
                                     <th>ID</th>
                                     <th>名称</th>
                                     <th>描述</th>
-                                    <th>工作空间ID</th>
-                                    <th>创建者ID</th>
+                                    <th>工作空间</th>
+                                    <th>创建者</th>
                                     <th>公开</th>
                                     <th>状态</th>
                                     <th>创建时间</th>
@@ -746,8 +746,16 @@ onMounted(() => {
                                     <td>{{ prompt.id }}</td>
                                     <td>{{ prompt.name }}</td>
                                     <td>{{ prompt.description || '-' }}</td>
-                                    <td>{{ prompt.workspaceId }}</td>
-                                    <td>{{ prompt.creatorId }}</td>
+                                    <td>
+                                        <a-tooltip :title="'ID: ' + prompt.workspaceId">
+                                            {{ prompt.workspaceName }}
+                                        </a-tooltip>
+                                    </td>
+                                    <td>
+                                        <a-tooltip :title="'ID: ' + prompt.creatorId">
+                                            {{ prompt.creatorName }}
+                                        </a-tooltip>
+                                    </td>
                                     <td>
                                         <a-tag :color="prompt.isPublic ? 'green' : 'default'">
                                             {{ prompt.isPublic ? '公开' : '私有' }}

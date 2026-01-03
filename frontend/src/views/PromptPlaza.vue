@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getTemplates, cloneTemplate, CATEGORIES, type PromptTemplate } from '../api/plaza'
 import { getWorkspaces, type Workspace } from '../api/workspace'
@@ -42,8 +42,9 @@ const loadWorkspaces = async () => {
     const res = await getWorkspaces()
     if (res.code === 200) {
       workspaces.value = res.data
-      if (res.data.length > 0) {
-        selectedWorkspace.value = res.data[0].id
+      const firstWs = res.data[0]
+      if (firstWs) {
+        selectedWorkspace.value = firstWs.id
       }
     }
   } catch (error) {

@@ -54,7 +54,7 @@ export const sendCoachMessage = async (
     const token = localStorage.getItem('token')
 
     try {
-        const response = await fetch('/api/prompt-coach/chat', {
+        const response = await fetch('https://api.nmcp.tech/api/prompt-coach/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

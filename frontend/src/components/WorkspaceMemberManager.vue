@@ -131,15 +131,7 @@ const handleClose = () => {
   emit('close')
 }
 
-// 获取角色显示名称
-const getRoleName = (role: string) => {
-  const roleMap: Record<string, string> = {
-    'ADMIN': '管理员',
-    'MEMBER': '成员',
-    'VIEWER': '观察者'
-  }
-  return roleMap[role] || role
-}
+// getRoleColor 用于显示角色颜色
 
 // 获取角色颜色
 const getRoleColor = (role: string) => {

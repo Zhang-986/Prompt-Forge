@@ -41,7 +41,10 @@ const openOptimizeModal = async () => {
     const res = await getAvailableModels()
     if (res.code === 200 && res.data.length > 0) {
       availableModels.value = res.data
-      selectedOptimizeModel.value = res.data[0] // 默认选第一个
+      const firstModel = res.data[0]
+      if (firstModel) {
+        selectedOptimizeModel.value = firstModel // 默认选第一个
+      }
       showModelSelectModal.value = true
     } else {
       message.error('请先在模型配置中添加至少一个 AI 模型')
@@ -104,8 +107,9 @@ const loadVersions = async () => {
     if (res.code === 200) {
       versions.value = res.data
       // 如果有版本，设置最新内容
-      if (res.data.length > 0) {
-        newContent.value = res.data[0].content
+      const firstVersion = res.data[0]
+      if (firstVersion) {
+        newContent.value = firstVersion.content
       }
     } else {
       message.error(res.message || '加载版本历史失败')
@@ -130,7 +134,8 @@ const handleCommit = async () => {
 
   committing.value = true
   try {
-    const latestVersionId = versions.value.length > 0 ? versions.value[0].id : 1
+    const firstVersion = versions.value[0]
+    const latestVersionId = firstVersion ? firstVersion.id : 1
     const res = await commitVersion(promptId.value, {
       content: newContent.value,
       parentVersionId: latestVersionId,
@@ -189,8 +194,9 @@ const copyContent = async (content: string) => {
 
 // 加载最新版本到编辑器
 const loadLatest = () => {
-  if (versions.value.length > 0) {
-    newContent.value = versions.value[0].content
+  const latestVersion = versions.value[0]
+  if (latestVersion) {
+    newContent.value = latestVersion.content
     message.success('已加载最新版本')
   }
 }
@@ -251,7 +257,13 @@ const performDiff = async () => {
   try {
     // 确保较小的版本ID在前（较老的版本）
     const sortedIds = [...selectedVersions.value].sort((a, b) => a - b)
-    const res = await getVersionDiff(sortedIds[0], sortedIds[1])
+    const versionId1 = sortedIds[0]
+    const versionId2 = sortedIds[1]
+    if (versionId1 === undefined || versionId2 === undefined) {
+      message.warning('版本选择错误')
+      return
+    }
+    const res = await getVersionDiff(versionId1, versionId2)
     if (res.code === 200) {
       diffResult.value = res.data
     } else {
@@ -281,6 +293,10 @@ const compareWithPrevious = async (version: PromptVersion, index: number) => {
   }
 
   const previousVersion = versions.value[index + 1]
+  if (!previousVersion) {
+    message.warning('找不到上一个版本')
+    return
+  }
   selectedVersions.value = [previousVersion.id, version.id]
   await performDiff()
 }
