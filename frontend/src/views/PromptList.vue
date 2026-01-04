@@ -5,7 +5,7 @@ import { getPrompts, createPrompt, deletePrompt, updatePrompt, getLatestVersion,
 import { getTags, createTag, deleteTag, getPromptTags, setPromptTags, TAG_COLORS, type Tag } from '../api/tag'
 import { exportPrompt, importPromptFile } from '../api/promptExport'
 import { optimizePrompt } from '../api/optimize'
-import { publishToPlaza, CATEGORIES } from '../api/plaza'
+import { publishToPlaza, DEFAULT_CATEGORIES } from '../api/plaza'
 import { getAvailableModels } from '../api/arena'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -699,7 +699,8 @@ onMounted(() => {
       <p class="publish-prompt-name">{{ publishTarget?.name }}</p>
       <a-form-item label="选择分类">
         <a-select v-model:value="publishCategory" style="width: 100%">
-          <a-select-option v-for="cat in CATEGORIES.filter(c => c.value !== 'ALL')" :key="cat.value" :value="cat.value">
+          <a-select-option v-for="cat in DEFAULT_CATEGORIES.filter(c => c.value !== 'ALL')" :key="cat.value"
+            :value="cat.value">
             {{ cat.label }}
           </a-select-option>
         </a-select>

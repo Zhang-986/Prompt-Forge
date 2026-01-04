@@ -90,16 +90,4 @@ public class ArenaDomainService {
 
         return variables;
     }
-
-    /**
-     * 验证变量值是否符合定义
-     * 
-     * @param variableDefinitions 变量定义 (JSON)
-     * @param variables 变量值映射
-     * @return 验证结果
-     */
-    public boolean validateVariables(String variableDefinitions, Map<String, Object> variables) {
-        // TODO: 根据变量定义校验变量值类型和约束
-        return true;
-    }
 }

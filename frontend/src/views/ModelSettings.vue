@@ -59,7 +59,32 @@ const currentProviderModels = computed(() => {
 // 编辑时当前提供商的可用模型
 const editProviderModels = computed(() => {
   const provider = providers.value.find(p => p.id === editingConfig.value?.provider)
-  return provider?.models || []
+  const defaultModels = provider?.models || []
+  
+  // 如果有自动获取的模型，合并显示
+  if (editingConfig.value?.availableModels) {
+    try {
+      const fetchedModels: string[] = JSON.parse(editingConfig.value.availableModels)
+      const fetchedOptions = fetchedModels.map(id => ({
+        id,
+        name: id,
+        description: '自动获取'
+      }))
+      
+      // 合并去重 (优先使用 defaultModels 的详细信息)
+      const map = new Map<string, any>()
+      defaultModels.forEach(m => map.set(m.id, m))
+      fetchedOptions.forEach(m => {
+        if (!map.has(m.id)) {
+            map.set(m.id, m)
+        }
+      })
+      return Array.from(map.values())
+    } catch (e) {
+      console.error('解析 availableModels 失败', e)
+    }
+  }
+  return defaultModels
 })
 
 // 加载数据
@@ -175,6 +200,25 @@ const handleToggle = async (config: ModelConfig) => {
   } catch (error) {
     message.error('操作失败')
   }
+}
+
+// 刷新可用模型
+const handleRefresh = async (config: ModelConfig) => {
+    const hide = message.loading('正在获取模型列表...', 0)
+    try {
+        const res = await refreshModelConfig(config.id)
+        if (res.code === 200) {
+            message.success(`成功获取 ${res.data.length} 个模型`)
+            // 更新本地数据
+            config.availableModels = JSON.stringify(res.data)
+        } else {
+            message.error(res.message || '获取失败')
+        }
+    } catch (e) {
+        message.error('获取失败，请检查 Base URL 和 API Key')
+    } finally {
+        hide()
+    }
 }
 
 // 删除配置

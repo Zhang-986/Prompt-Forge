@@ -24,6 +24,7 @@ export interface ModelConfig {
     enabled: boolean
     createdAt: string
     updatedAt: string
+    availableModels?: string // JSON string
 }
 
 export interface CreateConfigRequest {
@@ -87,6 +88,13 @@ export function deleteConfig(id: number) {
  */
 export function toggleConfig(id: number) {
     return request.post<any, { code: number; data: ModelConfig; message: string }>(`/user/model-configs/${id}/toggle`)
+}
+
+/**
+ * 刷新可用模型列表
+ */
+export function refreshModelConfig(id: number) {
+    return request.post<any, { code: number; data: string[]; message: string }>(`/user/model-configs/${id}/refresh`)
 }
 
 

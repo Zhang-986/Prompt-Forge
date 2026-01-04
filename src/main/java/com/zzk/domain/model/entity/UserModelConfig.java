@@ -42,6 +42,11 @@ public class UserModelConfig {
      * 模型名称 (如 gpt-4, glm-4-flash)
      */
     private String modelName;
+
+    /**
+     * 自动获取的可用模型列表 (JSON)
+     */
+    private String availableModels;
     
     /**
      * 是否启用

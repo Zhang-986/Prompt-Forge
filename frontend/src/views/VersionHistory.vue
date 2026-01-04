@@ -175,11 +175,13 @@ const handleRollback = (version: PromptVersion) => {
 
 // 切换展开
 const toggleExpand = (versionId: number) => {
-  if (expandedVersions.value.has(versionId)) {
-    expandedVersions.value.delete(versionId)
+  const newSet = new Set(expandedVersions.value)
+  if (newSet.has(versionId)) {
+    newSet.delete(versionId)
   } else {
-    expandedVersions.value.add(versionId)
+    newSet.add(versionId)
   }
+  expandedVersions.value = newSet
 }
 
 // 复制内容
@@ -408,17 +410,17 @@ onMounted(() => {
                 <span class="version-date">{{ new Date(version.createdAt).toLocaleString() }}</span>
               </div>
 
-              <p class="commit-message">{{ version.commitMessage || '无提交说明' }}</p>
-
-              <div v-if="expandedVersions.has(version.id)" class="version-code">
-                <pre>{{ version.content }}</pre>
+              <!-- 内容预览（默认显示前3行） -->
+              <div class="version-preview" @click.stop="toggleExpand(version.id)">
+                <pre v-if="!expandedVersions.has(version.id)">{{ version.content.split('\n').slice(0, 3).join('\n') }}{{
+                  version.content.split('\n').length > 3 ? '\n...' : '' }}</pre>
+                <pre v-else>{{ version.content }}</pre>
               </div>
 
+              <!-- 版本说明（小字） -->
+              <p class="commit-message-small">{{ version.commitMessage || '无提交说明' }}</p>
+
               <div class="version-actions" v-if="!compareMode">
-                <button class="action-btn" @click.stop="toggleExpand(version.id)">
-                  {{ expandedVersions.has(version.id) ? '收起' : '查看内容' }}
-                </button>
-                <button class="action-btn" @click.stop="copyContent(version.content)">复制</button>
                 <button v-if="index < versions.length - 1" class="action-btn diff"
                   @click.stop="compareWithPrevious(version, index)">
                   对比上一版
@@ -854,6 +856,35 @@ onMounted(() => {
   margin-bottom: 12px;
   color: #ccc;
   font-size: 14px;
+}
+
+.commit-message-small {
+  margin: 8px 0;
+  color: #666;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.version-preview {
+  margin-bottom: 8px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.version-preview:hover {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.version-preview pre {
+  margin: 0;
+  font-family: 'Consolas', monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  color: #ddd;
+  line-height: 1.5;
 }
 
 .version-code {

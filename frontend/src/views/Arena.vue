@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getPrompts, getVersionHistory, type Prompt, type PromptVersion } from '../api/prompt'
-import { getAvailableModels, type ArenaEvent } from '../api/arena'
+import { getAvailableModels, submitVote, getLeaderboard, type ArenaEvent, type LeaderboardItem } from '../api/arena'
 import { message } from 'ant-design-vue'
-import { ArrowLeftOutlined, ThunderboltOutlined, HistoryOutlined, PlayCircleOutlined, PauseCircleOutlined, WarningOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, BarChartOutlined } from '@ant-design/icons-vue'
+import { ArrowLeftOutlined, ThunderboltOutlined, HistoryOutlined, PlayCircleOutlined, PauseCircleOutlined, WarningOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, BarChartOutlined, TrophyOutlined } from '@ant-design/icons-vue'
 import { marked } from 'marked'
 
 // 配置 marked
@@ -30,6 +30,15 @@ const eventSource = ref<EventSource | null>(null)
 
 // 每个模型的输出
 const modelOutputs = ref<Record<string, { content: string; finished: boolean; error?: string }>>({})
+
+// 投票状态
+const hasVoted = ref(false)
+const votingFor = ref<string | null>(null)
+
+// 排行榜状态
+const leaderboardVisible = ref(false)
+const leaderboardData = ref<LeaderboardItem[]>([])
+const leaderboardLoading = ref(false)
 
 // 加载 Prompts
 const loadPrompts = async () => {
@@ -135,12 +144,16 @@ const startCompete = () => {
     modelOutputs.value[modelId] = { content: '', finished: false }
   })
 
+  // 重置投票状态
+  hasVoted.value = false
+  votingFor.value = null
+
   isCompeting.value = true
 
   const token = localStorage.getItem('token')
-  const baseUrl = 'https://api.nmcp.tech/api/arena/compete'
+  const baseUrl = import.meta.env.VITE_API_URL || '/api'
 
-  fetch(baseUrl, {
+  fetch(`${baseUrl}/arena/compete`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -154,6 +167,7 @@ const startCompete = () => {
   }).then(response => {
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
+    let buffer = '' // 用于处理跨 chunk 的数据
 
     const read = () => {
       reader?.read().then(({ done, value }) => {
@@ -162,15 +176,24 @@ const startCompete = () => {
           return
         }
 
-        const text = decoder.decode(value, { stream: true })
-        const lines = text.split('\n')
+        // 解码并追加到 buffer
+        buffer += decoder.decode(value, { stream: true })
+
+        // 按换行符分割，但保留最后一个可能不完整的行
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // 最后一行可能不完整，保留到下次处理
+
         for (const line of lines) {
-          if (line.startsWith('data:')) {
+          const trimmedLine = line.trim()
+          if (trimmedLine.startsWith('data:')) {
             try {
-              const data = JSON.parse(line.substring(5).trim()) as ArenaEvent
-              handleArenaEvent(data)
+              const jsonStr = trimmedLine.substring(5).trim()
+              if (jsonStr) {
+                const data = JSON.parse(jsonStr) as ArenaEvent
+                handleArenaEvent(data)
+              }
             } catch (e) {
-              // 忽略解析错误
+              console.warn('SSE 解析跳过:', trimmedLine)
             }
           }
         }
@@ -191,21 +214,17 @@ const handleArenaEvent = (event: ArenaEvent) => {
   if (!output) return
 
   if (event.type === 'content') {
-    modelOutputs.value[event.modelId] = {
-      ...output,
-      content: output.content + event.content
-    }
+    // 直接修改内容，而不是创建新对象，减少 GC 压力
+    output.content += event.content
+    // 强制触发响应式更新
+    modelOutputs.value = { ...modelOutputs.value }
   } else if (event.type === 'finish') {
-    modelOutputs.value[event.modelId] = {
-      ...output,
-      finished: true
-    }
+    output.finished = true
+    modelOutputs.value = { ...modelOutputs.value }
   } else if (event.type === 'error') {
-    modelOutputs.value[event.modelId] = {
-      ...output,
-      error: event.content,
-      finished: true
-    }
+    output.error = event.content
+    output.finished = true
+    modelOutputs.value = { ...modelOutputs.value }
   }
 }
 
@@ -236,7 +255,9 @@ const modelDisplayNames: Record<string, string> = {
   'zhipu': '智谱 GLM',
   'deepseek': 'DeepSeek',
   'openai': 'OpenAI GPT',
-  'claude': 'Claude'
+  'claude': 'Claude',
+  'aliyun': '通义千问',
+  'moonshot': 'Moonshot Kimi'
 }
 
 const getModelDisplayName = (modelId: string) => {
@@ -250,9 +271,52 @@ const getModelIcon = (modelId: string) => {
     'zhipu': '🧠',
     'deepseek': '🔍',
     'openai': '🤖',
-    'claude': '🎭'
+    'claude': '🎭',
+    'aliyun': '🐱',
+    'moonshot': '🌙'
   }
   return icons[modelId] || '💬'
+}
+
+// 处理投票
+const handleVote = async (modelId: string) => {
+  if (hasVoted.value) return
+  if (selectedModels.value.length < 2) return
+
+  try {
+    // 找出另一个模型作为败者（简化逻辑：暂时只支持两两对比的投票，多模型时只记录点击的胜者）
+    // 实际业务中可能需要更复杂的投票 UI
+    const loser = selectedModels.value.find(m => m !== modelId) || 'other'
+
+    await submitVote({
+      winnerModel: modelId,
+      loserModel: loser
+    })
+
+    hasVoted.value = true
+    votingFor.value = modelId
+    message.success('感谢您的投票！')
+  } catch (error) {
+    message.error('投票失败')
+  }
+}
+
+
+
+// 打开排行榜
+const openLeaderboard = async () => {
+  leaderboardVisible.value = true
+  leaderboardLoading.value = true
+  try {
+    const res = await getLeaderboard()
+    if (res.code === 200) {
+      leaderboardData.value = res.data
+    }
+  } catch (error) {
+    message.error('加载排行榜失败')
+  } finally {
+    leaderboardLoading.value = false
+  }
 }
 
 onMounted(() => {
@@ -291,6 +355,9 @@ onUnmounted(() => {
             <HistoryOutlined />
           </template>
           竞技历史
+        </a-button>
+        <a-button @click="openLeaderboard">
+          <BarChartOutlined /> 胜率排行
         </a-button>
       </div>
     </header>
@@ -380,7 +447,8 @@ onUnmounted(() => {
           <BarChartOutlined /> 对比结果
         </h3>
         <div class="results-grid">
-          <div v-for="modelId in selectedModels" :key="modelId" class="result-card">
+          <div v-for="modelId in selectedModels" :key="modelId" class="result-card"
+            :class="{ 'winner': votingFor === modelId }">
             <!-- 卡片头部 -->
             <div class="result-header">
               <div class="model-info">
@@ -410,10 +478,60 @@ onUnmounted(() => {
                 </span>
               </div>
             </div>
+
+            <!-- 投票按钮 (仅当竞技结束且至少2个模型时显示) -->
+            <div v-if="!isCompeting && selectedModels.length >= 2 && modelOutputs[modelId]?.finished"
+              class="vote-section">
+              <div v-if="!hasVoted" class="vote-btn-wrapper">
+                <a-button type="primary" ghost class="vote-btn" @click="handleVote(modelId)">
+                  <template #icon>
+                    <TrophyOutlined />
+                  </template>
+                  投它一票
+                </a-button>
+              </div>
+              <div v-else-if="votingFor === modelId" class="voted-badge">
+                <TrophyOutlined /> 已投票给此模型
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </main>
+
+    <!-- 排行榜 Modal -->
+    <a-modal v-model:visible="leaderboardVisible" title="🤖 模型胜率排行榜" :footer="null" width="600px">
+      <a-table :dataSource="leaderboardData" :loading="leaderboardLoading" :pagination="false" rowKey="modelId">
+        <a-table-column title="排名" width="80px">
+          <template #default="{ index }">
+            <span v-if="index === 0" style="font-size: 1.5em">🥇</span>
+            <span v-else-if="index === 1" style="font-size: 1.5em">🥈</span>
+            <span v-else-if="index === 2" style="font-size: 1.5em">🥉</span>
+            <span v-else class="rank-num">{{ index + 1 }}</span>
+          </template>
+        </a-table-column>
+        <a-table-column title="模型" dataIndex="modelId">
+          <template #default="{ text }">
+            <span style="font-size: 1.2em; margin-right: 8px">{{ getModelIcon(text) }}</span>
+            <span style="font-weight: 500">{{ getModelDisplayName(text) }}</span>
+          </template>
+        </a-table-column>
+        <a-table-column title="胜率" dataIndex="winRate" align="right">
+          <template #default="{ text }">
+            <span class="win-rate" :class="{ 'high-rate': text >= 50, 'low-rate': text < 50 }">
+              {{ text }}%
+            </span>
+          </template>
+        </a-table-column>
+        <a-table-column title="胜/负/总" align="center">
+          <template #default="{ record }">
+            <span style="color: #52c41a">{{ record.wins }}</span> /
+            <span style="color: #ff4d4f">{{ record.losses }}</span> /
+            <span style="color: #888">{{ record.total }}</span>
+          </template>
+        </a-table-column>
+      </a-table>
+    </a-modal>
   </div>
 </template>
 
@@ -685,6 +803,12 @@ onUnmounted(() => {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
+.result-card.winner {
+  border-color: #f59e0b;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+  background: linear-gradient(to bottom, rgba(245, 158, 11, 0.05), rgba(255, 255, 255, 0.03));
+}
+
 .result-header {
   display: flex;
   justify-content: space-between;
@@ -871,10 +995,55 @@ onUnmounted(() => {
   text-decoration: underline;
 }
 
-.markdown-body :deep(hr) {
-  border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  margin: 1.5em 0;
+.markdown-body :deep(h2) {
+  font-size: 1.3em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.3em;
+}
+
+.vote-section {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: center;
+}
+
+.vote-btn {
+  width: 100%;
+}
+
+.voted-badge {
+  color: #f59e0b;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: 8px;
+  width: 100%;
+  justify-content: center;
+}
+
+.rank-num {
+  font-weight: bold;
+  color: #888;
+  display: inline-block;
+  width: 24px;
+  text-align: center;
+}
+
+.win-rate {
+  font-family: monospace;
+  font-weight: bold;
+}
+
+.high-rate {
+  color: #cf1322;
+}
+
+.low-rate {
+  color: #3f8600;
 }
 
 .markdown-body :deep(table) {

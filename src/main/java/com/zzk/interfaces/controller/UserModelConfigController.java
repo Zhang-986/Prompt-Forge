@@ -99,6 +99,15 @@ public class UserModelConfigController {
         return Result.success(configService.toggleEnabled(id, userId));
     }
 
+    /**
+     * 刷新可用模型列表
+     */
+    @PostMapping("/{id}/refresh")
+    public Result<List<String>> refreshAvailableModels(@RequestAttribute("userId") Long userId,
+                                                       @PathVariable Long id) {
+        return Result.success(configService.refreshAvailableModels(id, userId));
+    }
+
     @Data
     public static class CreateConfigRequest {
         private String provider;

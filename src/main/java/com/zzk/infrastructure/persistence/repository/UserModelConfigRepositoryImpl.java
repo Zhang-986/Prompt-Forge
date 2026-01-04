@@ -80,6 +80,7 @@ public class UserModelConfigRepositoryImpl implements UserModelConfigRepository 
                 .apiKey(po.getApiKey())
                 .baseUrl(po.getBaseUrl())
                 .modelName(po.getModelName())
+                .availableModels(po.getAvailableModels())
                 .enabled(po.getEnabled() == 1)
                 .createdAt(po.getCreatedAt())
                 .updatedAt(po.getUpdatedAt())
@@ -94,6 +95,7 @@ public class UserModelConfigRepositoryImpl implements UserModelConfigRepository 
         po.setApiKey(entity.getApiKey());
         po.setBaseUrl(entity.getBaseUrl());
         po.setModelName(entity.getModelName());
+        po.setAvailableModels(entity.getAvailableModels());
         po.setEnabled(entity.getEnabled() ? 1 : 0);
         return po;
     }

@@ -132,6 +132,22 @@ CREATE TABLE arena_results (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='竞技场结果表';
 
 -- =====================================================
+-- 8. 竞技场投票表
+-- =====================================================
+DROP TABLE IF EXISTS arena_votes;
+CREATE TABLE arena_votes (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '投票ID',
+    session_id BIGINT COMMENT '竞技会话ID (可选)',
+    winner_model VARCHAR(50) NOT NULL COMMENT '胜者模型ID',
+    loser_model VARCHAR(50) NOT NULL COMMENT '败者模型ID',
+    voter_id BIGINT NOT NULL COMMENT '投票用户ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '投票时间',
+    INDEX idx_winner (winner_model),
+    INDEX idx_loser (loser_model),
+    INDEX idx_voter (voter_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='竞技场投票表';
+
+-- =====================================================
 -- 8. 异步任务表
 -- =====================================================
 DROP TABLE IF EXISTS async_tasks;

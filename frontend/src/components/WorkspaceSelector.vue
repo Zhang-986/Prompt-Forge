@@ -43,13 +43,13 @@ const loadWorkspaces = async () => {
     const res = await getWorkspaces()
     if (res.code === 200) {
       workspaces.value = res.data
-      
+
       // 如果没有任何工作空间，显示全屏引导
       if (workspaces.value.length === 0) {
         showOnboarding.value = true
         return
       }
-      
+
       // 如果当前没有选中，默认选中第一个
       const firstWs = workspaces.value[0]
       if (firstWs && !props.modelValue) {
@@ -140,6 +140,13 @@ const handleEdit = async () => {
 // 删除工作空间
 const handleDelete = (ws: Workspace) => {
   dropdownOpen.value = false
+
+  // 只有一个工作空间时不允许删除
+  if (workspaces.value.length <= 1) {
+    message.warning('至少保留一个工作空间')
+    return
+  }
+
   Modal.confirm({
     title: '确认删除',
     content: `确定要删除工作空间 "${ws.name}" 吗？此操作不可恢复！`,
@@ -207,7 +214,7 @@ onMounted(() => {
                     </template>
                   </a-button>
                 </a-tooltip>
-                <a-tooltip title="删除">
+                <a-tooltip v-if="workspaces.length > 1" title="删除">
                   <a-button type="text" size="small" danger @click="handleDelete(ws)">
                     <template #icon>
                       <DeleteOutlined />

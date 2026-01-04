@@ -3,12 +3,21 @@ package com.zzk.application.service;
 import com.zzk.domain.model.entity.UserModelConfig;
 import com.zzk.domain.repository.UserModelConfigRepository;
 import com.zzk.infrastructure.exception.BusinessException;
+import com.zzk.infrastructure.ai.factory.DynamicLlmClientFactory;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Arrays;
+import jakarta.annotation.PostConstruct;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -23,13 +32,64 @@ import java.util.List;
 public class UserModelConfigAppService {
 
     private final UserModelConfigRepository configRepository;
+    private final DynamicLlmClientFactory llmClientFactory;
 
     /**
-     * 支持的提供商列表
+     * 支持的提供商列表（从 JSON 文件加载）
      */
-    public static final List<String> SUPPORTED_PROVIDERS = Arrays.asList(
-            "google", "zhipu", "deepseek", "openai", "claude"
-    );
+    public static List<String> SUPPORTED_PROVIDERS = new ArrayList<>();
+    
+    /**
+     * 缓存的提供商信息
+     */
+    private List<ProviderInfo> cachedProviders = new ArrayList<>();
+
+    /**
+     * 启动时从 JSON 文件加载模型配置
+     */
+    @PostConstruct
+    public void loadProvidersFromJson() {
+        try {
+            ClassPathResource resource = new ClassPathResource("model-providers.json");
+            InputStream is = resource.getInputStream();
+            String json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            
+            JSONObject root = JSON.parseObject(json);
+            JSONArray providersArray = root.getJSONArray("providers");
+            
+            List<ProviderInfo> providers = new ArrayList<>();
+            List<String> providerIds = new ArrayList<>();
+            
+            for (int i = 0; i < providersArray.size(); i++) {
+                JSONObject p = providersArray.getJSONObject(i);
+                String id = p.getString("id");
+                String name = p.getString("name");
+                String defaultBaseUrl = p.getString("defaultBaseUrl");
+                String defaultModel = p.getString("defaultModel");
+                
+                JSONArray modelsArray = p.getJSONArray("models");
+                List<ModelInfo> models = new ArrayList<>();
+                for (int j = 0; j < modelsArray.size(); j++) {
+                    JSONObject m = modelsArray.getJSONObject(j);
+                    models.add(new ModelInfo(
+                            m.getString("id"),
+                            m.getString("name"),
+                            m.getString("description")
+                    ));
+                }
+                
+                providers.add(new ProviderInfo(id, name, defaultBaseUrl, defaultModel, models));
+                providerIds.add(id);
+            }
+            
+            this.cachedProviders = providers;
+            SUPPORTED_PROVIDERS = providerIds;
+            log.info("成功加载 {} 个模型提供商配置", providers.size());
+            
+        } catch (IOException e) {
+            log.error("加载 model-providers.json 失败，使用空配置", e);
+        }
+    }
 
     /**
      * 获取用户的所有配置
@@ -132,60 +192,26 @@ public class UserModelConfigAppService {
     }
 
     /**
-     * 获取支持的提供商及其模型列表
+     * 刷新可用模型列表
+     */
+    @Transactional
+    public List<String> refreshAvailableModels(Long id, Long userId) {
+        UserModelConfig config = getConfigById(id, userId);
+        
+        List<String> models = llmClientFactory.fetchAvailableModels(config);
+        
+        config.setAvailableModels(JSON.toJSONString(models));
+        configRepository.update(config);
+        log.info("用户 {} 刷新了 {} 配置的模型列表: {}", userId, config.getProvider(), models);
+        
+        return models;
+    }
+
+    /**
+     * 获取支持的提供商及其模型列表（从 JSON 配置文件加载）
      */
     public List<ProviderInfo> getSupportedProviders() {
-        return Arrays.asList(
-                new ProviderInfo("google", "Google Gemini", 
-                        "https://generativelanguage.googleapis.com", 
-                        "gemini-2.0-flash",
-                        Arrays.asList(
-                                new ModelInfo("gemini-2.0-flash", "Gemini 2.0 Flash (推荐)", "快速、高效的通用模型"),
-                                new ModelInfo("gemini-2.0-flash-lite", "Gemini 2.0 Flash-Lite", "轻量级高效模型"),
-                                new ModelInfo("gemini-1.5-pro", "Gemini 1.5 Pro", "高性能推理模型"),
-                                new ModelInfo("gemini-1.5-flash", "Gemini 1.5 Flash", "均衡型模型")
-                        )),
-                new ProviderInfo("zhipu", "智谱 GLM", 
-                        "https://open.bigmodel.cn/api/paas/v4", 
-                        "glm-4-flash",
-                        Arrays.asList(
-                                new ModelInfo("glm-4-flash", "GLM-4-Flash (推荐)", "免费快速模型"),
-                                new ModelInfo("glm-4-flashx", "GLM-4-FlashX", "增强版 Flash"),
-                                new ModelInfo("glm-4-air", "GLM-4-Air", "轻量级模型"),
-                                new ModelInfo("glm-4-airx", "GLM-4-AirX", "增强版 Air"),
-                                new ModelInfo("glm-4-plus", "GLM-4-Plus", "高性能旗舰模型"),
-                                new ModelInfo("glm-4-long", "GLM-4-Long", "长文本模型"),
-                                new ModelInfo("glm-4", "GLM-4", "标准版模型")
-                        )),
-                new ProviderInfo("deepseek", "DeepSeek", 
-                        "https://api.deepseek.com", 
-                        "deepseek-chat",
-                        Arrays.asList(
-                                new ModelInfo("deepseek-chat", "DeepSeek-Chat (推荐)", "通用对话模型 (V3)"),
-                                new ModelInfo("deepseek-reasoner", "DeepSeek-Reasoner", "推理专用模型 (R1)")
-                        )),
-                new ProviderInfo("openai", "OpenAI GPT", 
-                        "https://api.openai.com", 
-                        "gpt-4o-mini",
-                        Arrays.asList(
-                                new ModelInfo("gpt-4o-mini", "GPT-4o Mini (推荐)", "高性价比多模态模型"),
-                                new ModelInfo("gpt-4o", "GPT-4o", "旗舰多模态模型"),
-                                new ModelInfo("gpt-4-turbo", "GPT-4 Turbo", "高性能版 GPT-4"),
-                                new ModelInfo("gpt-4", "GPT-4", "标准版 GPT-4"),
-                                new ModelInfo("gpt-3.5-turbo", "GPT-3.5 Turbo", "经济型模型"),
-                                new ModelInfo("o1-mini", "o1-Mini", "推理模型")
-                        )),
-                new ProviderInfo("claude", "Anthropic Claude", 
-                        "https://api.anthropic.com", 
-                        "claude-3-5-sonnet-20241022",
-                        Arrays.asList(
-                                new ModelInfo("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet (推荐)", "均衡型旗舰模型"),
-                                new ModelInfo("claude-3-5-haiku-20241022", "Claude 3.5 Haiku", "快速经济型模型"),
-                                new ModelInfo("claude-3-opus-20240229", "Claude 3 Opus", "最强智能模型"),
-                                new ModelInfo("claude-3-sonnet-20240229", "Claude 3 Sonnet", "均衡型模型"),
-                                new ModelInfo("claude-3-haiku-20240307", "Claude 3 Haiku", "快速模型")
-                        ))
-        );
+        return cachedProviders;
     }
 
     /**

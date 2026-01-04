@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS user_model_configs (
     api_key VARCHAR(500) NOT NULL COMMENT 'API Key',
     base_url VARCHAR(255) COMMENT '自定义 Base URL (可选)',
     model_name VARCHAR(100) COMMENT '模型名称 (如 gpt-4/glm-4-flash)',
+    available_models JSON COMMENT '自动获取的可用模型列表',
     enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用: 0-禁用, 1-启用',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

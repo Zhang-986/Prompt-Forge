@@ -40,11 +40,10 @@ public class PromptController {
      */
     @PostMapping
     @Operation(summary = "创建 Prompt", description = "创建一个新的 Prompt 并初始化第一个版本")
-    public Result<Prompt> createPrompt(@Valid @RequestBody CreatePromptRequest request) {
+    public Result<Prompt> createPrompt(
+            @RequestAttribute("userId") Long userId,
+            @Valid @RequestBody CreatePromptRequest request) {
         log.info("创建 Prompt: name={}", request.getName());
-
-        // TODO: 从 JWT 中获取用户 ID
-        Long userId = 1L;
 
         Prompt prompt = promptAppService.createPrompt(
                 request.getName(),
@@ -84,12 +83,10 @@ public class PromptController {
     @PostMapping("/{promptId}/commit")
     @Operation(summary = "提交新版本", description = "提交 Prompt 的新版本，类似 Git commit")
     public Result<PromptVersion> commitVersion(
+            @RequestAttribute("userId") Long userId,
             @Parameter(description = "Prompt ID") @PathVariable Long promptId,
             @Valid @RequestBody CommitVersionRequest request) {
         log.info("提交新版本: promptId={}, parentVersionId={}", promptId, request.getParentVersionId());
-
-        // TODO: 从 JWT 中获取用户 ID
-        Long userId = 1L;
 
         PromptVersion version = promptAppService.commitVersion(
                 promptId,
@@ -128,12 +125,10 @@ public class PromptController {
     @PostMapping("/{promptId}/rollback/{targetVersionId}")
     @Operation(summary = "回滚版本", description = "回滚到指定版本（会创建新版本）")
     public Result<PromptVersion> rollbackToVersion(
+            @RequestAttribute("userId") Long userId,
             @Parameter(description = "Prompt ID") @PathVariable Long promptId,
             @Parameter(description = "目标版本 ID") @PathVariable Long targetVersionId) {
         log.info("回滚版本: promptId={}, targetVersionId={}", promptId, targetVersionId);
-
-        // TODO: 从 JWT 中获取用户 ID
-        Long userId = 1L;
 
         PromptVersion version = promptAppService.rollbackToVersion(promptId, targetVersionId, userId);
         return Result.success("回滚成功", version);
@@ -165,11 +160,9 @@ public class PromptController {
     @DeleteMapping("/{promptId}")
     @Operation(summary = "删除 Prompt", description = "软删除 Prompt")
     public Result<Void> deletePrompt(
+            @RequestAttribute("userId") Long userId,
             @Parameter(description = "Prompt ID") @PathVariable Long promptId) {
         log.info("删除 Prompt: promptId={}", promptId);
-
-        // TODO: 从 JWT 中获取用户 ID
-        Long userId = 1L;
 
         promptAppService.deletePrompt(promptId, userId);
         return Result.success("删除成功", null);

@@ -37,7 +37,7 @@ public class DynamicLlmClientFactory {
     public Flux<String> generateStream(UserModelConfig config, String prompt) {
         return switch (config.getProvider()) {
             case "google" -> generateGoogleStream(config, prompt);
-            case "zhipu", "deepseek", "openai" -> generateOpenAICompatibleStream(config, prompt);
+            case "zhipu", "deepseek", "openai", "aliyun", "moonshot" -> generateOpenAICompatibleStream(config, prompt);
             case "claude" -> generateClaudeStream(config, prompt);
             default -> Flux.error(new RuntimeException("不支持的提供商: " + config.getProvider()));
         };
@@ -101,7 +101,17 @@ public class DynamicLlmClientFactory {
                 "stream", true
         );
 
-        String chatEndpoint = config.getProvider().equals("zhipu") ? "/chat/completions" : "/v1/chat/completions";
+        // 智谱、阿里云、Moonshot 的 Base URL 已包含版本路径，其他用 /v1/chat/completions
+        String chatEndpoint;
+        if (config.getProvider().equals("zhipu")) {
+            chatEndpoint = "/chat/completions";
+        } else if (config.getProvider().equals("aliyun")) {
+            chatEndpoint = "/chat/completions"; // Base URL 已包含 /compatible-mode/v1
+        } else if (config.getProvider().equals("moonshot")) {
+            chatEndpoint = "/chat/completions"; // Base URL 已包含 /v1
+        } else {
+            chatEndpoint = "/v1/chat/completions";
+        }
 
         return webClientBuilder.build()
                 .post()
@@ -277,5 +287,34 @@ public class DynamicLlmClientFactory {
             log.warn("解析 Claude 响应失败: {}", e.getMessage());
         }
         return "";
+    }
+    /**
+     * 获取可用模型列表 (仅限 OpenAI 兼容接口)
+     */
+    public List<String> fetchAvailableModels(UserModelConfig config) {
+        String baseUrl = config.getEffectiveBaseUrl();
+        if (baseUrl == null) {
+            throw new RuntimeException("Base URL cannot be null");
+        }
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+
+        String response = webClientBuilder.build()
+                .get()
+                .uri(baseUrl + "/v1/models")
+                .header("Authorization", "Bearer " + config.getApiKey())
+                .retrieve()
+                .bodyToMono(String.class)
+                .block(); // Sync call
+
+        JSONObject json = JSON.parseObject(response);
+        if (json.containsKey("data")) {
+            JSONArray data = json.getJSONArray("data");
+            return data.stream()
+                    .map(obj -> ((JSONObject) obj).getString("id"))
+                    .toList();
+        }
+        return List.of();
     }
 }

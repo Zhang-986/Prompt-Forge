@@ -26,3 +26,25 @@ export interface ArenaEvent {
     sequence: number
     finished: boolean
 }
+
+// 提交投票
+export const submitVote = (data: {
+    sessionId?: number
+    winnerModel: string
+    loserModel: string
+}) => {
+    return request.post<any, { code: number; data: null; message: string }>('/arena/vote', data)
+}
+
+// 获取排行榜
+export interface LeaderboardItem {
+    modelId: string
+    wins: number
+    losses: number
+    total: number
+    winRate: number
+}
+
+export const getLeaderboard = () => {
+    return request.get<any, { code: number; data: LeaderboardItem[]; message: string }>('/arena/leaderboard')
+}

@@ -28,6 +28,8 @@ public class UserModelConfigPO {
 
     private String modelName;
 
+    private String availableModels;
+
     private Integer enabled;
 
     @TableField(fill = FieldFill.INSERT)

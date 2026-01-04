@@ -11,6 +11,7 @@ import com.zzk.domain.repository.UserModelConfigRepository;
 import com.zzk.domain.service.ArenaDomainService;
 import com.zzk.infrastructure.ai.factory.DynamicLlmClientFactory;
 import com.zzk.infrastructure.exception.BusinessException;
+import com.zzk.infrastructure.persistence.mapper.ArenaVoteMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,6 +56,7 @@ public class ArenaAppService {
     private final ArenaResultRepository arenaResultRepository;
     private final DynamicLlmClientFactory dynamicLlmFactory;
     private final ObjectMapper objectMapper;
+    private final ArenaVoteMapper arenaVoteMapper;
 
     @Qualifier("arenaExecutor")
     private final ThreadPoolExecutor arenaExecutor;
@@ -300,6 +302,71 @@ public class ArenaAppService {
         return userConfigRepository.findEnabledByUserId(userId)
                 .stream()
                 .map(UserModelConfig::getProvider)
+                .toList();
+    }
+
+    /**
+     * 提交投票
+     */
+    public void submitVote(Long sessionId, String winnerModel, String loserModel, Long voterId) {
+        log.info("提交投票: sessionId={}, winner={}, loser={}, voter={}", 
+                sessionId, winnerModel, loserModel, voterId);
+        
+        arenaVoteMapper.insert(
+            com.zzk.infrastructure.persistence.po.ArenaVotePO.builder()
+                .sessionId(sessionId)
+                .winnerModel(winnerModel)
+                .loserModel(loserModel)
+                .voterId(voterId)
+                .createdAt(LocalDateTime.now())
+                .build()
+        );
+    }
+
+    /**
+     * 获取模型排行榜
+     */
+    public List<Map<String, Object>> getLeaderboard() {
+        // 获取胜负统计
+        var wins = arenaVoteMapper.countWinsByModel();
+        var losses = arenaVoteMapper.countLossesByModel();
+        
+        // 合并统计
+        Map<String, Long> winMap = wins.stream()
+                .collect(Collectors.toMap(
+                    w -> w.getModelId(), 
+                    w -> w.getCount(),
+                    (a, b) -> a
+                ));
+        Map<String, Long> lossMap = losses.stream()
+                .collect(Collectors.toMap(
+                    l -> l.getModelId(), 
+                    l -> l.getCount(),
+                    (a, b) -> a
+                ));
+        
+        // 合并所有模型 ID
+        java.util.Set<String> allModels = new java.util.HashSet<>();
+        allModels.addAll(winMap.keySet());
+        allModels.addAll(lossMap.keySet());
+        
+        // 计算胜率并排序
+        return allModels.stream()
+                .map(modelId -> {
+                    long w = winMap.getOrDefault(modelId, 0L);
+                    long l = lossMap.getOrDefault(modelId, 0L);
+                    long total = w + l;
+                    double winRate = total > 0 ? (double) w / total * 100 : 0;
+                    
+                    Map<String, Object> result = new java.util.HashMap<>();
+                    result.put("modelId", modelId);
+                    result.put("wins", w);
+                    result.put("losses", l);
+                    result.put("total", total);
+                    result.put("winRate", Math.round(winRate * 10) / 10.0);
+                    return result;
+                })
+                .sorted((a, b) -> Double.compare((Double) b.get("winRate"), (Double) a.get("winRate")))
                 .toList();
     }
 }

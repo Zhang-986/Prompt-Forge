@@ -2,6 +2,7 @@ package com.zzk.interfaces.controller;
 
 import com.zzk.application.service.ArenaAppService;
 import com.zzk.interfaces.dto.request.ArenaCompeteRequest;
+import com.zzk.interfaces.dto.request.ArenaVoteRequest;
 import com.zzk.interfaces.dto.response.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 竞技场控制器
@@ -65,5 +67,32 @@ public class ArenaController {
     @Operation(summary = "获取可用模型列表", description = "返回用户已配置的 AI 模型列表")
     public Result<List<String>> getAvailableModels(@RequestAttribute("userId") Long userId) {
         return Result.success(arenaAppService.getAvailableModels(userId));
+    }
+
+    /**
+     * 提交投票
+     */
+    @PostMapping("/vote")
+    @Operation(summary = "提交投票", description = "投票选择更好的模型输出")
+    public Result<Void> submitVote(@RequestAttribute("userId") Long userId,
+                                   @Valid @RequestBody ArenaVoteRequest request) {
+        log.info("提交投票: winner={}, loser={}, userId={}", 
+                request.getWinnerModel(), request.getLoserModel(), userId);
+        arenaAppService.submitVote(
+                request.getSessionId(),
+                request.getWinnerModel(),
+                request.getLoserModel(),
+                userId
+        );
+        return Result.success("投票成功", null);
+    }
+
+    /**
+     * 获取模型排行榜
+     */
+    @GetMapping("/leaderboard")
+    @Operation(summary = "获取模型排行榜", description = "返回所有模型的胜率排行")
+    public Result<List<Map<String, Object>>> getLeaderboard() {
+        return Result.success(arenaAppService.getLeaderboard());
     }
 }
