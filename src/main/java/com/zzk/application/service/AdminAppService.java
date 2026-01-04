@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zzk.domain.model.aggregate.User;
+import com.zzk.domain.model.entity.PlazaCategory;
 import com.zzk.domain.model.entity.PromptTemplate;
 import com.zzk.domain.model.entity.Workspace;
+import com.zzk.domain.repository.PlazaCategoryRepository;
 import com.zzk.domain.repository.PromptTemplateRepository;
 import com.zzk.domain.repository.UserRepository;
 import com.zzk.domain.repository.WorkspaceRepository;
@@ -42,6 +44,7 @@ public class AdminAppService {
     private final UserRepository userRepository;
     private final WorkspaceRepository workspaceRepository;
     private final PromptTemplateRepository promptTemplateRepository;
+    private final PlazaCategoryRepository plazaCategoryRepository;
     
     private final UserMapper userMapper;
     private final WorkspaceMapper workspaceMapper;
@@ -317,6 +320,24 @@ public class AdminAppService {
                         .eq(PromptTemplatePO::getId, templateId)
                         .set(PromptTemplatePO::getIsOfficial, isOfficial));
     }
+
+    /**
+     * 更新广场模板
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PromptTemplate updateTemplate(Long templateId, String name, String description, String content, String category) {
+        log.info("管理员更新广场模板: templateId={}, name={}", templateId, name);
+        
+        PromptTemplate template = promptTemplateRepository.findById(templateId)
+                .orElseThrow(() -> new BusinessException("模板不存在: " + templateId));
+        
+        template.setName(name);
+        template.setDescription(description);
+        template.setContent(content);
+        template.setCategory(category);
+        
+        return promptTemplateRepository.save(template);
+    }
     
     // ==================== Prompt 管理 ====================
     
@@ -426,6 +447,83 @@ public class AdminAppService {
      */
     public long getLoginLogCount() {
         return loginAuditLogMapper.selectCount(null);
+    }
+    
+    // ==================== 广场分类管理 ====================
+    
+    /**
+     * 获取所有分类
+     */
+    public List<PlazaCategory> getAllCategories() {
+        return plazaCategoryRepository.findAll();
+    }
+    
+    /**
+     * 获取所有启用的分类（供前端广场页面使用）
+     */
+    public List<PlazaCategory> getActiveCategories() {
+        return plazaCategoryRepository.findAllActive();
+    }
+    
+    /**
+     * 创建分类
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PlazaCategory createCategory(String value, String label, String icon, Integer sortOrder) {
+        log.info("创建分类: value={}, label={}", value, label);
+        
+        // 检查 value 是否已存在
+        if (plazaCategoryRepository.findByValue(value).isPresent()) {
+            throw new BusinessException("分类值已存在: " + value);
+        }
+        
+        PlazaCategory category = PlazaCategory.builder()
+                .value(value.toUpperCase())
+                .label(label)
+                .icon(icon != null ? icon : "📦")
+                .sortOrder(sortOrder != null ? sortOrder : 0)
+                .isActive(true)
+                .build();
+        
+        return plazaCategoryRepository.save(category);
+    }
+    
+    /**
+     * 更新分类
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PlazaCategory updateCategory(Long id, String value, String label, String icon, Integer sortOrder) {
+        log.info("更新分类: id={}, value={}", id, value);
+        
+        PlazaCategory category = plazaCategoryRepository.findById(id)
+                .orElseThrow(() -> new BusinessException("分类不存在: " + id));
+        
+        // 如果 value 变更，检查新值是否冲突
+        if (!category.getValue().equals(value)) {
+            if (plazaCategoryRepository.findByValue(value).isPresent()) {
+                throw new BusinessException("分类值已存在: " + value);
+            }
+        }
+        
+        category.setValue(value.toUpperCase());
+        category.setLabel(label);
+        category.setIcon(icon);
+        category.setSortOrder(sortOrder);
+        
+        return plazaCategoryRepository.save(category);
+    }
+    
+    /**
+     * 删除分类
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteCategory(Long id) {
+        log.info("删除分类: id={}", id);
+        
+        plazaCategoryRepository.findById(id)
+                .orElseThrow(() -> new BusinessException("分类不存在: " + id));
+        
+        plazaCategoryRepository.deleteById(id);
     }
 }
 

@@ -1,7 +1,9 @@
 package com.zzk.interfaces.controller;
 
+import com.zzk.application.service.AdminAppService;
 import com.zzk.application.service.PromptPlazaAppService;
 import com.zzk.domain.model.aggregate.Prompt;
+import com.zzk.domain.model.entity.PlazaCategory;
 import com.zzk.domain.model.entity.PromptTemplate;
 import com.zzk.interfaces.dto.response.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,6 +30,16 @@ import java.util.List;
 public class PromptPlazaController {
     
     private final PromptPlazaAppService plazaAppService;
+    private final AdminAppService adminAppService;
+    
+    /**
+     * 获取分类列表（供广场页面使用）
+     */
+    @GetMapping("/categories")
+    @Operation(summary = "获取分类列表", description = "获取所有启用的广场分类")
+    public Result<List<PlazaCategory>> getCategories() {
+        return Result.success(adminAppService.getActiveCategories());
+    }
     
     /**
      * 获取模板列表

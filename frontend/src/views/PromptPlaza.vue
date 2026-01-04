@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { getTemplates, cloneTemplate, CATEGORIES, type PromptTemplate } from '../api/plaza'
+import { getTemplates, getCategories, cloneTemplate, updatePlazaTemplate, deletePlazaTemplate, createCategory, updateCategory, deleteCategory, DEFAULT_CATEGORIES, type PromptTemplate, type PlazaCategory } from '../api/plaza'
 import { getWorkspaces, type Workspace } from '../api/workspace'
 import { message, Modal } from 'ant-design-vue'
-import { AppstoreOutlined, FileTextOutlined, ThunderboltOutlined, DownloadOutlined } from '@ant-design/icons-vue'
+import { AppstoreOutlined, FileTextOutlined, ThunderboltOutlined, DownloadOutlined, EditOutlined, DeleteOutlined, SettingOutlined, PlusOutlined } from '@ant-design/icons-vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -19,6 +19,52 @@ const cloning = ref(false)
 // 预览弹窗
 const showPreview = ref(false)
 const previewTemplate = ref<PromptTemplate | null>(null)
+
+// 管理员编辑弹窗
+const showEditDialog = ref(false)
+const editTemplate = ref<PromptTemplate | null>(null)
+const editForm = ref({
+  name: '',
+  description: '',
+  content: '',
+  category: ''
+})
+const saving = ref(false)
+
+// 动态分类列表
+const categories = ref<{ value: string; label: string; icon: string; id?: number }[]>([
+  { value: 'ALL', label: '全部', icon: '🌐' }
+])
+
+// 分类管理弹窗
+const showCategoryDialog = ref(false)
+const categoryList = ref<PlazaCategory[]>([])
+const editingCategory = ref<PlazaCategory | null>(null)
+const categoryForm = ref({
+  value: '',
+  label: '',
+  icon: '📦',
+  sortOrder: 0
+})
+const savingCategory = ref(false)
+
+// 加载分类列表
+const loadCategories = async () => {
+  try {
+    const res = await getCategories()
+    if (res.code === 200) {
+      categories.value = [
+        { value: 'ALL', label: '全部', icon: '🌐' },
+        ...res.data.map(c => ({ value: c.value, label: c.label, icon: c.icon, id: c.id }))
+      ]
+      categoryList.value = res.data
+    }
+  } catch (error) {
+    console.error('加载分类失败:', error)
+    // 使用默认分类作为后备
+    categories.value = DEFAULT_CATEGORIES.map(c => ({ value: c.value, label: c.label, icon: c.icon }))
+  }
+}
 
 // 加载模板列表
 const loadTemplates = async () => {
@@ -61,7 +107,7 @@ const openCloneDialog = (template: PromptTemplate) => {
 // 执行克隆
 const handleClone = async () => {
   if (!cloneTargetTemplate.value || !selectedWorkspace.value) return
-  
+
   cloning.value = true
   try {
     const res = await cloneTemplate(cloneTargetTemplate.value.id, selectedWorkspace.value)
@@ -94,13 +140,13 @@ const openPreview = (template: PromptTemplate) => {
 
 // 获取分类图标
 const getCategoryIcon = (category: string) => {
-  const cat = CATEGORIES.find(c => c.value === category)
+  const cat = categories.value.find(c => c.value === category)
   return cat?.icon || '📦'
 }
 
 // 获取分类名称
 const getCategoryLabel = (category: string) => {
-  const cat = CATEGORIES.find(c => c.value === category)
+  const cat = categories.value.find(c => c.value === category)
   return cat?.label || category
 }
 
@@ -117,7 +163,10 @@ try {
   if (userStr) {
     currentUser.value = JSON.parse(userStr)
   }
-} catch {}
+} catch { }
+
+// 是否是管理员
+const isAdmin = computed(() => currentUser.value?.role === 'ADMIN')
 
 // 退出登录
 const handleLogout = () => {
@@ -126,10 +175,134 @@ const handleLogout = () => {
   router.push('/login')
 }
 
+// ==================== 管理员功能 ====================
+
+// 打开编辑弹窗
+const openEditDialog = (template: PromptTemplate) => {
+  editTemplate.value = template
+  editForm.value = {
+    name: template.name,
+    description: template.description || '',
+    content: template.content,
+    category: template.category
+  }
+  showEditDialog.value = true
+}
+
+// 保存编辑
+const handleSaveEdit = async () => {
+  if (!editTemplate.value) return
+
+  saving.value = true
+  try {
+    const res = await updatePlazaTemplate(editTemplate.value.id, editForm.value)
+    if (res.code === 200) {
+      message.success('更新成功')
+      showEditDialog.value = false
+      loadTemplates() // 刷新列表
+    }
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '更新失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+// 删除模板
+const handleDelete = (template: PromptTemplate) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要删除模板「${template.name}」吗？此操作不可恢复。`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        const res = await deletePlazaTemplate(template.id)
+        if (res.code === 200) {
+          message.success('删除成功')
+          loadTemplates() // 刷新列表
+        }
+      } catch (error: any) {
+        message.error(error.response?.data?.message || '删除失败')
+      }
+    }
+  })
+}
+
 onMounted(() => {
+  loadCategories()
   loadTemplates()
   loadWorkspaces()
 })
+
+// ==================== 分类管理 ====================
+
+// 打开分类管理弹窗
+const openCategoryDialog = () => {
+  editingCategory.value = null
+  categoryForm.value = { value: '', label: '', icon: '📦', sortOrder: 0 }
+  showCategoryDialog.value = true
+}
+
+// 编辑分类
+const startEditCategory = (cat: PlazaCategory) => {
+  editingCategory.value = cat
+  categoryForm.value = {
+    value: cat.value,
+    label: cat.label,
+    icon: cat.icon,
+    sortOrder: cat.sortOrder
+  }
+}
+
+// 保存分类
+const handleSaveCategory = async () => {
+  if (!categoryForm.value.value || !categoryForm.value.label) {
+    message.error('请填写分类值和名称')
+    return
+  }
+
+  savingCategory.value = true
+  try {
+    if (editingCategory.value) {
+      // 更新
+      await updateCategory(editingCategory.value.id, categoryForm.value)
+      message.success('更新成功')
+    } else {
+      // 创建
+      await createCategory(categoryForm.value)
+      message.success('创建成功')
+    }
+    editingCategory.value = null
+    categoryForm.value = { value: '', label: '', icon: '📦', sortOrder: 0 }
+    loadCategories()
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '保存失败')
+  } finally {
+    savingCategory.value = false
+  }
+}
+
+// 删除分类
+const handleDeleteCategory = (cat: PlazaCategory) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要删除分类「${cat.label}」吗？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        await deleteCategory(cat.id)
+        message.success('删除成功')
+        loadCategories()
+      } catch (error: any) {
+        message.error(error.response?.data?.message || '删除失败')
+      }
+    }
+  })
+}
 </script>
 
 <template>
@@ -139,15 +312,21 @@ onMounted(() => {
       <div class="header-left">
         <img src="/vite.svg" alt="Logo" class="logo-icon" />
         <span class="logo-text">Prompt-Forge</span>
-        <a-tag color="purple"><AppstoreOutlined /> 广场</a-tag>
+        <a-tag color="purple">
+          <AppstoreOutlined /> 广场
+        </a-tag>
       </div>
       <div class="header-right">
         <a-button @click="router.push('/prompts')">
-          <template #icon><FileTextOutlined /></template>
+          <template #icon>
+            <FileTextOutlined />
+          </template>
           我的 Prompt
         </a-button>
         <a-button @click="router.push('/arena')">
-          <template #icon><ThunderboltOutlined /></template>
+          <template #icon>
+            <ThunderboltOutlined />
+          </template>
           竞技场
         </a-button>
         <span class="username">{{ currentUser?.username }}</span>
@@ -166,15 +345,14 @@ onMounted(() => {
 
       <!-- 分类筛选 -->
       <div class="category-tabs">
-        <button 
-          v-for="cat in CATEGORIES" 
-          :key="cat.value"
-          class="category-tab"
-          :class="{ active: selectedCategory === cat.value }"
-          @click="handleCategoryChange(cat.value)"
-        >
+        <button v-for="cat in categories" :key="cat.value" class="category-tab"
+          :class="{ active: selectedCategory === cat.value }" @click="handleCategoryChange(cat.value)">
           <span class="cat-icon">{{ cat.icon }}</span>
           <span class="cat-label">{{ cat.label }}</span>
+        </button>
+        <!-- 管理员设置按钮 -->
+        <button v-if="isAdmin" class="category-tab settings-btn" @click="openCategoryDialog" title="管理分类">
+          <SettingOutlined />
         </button>
       </div>
 
@@ -183,12 +361,7 @@ onMounted(() => {
 
       <!-- Template Grid -->
       <div v-else class="template-grid">
-        <div 
-          v-for="template in templates" 
-          :key="template.id" 
-          class="template-card"
-          @click="openPreview(template)"
-        >
+        <div v-for="template in templates" :key="template.id" class="template-card" @click="openPreview(template)">
           <div class="card-header">
             <span class="template-icon">{{ getCategoryIcon(template.category) }}</span>
             <div class="template-meta">
@@ -201,11 +374,24 @@ onMounted(() => {
           <div class="card-footer">
             <div class="footer-left">
               <span class="author">{{ template.authorName || '匿名' }}</span>
-              <span class="clone-count"><DownloadOutlined /> {{ template.cloneCount }}</span>
+              <span class="clone-count">
+                <DownloadOutlined /> {{ template.cloneCount }}
+              </span>
             </div>
-            <button class="clone-btn" @click.stop="openCloneDialog(template)">
-              Clone
-            </button>
+            <div class="footer-actions">
+              <!-- 管理员操作按钮 -->
+              <template v-if="isAdmin">
+                <button class="action-btn edit-btn" @click.stop="openEditDialog(template)" title="编辑">
+                  <EditOutlined />
+                </button>
+                <button class="action-btn delete-btn" @click.stop="handleDelete(template)" title="删除">
+                  <DeleteOutlined />
+                </button>
+              </template>
+              <button class="clone-btn" @click.stop="openCloneDialog(template)">
+                Clone
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -219,7 +405,9 @@ onMounted(() => {
     <!-- Clone Dialog -->
     <div v-if="showCloneDialog" class="dialog-overlay" @click.self="showCloneDialog = false">
       <div class="dialog">
-        <h3><DownloadOutlined /> 克隆到工作空间</h3>
+        <h3>
+          <DownloadOutlined /> 克隆到工作空间
+        </h3>
         <p class="clone-template-name">{{ cloneTargetTemplate?.name }}</p>
         <div class="form-group">
           <label>选择工作空间</label>
@@ -251,14 +439,118 @@ onMounted(() => {
         </div>
         <div class="preview-footer">
           <span class="preview-meta">
-            {{ getCategoryLabel(previewTemplate.category) }} · 
-            {{ previewTemplate.authorName || '匿名' }} · 
+            {{ getCategoryLabel(previewTemplate.category) }} ·
+            {{ previewTemplate.authorName || '匿名' }} ·
             {{ previewTemplate.cloneCount }} 次克隆
           </span>
           <a-button type="primary" size="large" @click="openCloneDialog(previewTemplate); showPreview = false">
-            <template #icon><DownloadOutlined /></template>
+            <template #icon>
+              <DownloadOutlined />
+            </template>
             Clone 到我的空间
           </a-button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Dialog (Admin) -->
+    <div v-if="showEditDialog && editTemplate" class="dialog-overlay" @click.self="showEditDialog = false">
+      <div class="dialog edit-dialog">
+        <div class="preview-header">
+          <h3>
+            <EditOutlined /> 编辑模板
+          </h3>
+          <button class="close-btn" @click="showEditDialog = false">×</button>
+        </div>
+        <div class="form-group">
+          <label>模板名称</label>
+          <input v-model="editForm.name" class="form-input" placeholder="请输入模板名称" />
+        </div>
+        <div class="form-group">
+          <label>模板描述</label>
+          <input v-model="editForm.description" class="form-input" placeholder="请输入模板描述" />
+        </div>
+        <div class="form-group">
+          <label>分类</label>
+          <select v-model="editForm.category" class="workspace-select">
+            <option v-for="cat in categories.filter(c => c.value !== 'ALL')" :key="cat.value" :value="cat.value">
+              {{ cat.icon }} {{ cat.label }}
+            </option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>模板内容</label>
+          <textarea v-model="editForm.content" class="form-textarea" rows="8" placeholder="请输入模板内容"></textarea>
+        </div>
+        <div class="dialog-actions">
+          <button class="cancel-btn" @click="showEditDialog = false">取消</button>
+          <button class="submit-btn" @click="handleSaveEdit" :disabled="saving">
+            {{ saving ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category Management Dialog (Admin) -->
+    <div v-if="showCategoryDialog" class="dialog-overlay" @click.self="showCategoryDialog = false">
+      <div class="dialog category-dialog">
+        <div class="preview-header">
+          <h3>
+            <SettingOutlined /> 分类管理
+          </h3>
+          <button class="close-btn" @click="showCategoryDialog = false">×</button>
+        </div>
+
+        <!-- 分类列表 -->
+        <div class="category-list">
+          <div v-for="cat in categoryList" :key="cat.id" class="category-item">
+            <span class="cat-icon">{{ cat.icon }}</span>
+            <span class="cat-info">
+              <strong>{{ cat.label }}</strong>
+              <small>{{ cat.value }}</small>
+            </span>
+            <span class="cat-order">#{{ cat.sortOrder }}</span>
+            <div class="cat-actions">
+              <button class="action-btn" @click="startEditCategory(cat)" title="编辑">
+                <EditOutlined />
+              </button>
+              <button class="action-btn delete-btn" @click="handleDeleteCategory(cat)" title="删除">
+                <DeleteOutlined />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 添加/编辑表单 -->
+        <div class="category-form">
+          <h4>{{ editingCategory ? '编辑分类' : '添加分类' }}</h4>
+          <div class="form-row">
+            <div class="form-group">
+              <label>分类值 (Value)</label>
+              <input v-model="categoryForm.value" class="form-input" placeholder="如 WRITING" />
+            </div>
+            <div class="form-group">
+              <label>显示名称</label>
+              <input v-model="categoryForm.label" class="form-input" placeholder="如 文案写作" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>图标 (Emoji)</label>
+              <input v-model="categoryForm.icon" class="form-input" placeholder="📦" />
+            </div>
+            <div class="form-group">
+              <label>排序</label>
+              <input v-model.number="categoryForm.sortOrder" type="number" class="form-input" placeholder="0" />
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <button v-if="editingCategory" class="cancel-btn"
+              @click="editingCategory = null; categoryForm = { value: '', label: '', icon: '📦', sortOrder: 0 }">取消编辑</button>
+            <button class="submit-btn" @click="handleSaveCategory" :disabled="savingCategory">
+              {{ savingCategory ? '保存中...' : (editingCategory ? '更新' : '添加') }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -671,9 +963,159 @@ onMounted(() => {
   color: var(--color-text-tertiary);
 }
 
-.loading, .empty-state {
+.loading,
+.empty-state {
   text-align: center;
   padding: 60px;
   color: var(--color-text-tertiary);
+}
+
+/* Admin Action Buttons */
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--color-text-tertiary);
+}
+
+.action-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.action-btn.delete-btn:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+/* Edit Dialog */
+.edit-dialog {
+  width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-family: 'Consolas', monospace;
+  resize: vertical;
+  min-height: 120px;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* Category Management Dialog */
+.category-dialog {
+  width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.settings-btn {
+  background: transparent !important;
+  border-style: dashed !important;
+}
+
+.category-list {
+  max-height: 250px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.category-item:last-child {
+  border-bottom: none;
+}
+
+.category-item .cat-icon {
+  font-size: 20px;
+}
+
+.category-item .cat-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.category-item .cat-info small {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.category-item .cat-order {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.category-item .cat-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.category-form {
+  padding: 16px;
+  background: var(--color-bg-secondary);
+  border-radius: 8px;
+}
+
+.category-form h4 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.form-row .form-group {
+  flex: 1;
 }
 </style>

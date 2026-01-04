@@ -19,8 +19,17 @@ export interface Prompt {
     description: string
 }
 
-// 分类列表
-export const CATEGORIES = [
+export interface PlazaCategory {
+    id: number
+    value: string
+    label: string
+    icon: string
+    sortOrder: number
+    isActive: boolean
+}
+
+// 默认分类列表（作为后备）
+export const DEFAULT_CATEGORIES = [
     { value: 'ALL', label: '全部', icon: '🌐' },
     { value: 'WRITING', label: '文案写作', icon: '✍️' },
     { value: 'CODING', label: '代码助手', icon: '💻' },
@@ -30,6 +39,11 @@ export const CATEGORIES = [
     { value: 'TRANSLATION', label: '翻译润色', icon: '🌍' },
     { value: 'OTHER', label: '其他', icon: '📦' },
 ]
+
+// 获取分类列表（从后端动态获取）
+export const getCategories = () => {
+    return request.get<any, { code: number; data: PlazaCategory[]; message: string }>('/plaza/categories')
+}
 
 // 获取模板列表
 export const getTemplates = (category?: string) => {
@@ -57,4 +71,36 @@ export const publishToPlaza = (promptId: number, category: string, authorName: s
         category,
         authorName
     })
+}
+
+// ==================== 管理员 API ====================
+
+// 管理员 - 更新广场模板
+export const updatePlazaTemplate = (id: number, data: { name: string; description: string; content: string; category: string }) => {
+    return request.put<any, { code: number; data: PromptTemplate; message: string }>(`/admin/templates/${id}`, data)
+}
+
+// 管理员 - 删除广场模板
+export const deletePlazaTemplate = (id: number) => {
+    return request.delete<any, { code: number; message: string }>(`/admin/templates/${id}`)
+}
+
+// 管理员 - 获取所有分类
+export const getAdminCategories = () => {
+    return request.get<any, { code: number; data: PlazaCategory[]; message: string }>('/admin/categories')
+}
+
+// 管理员 - 创建分类
+export const createCategory = (data: { value: string; label: string; icon?: string; sortOrder?: number }) => {
+    return request.post<any, { code: number; data: PlazaCategory; message: string }>('/admin/categories', data)
+}
+
+// 管理员 - 更新分类
+export const updateCategory = (id: number, data: { value: string; label: string; icon?: string; sortOrder?: number }) => {
+    return request.put<any, { code: number; data: PlazaCategory; message: string }>(`/admin/categories/${id}`, data)
+}
+
+// 管理员 - 删除分类
+export const deleteCategory = (id: number) => {
+    return request.delete<any, { code: number; message: string }>(`/admin/categories/${id}`)
 }

@@ -1,6 +1,7 @@
 package com.zzk.interfaces.controller;
 
 import com.zzk.application.service.AdminAppService;
+import com.zzk.domain.model.entity.PlazaCategory;
 import com.zzk.domain.model.entity.PromptTemplate;
 import com.zzk.domain.model.entity.Workspace;
 import com.zzk.interfaces.dto.response.AdminUserDTO;
@@ -186,6 +187,25 @@ public class AdminController {
         return Result.success("设置成功", null);
     }
 
+    /**
+     * 更新广场模板
+     */
+    @PutMapping("/templates/{id}")
+    @Operation(summary = "更新广场模板", description = "编辑模板的名称、描述、内容和分类")
+    public Result<PromptTemplate> updateTemplate(
+            @Parameter(description = "模板ID") @PathVariable Long id,
+            @Valid @RequestBody UpdateTemplateRequest request) {
+        log.info("更新广场模板: templateId={}", id);
+        PromptTemplate template = adminAppService.updateTemplate(
+                id,
+                request.getName(),
+                request.getDescription(),
+                request.getContent(),
+                request.getCategory()
+        );
+        return Result.success("更新成功", template);
+    }
+
     // ==================== Prompt 管理 ====================
 
     /**
@@ -270,6 +290,64 @@ public class AdminController {
         return Result.success(result);
     }
 
+    // ==================== 广场分类管理 ====================
+
+    /**
+     * 获取所有分类
+     */
+    @GetMapping("/categories")
+    @Operation(summary = "获取分类列表", description = "获取所有广场分类")
+    public Result<List<PlazaCategory>> getAllCategories() {
+        log.info("获取所有分类");
+        return Result.success(adminAppService.getAllCategories());
+    }
+
+    /**
+     * 创建分类
+     */
+    @PostMapping("/categories")
+    @Operation(summary = "创建分类", description = "创建新的广场分类")
+    public Result<PlazaCategory> createCategory(@Valid @RequestBody CategoryRequest request) {
+        log.info("创建分类: value={}", request.getValue());
+        PlazaCategory category = adminAppService.createCategory(
+                request.getValue(),
+                request.getLabel(),
+                request.getIcon(),
+                request.getSortOrder()
+        );
+        return Result.success("创建成功", category);
+    }
+
+    /**
+     * 更新分类
+     */
+    @PutMapping("/categories/{id}")
+    @Operation(summary = "更新分类", description = "更新分类信息")
+    public Result<PlazaCategory> updateCategory(
+            @Parameter(description = "分类ID") @PathVariable Long id,
+            @Valid @RequestBody CategoryRequest request) {
+        log.info("更新分类: id={}", id);
+        PlazaCategory category = adminAppService.updateCategory(
+                id,
+                request.getValue(),
+                request.getLabel(),
+                request.getIcon(),
+                request.getSortOrder()
+        );
+        return Result.success("更新成功", category);
+    }
+
+    /**
+     * 删除分类
+     */
+    @DeleteMapping("/categories/{id}")
+    @Operation(summary = "删除分类", description = "删除广场分类")
+    public Result<Void> deleteCategory(@Parameter(description = "分类ID") @PathVariable Long id) {
+        log.info("删除分类: id={}", id);
+        adminAppService.deleteCategory(id);
+        return Result.success("删除成功", null);
+    }
+
     // ==================== DTO ====================
 
     @Data
@@ -288,6 +366,33 @@ public class AdminController {
     public static class SetOfficialRequest {
         @NotNull(message = "官方状态不能为空")
         private Boolean isOfficial;
+    }
+
+    @Data
+    public static class UpdateTemplateRequest {
+        @NotBlank(message = "名称不能为空")
+        private String name;
+        
+        private String description;
+        
+        @NotBlank(message = "内容不能为空")
+        private String content;
+        
+        @NotBlank(message = "分类不能为空")
+        private String category;
+    }
+
+    @Data
+    public static class CategoryRequest {
+        @NotBlank(message = "分类值不能为空")
+        private String value;
+        
+        @NotBlank(message = "分类名称不能为空")
+        private String label;
+        
+        private String icon;
+        
+        private Integer sortOrder;
     }
 }
 
