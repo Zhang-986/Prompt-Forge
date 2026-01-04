@@ -1,124 +1,77 @@
-# Prompt-Forge 🔥
+# Prompt-Forge
 
 [简体中文](./README_zh-CN.md) | English
 
-> Enterprise-grade PromptOps Platform for collaborative prompt engineering, version control, and AI model evaluation.
+A full-stack Prompt management platform with version control, AI Arena, and team collaboration.
 
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.7-brightgreen)](https://spring.io/projects/spring-boot)
-[![Vue.js](https://img.shields.io/badge/Vue.js-3.5-blue)](https://vuejs.org/)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+## What's This?
 
-## ✨ Features
+Managing prompts in a team is painful - different versions flying around in Slack, no way to track what changed, can't compare which prompt actually works better. Prompt-Forge solves this.
 
-- **🗂️ Workspace Management** - Multi-tenant workspaces for team collaboration
-- **📝 Prompt Version Control** - Git-like versioning with commit history and diff view
-- **🏟️ AI Arena** - Compare multiple AI models side-by-side with ELO ratings
-- **💡 Prompt Coach** - AI-powered prompt optimization assistant
-- **🛒 Prompt Plaza** - Public template marketplace with cloning support
-- **🏷️ Tag System** - Flexible tagging for prompt organization
-- **🔐 JWT Authentication** - Secure user authentication with role-based access
-- **📊 Admin Dashboard** - System statistics and management console
+**Core Features:**
+- Version control for prompts (like Git, but for prompts)
+- AI Arena - pit different AI models against each other with ELO ratings
+- Prompt Coach - let AI help you improve your prompts
+- Template marketplace - share and clone prompts
+- Multi-tenant workspaces for team collaboration
 
-## 🛠️ Tech Stack
+## Tech Stack
 
-### Backend
-- **Framework**: Spring Boot 3.3.7, Spring AI 1.0.0-M5
-- **Database**: MySQL 8.0, MyBatis-Plus 3.5.9
-- **Cache**: Redis, Caffeine (L1/L2 Cache)
-- **Resilience**: Resilience4j (Circuit Breaker, Rate Limiter)
-- **Security**: JWT, BCrypt
-- **API Docs**: SpringDoc OpenAPI 2.3.0
+**Backend:** Spring Boot 3.3 + Spring AI + MyBatis-Plus + Redis + MySQL
 
-### Frontend
-- **Framework**: Vue 3.5 + TypeScript
-- **UI Library**: Ant Design Vue 4.x
-- **Build Tool**: Vite 6.x
-- **HTTP Client**: Axios
+**Frontend:** Vue 3 + TypeScript + Vite + Ant Design Vue
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - JDK 17+
 - Node.js 18+
 - MySQL 8.0+
-- Redis 7.0+
+- Redis
 
-### Backend Setup
+### Setup
 
 ```bash
-# Clone the repository
+# Clone
 git clone https://github.com/Zhang-986/prompt-forge.git
 cd prompt-forge
 
-# Configure database
+# Database
 mysql -u root -p < sql/init.sql
 
-# Update application.yml with your MySQL/Redis credentials
-
-# Run the application
+# Backend (update application.yml with your DB/Redis config first)
 mvn spring-boot:run
+
+# Frontend
+cd frontend && npm install && npm run dev
 ```
 
-### Frontend Setup
+**Access:**
+- Frontend: http://localhost:5173
+- API Docs: http://localhost:8080/swagger-ui.html
 
-```bash
-cd frontend
+## Test Accounts
 
-# Install dependencies
-npm install
+| User | Password | Role |
+|------|----------|------|
+| admin | admin123 | Admin |
+| demo | demo123 | Member |
 
-# Development server
-npm run dev
-
-# Production build
-npm run build
-```
-
-### Access Points
-- **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:8080
-- **API Docs**: http://localhost:8080/swagger-ui.html
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-prompt-forge/
 ├── src/main/java/com/zzk/
-│   ├── application/        # Application services
-│   ├── domain/             # Domain models & repositories
-│   ├── infrastructure/     # Persistence, cache, utils
-│   └── interfaces/         # Controllers & DTOs
-├── frontend/
-│   ├── src/
-│   │   ├── api/            # API layer
-│   │   ├── components/     # Vue components
-│   │   ├── views/          # Page views
-│   │   └── router/         # Vue Router
-│   └── package.json
-└── sql/                    # Database scripts
+│   ├── application/        # Business logic
+│   ├── domain/             # Domain models
+│   ├── infrastructure/     # DB, cache, utils
+│   └── interfaces/         # REST controllers
+├── frontend/src/
+│   ├── api/                # API calls
+│   ├── views/              # Pages
+│   └── components/         # Components
+└── sql/                    # DB scripts
 ```
 
-## 🔑 Default Accounts
+## License
 
-| Username | Password | Role |
-|----------|----------|------|
-| admin | admin123 | ADMIN |
-| demo | demo123 | MEMBER |
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
-
-Made with ❤️ by [zzk](https://github.com/your-username)
+MIT
