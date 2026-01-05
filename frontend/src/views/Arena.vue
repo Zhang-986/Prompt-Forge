@@ -2,9 +2,9 @@
 import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getPrompts, getVersionHistory, type Prompt, type PromptVersion } from '../api/prompt'
-import { getAvailableModels, submitVote, getLeaderboard, type ArenaEvent, type LeaderboardItem } from '../api/arena'
+import { getAvailableModels, submitVote, getLeaderboard, type ArenaEvent, type LeaderboardItem, type AvailableModelInfo } from '../api/arena'
 import { message } from 'ant-design-vue'
-import { ArrowLeftOutlined, ThunderboltOutlined, HistoryOutlined, PlayCircleOutlined, PauseCircleOutlined, WarningOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, BarChartOutlined, TrophyOutlined } from '@ant-design/icons-vue'
+import { ArrowLeftOutlined, ThunderboltOutlined, HistoryOutlined, PlayCircleOutlined, PauseCircleOutlined, WarningOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, BarChartOutlined, TrophyOutlined, UpOutlined, DownOutlined } from '@ant-design/icons-vue'
 import { marked } from 'marked'
 
 // 配置 marked
@@ -20,7 +20,8 @@ const route = useRoute()
 // loading 状态由 isCompeting 管理
 const prompts = ref<Prompt[]>([])
 const versions = ref<PromptVersion[]>([])
-const models = ref<string[]>([])
+const models = ref<AvailableModelInfo[]>([])
+const modelMap = ref<Map<string, AvailableModelInfo>>(new Map())
 const selectedPromptId = ref<number | null>(null)
 const selectedVersionId = ref<number | null>(null)
 const selectedModels = ref<string[]>([])
@@ -39,6 +40,31 @@ const votingFor = ref<string | null>(null)
 const leaderboardVisible = ref(false)
 const leaderboardData = ref<LeaderboardItem[]>([])
 const leaderboardLoading = ref(false)
+
+// 卡片展开/折叠状态
+const expandedCards = ref<Set<string>>(new Set())
+
+// 切换卡片展开状态
+const toggleCard = (modelId: string) => {
+  if (expandedCards.value.has(modelId)) {
+    expandedCards.value.delete(modelId)
+  } else {
+    expandedCards.value.add(modelId)
+  }
+  // 触发响应式更新
+  expandedCards.value = new Set(expandedCards.value)
+}
+
+// 展开所有卡片
+const expandAll = () => {
+  selectedModels.value.forEach(id => expandedCards.value.add(id))
+  expandedCards.value = new Set(expandedCards.value)
+}
+
+// 折叠所有卡片
+const collapseAll = () => {
+  expandedCards.value = new Set()
+}
 
 // 加载 Prompts
 const loadPrompts = async () => {
@@ -80,7 +106,12 @@ const loadModels = async () => {
     const res = await getAvailableModels()
     if (res.code === 200) {
       models.value = res.data
-      selectedModels.value = [...res.data]
+      // 构建 modelId -> info 的映射
+      const map = new Map<string, AvailableModelInfo>()
+      res.data.forEach(m => map.set(m.modelId, m))
+      modelMap.value = map
+      // 默认选中所有模型
+      selectedModels.value = res.data.map(m => m.modelId)
     }
   } catch (error) {
     console.error('加载模型失败:', error)
@@ -249,23 +280,16 @@ const currentVersionContent = computed(() => {
 // 变量列表
 const variableNames = computed(() => Object.keys(variables.value))
 
-// 模型名称映射
-const modelDisplayNames: Record<string, string> = {
-  'google': 'Google Gemini',
-  'zhipu': '智谱 GLM',
-  'deepseek': 'DeepSeek',
-  'openai': 'OpenAI GPT',
-  'claude': 'Claude',
-  'aliyun': '通义千问',
-  'moonshot': 'Moonshot Kimi'
-}
-
+// 获取模型显示名称（使用后端返回的 displayName，回退到 modelId）
 const getModelDisplayName = (modelId: string) => {
-  return modelDisplayNames[modelId] || modelId
+  const info = modelMap.value.get(modelId)
+  return info?.displayName || modelId
 }
 
-// 模型图标
+// 模型图标（根据 provider 返回图标）
 const getModelIcon = (modelId: string) => {
+  const info = modelMap.value.get(modelId)
+  const provider = info?.provider || modelId.split(':')[0] || modelId
   const icons: Record<string, string> = {
     'google': '🌐',
     'zhipu': '🧠',
@@ -273,9 +297,11 @@ const getModelIcon = (modelId: string) => {
     'openai': '🤖',
     'claude': '🎭',
     'aliyun': '🐱',
-    'moonshot': '🌙'
+    'moonshot': '🌙',
+    'cloudflare': '☁️',
+    'modelscope': '🔬'
   }
-  return icons[modelId] || '💬'
+  return icons[provider] || '💬'
 }
 
 // 处理投票
@@ -415,10 +441,10 @@ onUnmounted(() => {
             <p>请先前往 <router-link to="/settings/models">模型配置</router-link> 添加您的 API Key</p>
           </div>
           <div v-else class="models-grid">
-            <label v-for="model in models" :key="model" class="model-checkbox">
-              <input type="checkbox" v-model="selectedModels" :value="model" />
-              <span class="model-icon">{{ getModelIcon(model) }}</span>
-              <span>{{ getModelDisplayName(model) }}</span>
+            <label v-for="model in models" :key="model.modelId" class="model-checkbox">
+              <input type="checkbox" v-model="selectedModels" :value="model.modelId" />
+              <span class="model-icon">{{ getModelIcon(model.modelId) }}</span>
+              <span>{{ model.displayName }}</span>
             </label>
           </div>
         </div>
@@ -441,31 +467,46 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- 结果展示区 - 改进的卡片布局 -->
+      <!-- 结果展示区 - 可折叠卡片布局 -->
       <div v-if="Object.keys(modelOutputs).length > 0" class="results-section">
-        <h3>
-          <BarChartOutlined /> 对比结果
-        </h3>
-        <div class="results-grid">
+        <div class="results-header">
+          <h3>
+            <BarChartOutlined /> 对比结果
+          </h3>
+          <div class="results-actions">
+            <a-button size="small" @click="expandAll">展开全部</a-button>
+            <a-button size="small" @click="collapseAll">折叠全部</a-button>
+          </div>
+        </div>
+        <div class="results-list">
           <div v-for="modelId in selectedModels" :key="modelId" class="result-card"
-            :class="{ 'winner': votingFor === modelId }">
-            <!-- 卡片头部 -->
-            <div class="result-header">
+            :class="{ 'winner': votingFor === modelId, 'collapsed': !expandedCards.has(modelId) }">
+            <!-- 卡片头部 - 可点击展开/折叠 -->
+            <div class="result-header" @click="toggleCard(modelId)">
               <div class="model-info">
                 <span class="model-icon-large">{{ getModelIcon(modelId) }}</span>
                 <span class="model-name">{{ getModelDisplayName(modelId) }}</span>
               </div>
-              <div class="status-badge"
-                :class="{ done: modelOutputs[modelId]?.finished, loading: !modelOutputs[modelId]?.finished }">
-                <span v-if="modelOutputs[modelId]?.finished">
-                  <CheckCircleOutlined /> 完成
+              <div class="header-right">
+                <div class="status-badge"
+                  :class="{ done: modelOutputs[modelId]?.finished, error: modelOutputs[modelId]?.error, loading: !modelOutputs[modelId]?.finished && !modelOutputs[modelId]?.error }">
+                  <span v-if="modelOutputs[modelId]?.error">
+                    <CloseCircleOutlined /> 失败
+                  </span>
+                  <span v-else-if="modelOutputs[modelId]?.finished">
+                    <CheckCircleOutlined /> 完成
+                  </span>
+                  <span v-else class="loading-dots">生成中<span class="dots"></span></span>
+                </div>
+                <span class="expand-icon">
+                  <UpOutlined v-if="expandedCards.has(modelId)" />
+                  <DownOutlined v-else />
                 </span>
-                <span v-else class="loading-dots">生成中<span class="dots"></span></span>
               </div>
             </div>
 
-            <!-- 卡片内容 - Markdown 渲染 -->
-            <div class="result-content">
+            <!-- 卡片内容 - 可折叠 -->
+            <div v-show="expandedCards.has(modelId)" class="result-content">
               <div v-if="modelOutputs[modelId]?.error" class="error-message">
                 <CloseCircleOutlined /> {{ modelOutputs[modelId].error }}
               </div>
@@ -480,10 +521,10 @@ onUnmounted(() => {
             </div>
 
             <!-- 投票按钮 (仅当竞技结束且至少2个模型时显示) -->
-            <div v-if="!isCompeting && selectedModels.length >= 2 && modelOutputs[modelId]?.finished"
+            <div v-if="expandedCards.has(modelId) && !isCompeting && selectedModels.length >= 2 && modelOutputs[modelId]?.finished && !modelOutputs[modelId]?.error"
               class="vote-section">
               <div v-if="!hasVoted" class="vote-btn-wrapper">
-                <a-button type="primary" ghost class="vote-btn" @click="handleVote(modelId)">
+                <a-button type="primary" ghost class="vote-btn" @click.stop="handleVote(modelId)">
                   <template #icon>
                     <TrophyOutlined />
                   </template>
@@ -778,16 +819,28 @@ onUnmounted(() => {
   margin-top: 32px;
 }
 
-.results-section h3 {
-  margin-bottom: 20px;
+.results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.results-header h3 {
+  margin: 0;
   font-size: 20px;
   font-weight: 600;
 }
 
-.results-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 24px;
+.results-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .result-card {
@@ -816,6 +869,16 @@ onUnmounted(() => {
   padding: 16px 20px;
   background: rgba(0, 0, 0, 0.4);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.result-header:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.result-card.collapsed .result-header {
+  border-bottom: none;
 }
 
 .model-info {
@@ -834,6 +897,18 @@ onUnmounted(() => {
   color: #fff;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.expand-icon {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  transition: transform 0.2s;
+}
+
 .status-badge {
   padding: 6px 12px;
   border-radius: 20px;
@@ -849,6 +924,11 @@ onUnmounted(() => {
 .status-badge.loading {
   background: rgba(243, 156, 18, 0.2);
   color: #f39c12;
+}
+
+.status-badge.error {
+  background: rgba(231, 76, 60, 0.2);
+  color: #e74c3c;
 }
 
 .loading-dots .dots::after {

@@ -120,7 +120,7 @@ DROP TABLE IF EXISTS arena_results;
 CREATE TABLE arena_results (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '结果ID',
     session_id BIGINT NOT NULL COMMENT '会话ID',
-    model_id VARCHAR(50) NOT NULL COMMENT '模型标识 (gpt-4, deepseek, claude)',
+    model_id VARCHAR(200) NOT NULL COMMENT '模型标识 (provider:modelName)',
     content TEXT COMMENT '生成的内容',
     tokens_used INT COMMENT '消耗的Token数',
     latency_ms INT COMMENT '响应延迟(毫秒)',
@@ -138,8 +138,8 @@ DROP TABLE IF EXISTS arena_votes;
 CREATE TABLE arena_votes (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '投票ID',
     session_id BIGINT COMMENT '竞技会话ID (可选)',
-    winner_model VARCHAR(50) NOT NULL COMMENT '胜者模型ID',
-    loser_model VARCHAR(50) NOT NULL COMMENT '败者模型ID',
+    winner_model VARCHAR(200) NOT NULL COMMENT '胜者模型ID',
+    loser_model VARCHAR(200) NOT NULL COMMENT '败者模型ID',
     voter_id BIGINT NOT NULL COMMENT '投票用户ID',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '投票时间',
     INDEX idx_winner (winner_model),

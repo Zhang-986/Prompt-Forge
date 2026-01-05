@@ -1,8 +1,16 @@
 import request from './request'
 
-// 获取可用的模型列表
+// 可用模型信息
+export interface AvailableModelInfo {
+    provider: string      // 提供商 ID，如 "cloudflare"
+    modelId: string       // 完整标识，如 "cloudflare:@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    modelName: string     // 原始模型名，如 "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    displayName: string   // 显示名，如 "Cloudflare - Llama 3.3 70B"
+}
+
+// 获取可用的模型列表（返回详细信息）
 export const getAvailableModels = () => {
-    return request.get<any, { code: number; data: string[]; message: string }>('/arena/models')
+    return request.get<any, { code: number; data: AvailableModelInfo[]; message: string }>('/arena/models')
 }
 
 // 构建竞技场 SSE 连接 URL

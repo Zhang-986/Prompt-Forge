@@ -46,19 +46,19 @@ const newPrompt = ref({
 
 const optimizing = ref(false)
 
-// AI 优化
 // AI 优化模型选择
 const showModelSelectModal = ref(false)
-const availableModels = ref<string[]>([])
+const availableModels = ref<AvailableModelInfo[]>([])
 const selectedOptimizeModel = ref<string>('')
 const loadingModels = ref(false)
 
 const openOptimizeModal = async () => {
-  if (!newPrompt.value.content || !newPrompt.value.content.trim()) {
-    message.warning('请先输入一些内容作为基础')
+  if (!newPrompt.value.content.trim()) {
+    message.warning('请先输入一些内容作为基础，AI 才能帮你优化')
     return
   }
 
+  // 加载可用模型
   loadingModels.value = true
   try {
     const res = await getAvailableModels()
@@ -66,7 +66,7 @@ const openOptimizeModal = async () => {
       availableModels.value = res.data
       const firstModel = res.data[0]
       if (firstModel) {
-        selectedOptimizeModel.value = firstModel
+        selectedOptimizeModel.value = firstModel.provider // 默认选第一个
       }
       showModelSelectModal.value = true
     } else {
@@ -725,8 +725,8 @@ onMounted(() => {
       <div class="model-select-content">
         <p class="model-hint">请选择用于优化 Prompt 的 AI 模型：</p>
         <a-radio-group v-model:value="selectedOptimizeModel" class="model-radio-group">
-          <a-radio v-for="model in availableModels" :key="model" :value="model" class="model-radio-item">
-            {{ model }}
+          <a-radio v-for="model in availableModels" :key="model.provider" :value="model.provider" class="model-radio-item">
+            {{ model.displayName }}
           </a-radio>
         </a-radio-group>
         <div class="modal-actions">

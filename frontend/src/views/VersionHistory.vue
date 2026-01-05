@@ -5,7 +5,7 @@ import { getPrompt, getVersionHistory, commitVersion, rollbackVersion, getVersio
 import { message, Modal } from 'ant-design-vue'
 import { ArrowLeftOutlined, EditOutlined, RobotOutlined, HistoryOutlined, SwapOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { optimizePrompt } from '../api/optimize'
-import { getAvailableModels } from '../api/arena'
+import { getAvailableModels, type AvailableModelInfo } from '../api/arena'
 
 
 const route = useRoute()
@@ -25,7 +25,7 @@ const optimizing = ref(false)
 
 // AI 优化模型选择
 const showModelSelectModal = ref(false)
-const availableModels = ref<string[]>([])
+const availableModels = ref<AvailableModelInfo[]>([])
 const selectedOptimizeModel = ref<string>('')
 const loadingModels = ref(false)
 
@@ -43,7 +43,7 @@ const openOptimizeModal = async () => {
       availableModels.value = res.data
       const firstModel = res.data[0]
       if (firstModel) {
-        selectedOptimizeModel.value = firstModel // 默认选第一个
+        selectedOptimizeModel.value = firstModel.provider // 默认选第一个
       }
       showModelSelectModal.value = true
     } else {
@@ -477,8 +477,8 @@ onMounted(() => {
       <div class="model-select-content">
         <p class="model-hint">请选择用于优化 Prompt 的 AI 模型：</p>
         <a-radio-group v-model:value="selectedOptimizeModel" class="model-radio-group">
-          <a-radio v-for="model in availableModels" :key="model" :value="model" class="model-radio-item">
-            {{ model }}
+          <a-radio v-for="model in availableModels" :key="model.provider" :value="model.provider" class="model-radio-item">
+            {{ model.displayName }}
           </a-radio>
         </a-radio-group>
         <div class="modal-actions">

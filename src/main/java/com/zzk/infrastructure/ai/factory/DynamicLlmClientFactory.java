@@ -37,7 +37,7 @@ public class DynamicLlmClientFactory {
     public Flux<String> generateStream(UserModelConfig config, String prompt) {
         return switch (config.getProvider()) {
             case "google" -> generateGoogleStream(config, prompt);
-            case "zhipu", "deepseek", "openai", "aliyun", "moonshot" -> generateOpenAICompatibleStream(config, prompt);
+            case "zhipu", "deepseek", "openai", "aliyun", "moonshot", "cloudflare" -> generateOpenAICompatibleStream(config, prompt);
             case "claude" -> generateClaudeStream(config, prompt);
             default -> Flux.error(new RuntimeException("不支持的提供商: " + config.getProvider()));
         };
@@ -95,13 +95,18 @@ public class DynamicLlmClientFactory {
 
         log.info("[{}] 调用 API: model={}", config.getProvider(), model);
 
-        Map<String, Object> requestBody = Map.of(
-                "model", model,
-                "messages", List.of(Map.of("role", "user", "content", prompt)),
-                "stream", true
-        );
+        // 构建请求体
+        Map<String, Object> requestBody = new java.util.HashMap<>();
+        requestBody.put("model", model);
+        requestBody.put("messages", List.of(Map.of("role", "user", "content", prompt)));
+        requestBody.put("stream", true);
+        
+        // Cloudflare 默认 max_tokens 较小，需要显式设置
+        if (config.getProvider().equals("cloudflare")) {
+            requestBody.put("max_tokens", 4096);
+        }
 
-        // 智谱、阿里云、Moonshot 的 Base URL 已包含版本路径，其他用 /v1/chat/completions
+        // 智谱、阿里云、Moonshot、Cloudflare 的 Base URL 已包含版本路径，其他用 /v1/chat/completions
         String chatEndpoint;
         if (config.getProvider().equals("zhipu")) {
             chatEndpoint = "/chat/completions";
@@ -109,6 +114,8 @@ public class DynamicLlmClientFactory {
             chatEndpoint = "/chat/completions"; // Base URL 已包含 /compatible-mode/v1
         } else if (config.getProvider().equals("moonshot")) {
             chatEndpoint = "/chat/completions"; // Base URL 已包含 /v1
+        } else if (config.getProvider().equals("cloudflare")) {
+            chatEndpoint = "/chat/completions"; // Base URL 已包含 /ai/v1
         } else {
             chatEndpoint = "/v1/chat/completions";
         }

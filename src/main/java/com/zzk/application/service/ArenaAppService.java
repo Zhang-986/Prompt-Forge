@@ -76,7 +76,7 @@ public class ArenaAppService {
         String finalPrompt = arenaDomainService.renderPrompt(version.getContent(), variables);
         log.debug("渲染后的 Prompt: {}", finalPrompt);
 
-        // 3. 获取用户配置
+        // 3. 获取用户配置（按 provider 索引）
         Map<String, UserModelConfig> userConfigs = userConfigRepository.findEnabledByUserId(userId)
                 .stream()
                 .collect(Collectors.toMap(UserModelConfig::getProvider, c -> c));
@@ -114,20 +114,45 @@ public class ArenaAppService {
         Map<String, StringBuilder> resultBuffers = new ConcurrentHashMap<>();
         Map<String, Long> startTimes = new ConcurrentHashMap<>();
 
-        // 6. 并行调用所有模型（只使用用户配置）
+        // 6. 并行调用所有模型（支持 provider:modelName 格式）
         List<CompletableFuture<Void>> futures = modelIds.stream()
                 .map(modelId -> CompletableFuture.runAsync(() -> {
                     startTimes.put(modelId, System.currentTimeMillis());
                     try {
-                        UserModelConfig userConfig = userConfigs.get(modelId);
+                        // 解析 modelId 格式: provider:modelName 或纯 provider
+                        String provider;
+                        String specificModel = null;
+                        if (modelId.contains(":")) {
+                            String[] parts = modelId.split(":", 2);
+                            provider = parts[0];
+                            specificModel = parts[1];
+                        } else {
+                            provider = modelId;
+                        }
+
+                        UserModelConfig userConfig = userConfigs.get(provider);
                         if (userConfig != null) {
-                            callModelWithUserConfig(emitter, modelId, finalPrompt, userConfig, 
+                            // 如果指定了具体模型，临时覆盖配置中的模型名
+                            UserModelConfig effectiveConfig = userConfig;
+                            if (specificModel != null && !specificModel.isEmpty()) {
+                                effectiveConfig = UserModelConfig.builder()
+                                        .id(userConfig.getId())
+                                        .userId(userConfig.getUserId())
+                                        .provider(userConfig.getProvider())
+                                        .apiKey(userConfig.getApiKey())
+                                        .baseUrl(userConfig.getBaseUrl())
+                                        .modelName(specificModel)  // 使用指定的模型
+                                        .enabled(userConfig.getEnabled())
+                                        .availableModels(userConfig.getAvailableModels())
+                                        .build();
+                            }
+                            callModelWithUserConfig(emitter, modelId, finalPrompt, effectiveConfig, 
                                     resultBuffers, completedCount, totalModels);
                             // 保存成功结果
                             saveArenaResult(sessionId, modelId, resultBuffers.get(modelId).toString(),
                                     startTimes.get(modelId), "SUCCESS", null);
                         } else {
-                            log.warn("用户未配置模型: {}", modelId);
+                            log.warn("用户未配置模型: {}", provider);
                             sendErrorEvent(emitter, modelId, "您没有配置该模型的 API Key，请先在模型配置中添加");
                             saveArenaResult(sessionId, modelId, null, startTimes.get(modelId), 
                                     "FAILED", "用户未配置该模型的 API Key");
@@ -296,13 +321,66 @@ public class ArenaAppService {
     }
 
     /**
-     * 获取用户可用的模型列表（只返回用户已配置的模型）
+     * 可用模型信息 DTO
      */
-    public List<String> getAvailableModels(Long userId) {
+    public record AvailableModelInfo(
+            String provider,      // 提供商 ID，如 "cloudflare"
+            String modelId,       // 完整标识，如 "cloudflare:@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+            String modelName,     // 原始模型名，如 "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+            String displayName    // 显示名，如 "Cloudflare - Llama 3.3 70B"
+    ) {}
+
+    /**
+     * 获取用户可用的模型列表（返回详细模型信息）
+     */
+    public List<AvailableModelInfo> getAvailableModels(Long userId) {
         return userConfigRepository.findEnabledByUserId(userId)
                 .stream()
-                .map(UserModelConfig::getProvider)
+                .map(config -> {
+                    String provider = config.getProvider();
+                    String modelName = config.getEffectiveModelName();
+                    String modelId = provider + ":" + modelName;
+                    String displayName = getProviderDisplayName(provider) + " - " + getModelShortName(modelName);
+                    return new AvailableModelInfo(provider, modelId, modelName, displayName);
+                })
                 .toList();
+    }
+
+    /**
+     * 获取提供商显示名称
+     */
+    private String getProviderDisplayName(String provider) {
+        return switch (provider) {
+            case "google" -> "Google Gemini";
+            case "zhipu" -> "智谱 GLM";
+            case "deepseek" -> "DeepSeek";
+            case "openai" -> "OpenAI";
+            case "claude" -> "Claude";
+            case "aliyun" -> "通义千问";
+            case "moonshot" -> "Moonshot";
+            case "cloudflare" -> "Cloudflare";
+            case "modelscope" -> "ModelScope";
+            default -> provider;
+        };
+    }
+
+    /**
+     * 获取模型简短名称（裁剪过长的模型 ID）
+     */
+    private String getModelShortName(String modelName) {
+        if (modelName == null) return "Default";
+        // 处理 Cloudflare 格式如 @cf/meta/llama-3.3-70b-instruct-fp8-fast
+        if (modelName.startsWith("@")) {
+            String[] parts = modelName.split("/");
+            if (parts.length >= 3) {
+                return parts[parts.length - 1]; // 取最后一部分
+            }
+        }
+        // 处理过长的模型名
+        if (modelName.length() > 30) {
+            return modelName.substring(0, 27) + "...";
+        }
+        return modelName;
     }
 
     /**

@@ -9,7 +9,7 @@ import {
     getCoachSession, 
     type CoachSession
 } from '../api/promptCoach'
-import { getAvailableModels } from '../api/arena'
+import { getAvailableModels, type AvailableModelInfo } from '../api/arena'
 
 const router = useRouter()
 // route 备用于后续功能
@@ -24,7 +24,7 @@ const chatContainer = ref<HTMLElement | null>(null)
 
 // 模型选择 - 从用户配置动态加载
 const selectedProvider = ref('')
-const availableProviders = ref<string[]>([])
+const availableProviders = ref<AvailableModelInfo[]>([])
 const loadingProviders = ref(false)
 
 // 加载用户配置的模型
@@ -41,6 +41,7 @@ const loadProviders = async () => {
         loadingProviders.value = false
     }
 }
+
 
 // 页面加载时获取模型列表
 onMounted(() => {
@@ -249,12 +250,12 @@ const handleKeydown = async (e: KeyboardEvent) => {
                     <a-select 
                         v-model:value="selectedProvider" 
                         placeholder="自动选择" 
-                        style="width: 180px"
+                        style="width: 240px"
                         :loading="loadingProviders"
                     >
                         <a-select-option value="">自动选择</a-select-option>
-                        <a-select-option v-for="provider in availableProviders" :key="provider" :value="provider">
-                            {{ provider }}
+                        <a-select-option v-for="info in availableProviders" :key="info.provider" :value="info.provider">
+                            {{ info.displayName }}
                         </a-select-option>
                     </a-select>
                     <span v-if="availableProviders.length === 0 && !loadingProviders" class="no-model-hint">

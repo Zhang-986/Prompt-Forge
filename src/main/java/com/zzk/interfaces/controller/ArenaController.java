@@ -61,11 +61,11 @@ public class ArenaController {
     }
 
     /**
-     * 获取用户可用的模型列表（只返回用户已配置的模型）
+     * 获取用户可用的模型列表（返回详细模型信息）
      */
     @GetMapping("/models")
-    @Operation(summary = "获取可用模型列表", description = "返回用户已配置的 AI 模型列表")
-    public Result<List<String>> getAvailableModels(@RequestAttribute("userId") Long userId) {
+    @Operation(summary = "获取可用模型列表", description = "返回用户已配置的 AI 模型详细信息")
+    public Result<List<ArenaAppService.AvailableModelInfo>> getAvailableModels(@RequestAttribute("userId") Long userId) {
         return Result.success(arenaAppService.getAvailableModels(userId));
     }
 
