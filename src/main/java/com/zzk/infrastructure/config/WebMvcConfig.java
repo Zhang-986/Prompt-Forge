@@ -31,6 +31,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                     // 用户登录注册
                     "/api/users/login",
                     "/api/users/register",
+                    "/api/users/send-email-code",
                     // 验证码相关（登录防护）
                     "/api/users/captcha",
                     "/api/users/login-check",

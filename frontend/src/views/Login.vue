@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { login, register, getCaptcha, type LoginData, type RegisterData, type CaptchaResult } from '../api/user'
+import { login, register, getCaptcha, sendEmailCode, type LoginData, type RegisterData, type CaptchaResult } from '../api/user'
 import { message } from 'ant-design-vue'
 import { ReloadOutlined } from '@ant-design/icons-vue'
 
@@ -26,10 +26,23 @@ const loginForm = ref<LoginData>({
 const registerForm = ref<RegisterData>({
   username: '',
   email: '',
-  password: ''
+  password: '',
+  emailCode: ''
 })
 
 const confirmPassword = ref('')
+
+// 邮箱验证码相关
+const emailCodeLoading = ref(false)
+const emailCodeCooldown = ref(0)
+let cooldownTimer: ReturnType<typeof setInterval> | null = null
+
+// 清理定时器
+onUnmounted(() => {
+  if (cooldownTimer) {
+    clearInterval(cooldownTimer)
+  }
+})
 
 // 获取验证码
 const fetchCaptcha = async () => {
@@ -99,10 +112,55 @@ const handleLogin = async () => {
   }
 }
 
+// 发送邮箱验证码
+const handleSendEmailCode = async () => {
+  if (!registerForm.value.email) {
+    message.warning('请先输入邮箱')
+    return
+  }
+  
+  // 简单的邮箱格式验证
+  const emailRegex = /^[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}$/
+  if (!emailRegex.test(registerForm.value.email)) {
+    message.warning('请输入正确的邮箱格式')
+    return
+  }
+  
+  emailCodeLoading.value = true
+  try {
+    const res = await sendEmailCode(registerForm.value.email)
+    if (res.code === 200) {
+      message.success(res.message || '验证码已发送')
+      // 开始倒计时
+      emailCodeCooldown.value = res.data?.cooldown || 60
+      cooldownTimer = setInterval(() => {
+        if (emailCodeCooldown.value > 0) {
+          emailCodeCooldown.value--
+        } else {
+          if (cooldownTimer) {
+            clearInterval(cooldownTimer)
+            cooldownTimer = null
+          }
+        }
+      }, 1000)
+    } else {
+      message.error(res.message || '发送失败')
+    }
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '发送失败')
+  } finally {
+    emailCodeLoading.value = false
+  }
+}
+
 // 注册
 const handleRegister = async () => {
   if (!registerForm.value.username || !registerForm.value.email || !registerForm.value.password) {
     message.warning('请填写完整信息')
+    return
+  }
+  if (!registerForm.value.emailCode) {
+    message.warning('请输入邮箱验证码')
     return
   }
   if (registerForm.value.password !== confirmPassword.value) {
@@ -190,6 +248,25 @@ const handleRegister = async () => {
             </a-form-item>
             <a-form-item label="邮箱" required>
               <a-input v-model:value="registerForm.email" type="email" placeholder="请输入邮箱" size="large" />
+            </a-form-item>
+            <a-form-item label="邮箱验证码" required>
+              <div class="email-code-row">
+                <a-input 
+                  v-model:value="registerForm.emailCode" 
+                  placeholder="请输入验证码" 
+                  size="large"
+                  class="email-code-input"
+                />
+                <a-button 
+                  size="large"
+                  :loading="emailCodeLoading" 
+                  :disabled="emailCodeCooldown > 0"
+                  @click="handleSendEmailCode"
+                  class="send-code-btn"
+                >
+                  {{ emailCodeCooldown > 0 ? `${emailCodeCooldown}秒后重发` : '发送验证码' }}
+                </a-button>
+              </div>
             </a-form-item>
             <a-form-item label="密码" required>
               <a-input-password v-model:value="registerForm.password" placeholder="请输入密码" size="large" />
@@ -301,5 +378,21 @@ const handleRegister = async () => {
 
 .captcha-image-wrapper:hover .captcha-refresh {
   opacity: 1;
+}
+
+/* 邮箱验证码样式 */
+.email-code-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.email-code-input {
+  flex: 1;
+}
+
+.send-code-btn {
+  min-width: 120px;
+  white-space: nowrap;
 }
 </style>

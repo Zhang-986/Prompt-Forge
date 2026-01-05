@@ -38,6 +38,24 @@ spring:
           max-idle: 10
           min-idle: 5
 
+  # ==================== 邮件配置 ====================
+  mail:
+    host: smtp.qq.com
+    port: 465
+    username: ${QQ_EMAIL:3225483474@qq.com}
+    password: wnicxbyhdoqpdbdj
+    protocol: smtps
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          ssl:
+            enable: true
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
   # ==================== Spring AI 配置 ====================
   ai:
     openai:
@@ -89,6 +107,13 @@ login:
     counter-expiration: 24h
     # 验证码有效期
     captcha-expiration: 5m
+
+# ==================== 邮箱验证码配置 ====================
+email:
+  verification:
+    code-length: 6
+    expiration-minutes: 5
+    resend-interval-seconds: 60
 
 # ==================== Resilience4j 熔断配置 ====================
 resilience4j:

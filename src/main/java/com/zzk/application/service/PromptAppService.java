@@ -54,16 +54,7 @@ public class PromptAppService {
         log.info("创建 Prompt: name={}, workspaceId={}", name, workspaceId);
 
         // 1. 创建 Prompt 聚合根
-        Prompt prompt = Prompt.builder()
-                .name(name)
-                .description(description)
-                .workspaceId(workspaceId)
-                .creatorId(userId)
-                .isPublic(false)
-                .status(1)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
+        Prompt prompt = getPrompt(name, description, workspaceId, userId);
 
         promptRepository.save(prompt);
         log.info("Prompt 创建成功: id={}", prompt.getId());
@@ -74,6 +65,20 @@ public class PromptAppService {
         
         log.info("初始版本创建成功: versionId={}", version.getId());
 
+        return prompt;
+    }
+
+    private static Prompt getPrompt(String name, String description, Long workspaceId, Long userId) {
+        Prompt prompt = Prompt.builder()
+                .name(name)
+                .description(description)
+                .workspaceId(workspaceId)
+                .creatorId(userId)
+                .isPublic(false)
+                .status(1)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
         return prompt;
     }
 

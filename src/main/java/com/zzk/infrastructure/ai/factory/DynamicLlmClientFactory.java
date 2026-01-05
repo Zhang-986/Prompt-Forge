@@ -37,7 +37,7 @@ public class DynamicLlmClientFactory {
     public Flux<String> generateStream(UserModelConfig config, String prompt) {
         return switch (config.getProvider()) {
             case "google" -> generateGoogleStream(config, prompt);
-            case "zhipu", "deepseek", "openai", "aliyun", "moonshot", "cloudflare" -> generateOpenAICompatibleStream(config, prompt);
+            case "zhipu", "deepseek", "openai", "aliyun", "moonshot", "cloudflare", "github", "hunyuan" -> generateOpenAICompatibleStream(config, prompt);
             case "claude" -> generateClaudeStream(config, prompt);
             default -> Flux.error(new RuntimeException("不支持的提供商: " + config.getProvider()));
         };
@@ -116,6 +116,10 @@ public class DynamicLlmClientFactory {
             chatEndpoint = "/chat/completions"; // Base URL 已包含 /v1
         } else if (config.getProvider().equals("cloudflare")) {
             chatEndpoint = "/chat/completions"; // Base URL 已包含 /ai/v1
+        } else if (config.getProvider().equals("github")) {
+            chatEndpoint = "/chat/completions?api-version=2024-12-01-preview"; // Azure-style, 需要 api-version
+        } else if (config.getProvider().equals("hunyuan")) {
+            chatEndpoint = "/chat/completions"; // Base URL 已包含 /v1
         } else {
             chatEndpoint = "/v1/chat/completions";
         }

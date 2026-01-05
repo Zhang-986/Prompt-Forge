@@ -168,6 +168,12 @@
             <artifactId>spring-security-crypto</artifactId>
         </dependency>
 
+        <!-- ==================== Email Service ==================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- ==================== JWT ==================== -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

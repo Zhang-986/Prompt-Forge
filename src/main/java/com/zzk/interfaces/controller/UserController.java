@@ -19,6 +19,7 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
+import com.zzk.application.service.EmailService;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -41,6 +42,42 @@ public class UserController {
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final LoginGuardService loginGuardService;
+    private final EmailService emailService;
+
+    /**
+     * 发送邮箱验证码
+     */
+    @PostMapping("/send-email-code")
+    @Operation(summary = "发送邮箱验证码", description = "发送验证码到指定邮箱，用于注册验证")
+    public Result<Map<String, Object>> sendEmailCode(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        
+        if (email == null || email.isBlank()) {
+            throw new BusinessException("邮箱不能为空");
+        }
+        
+        // 简单的邮箱格式验证
+        if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+            throw new BusinessException("邮箱格式不正确");
+        }
+        
+        // 检查邮箱是否已注册
+        if (userRepository.findByEmail(email).isPresent()) {
+            throw new BusinessException("该邮箱已被注册");
+        }
+        
+        // 发送验证码
+        int cooldown = emailService.sendVerificationCode(email);
+        
+        Map<String, Object> data = new HashMap<>();
+        if (cooldown > 0) {
+            data.put("cooldown", cooldown);
+            return Result.success("请稍后再试", data);
+        }
+        
+        data.put("cooldown", 60); // 返回默认冷却时间
+        return Result.success("验证码已发送", data);
+    }
 
     /**
      * 用户注册
@@ -49,6 +86,11 @@ public class UserController {
     @Operation(summary = "用户注册")
     public Result<Map<String, Object>> register(@Valid @RequestBody RegisterRequest request) {
         log.info("用户注册: username={}", request.getUsername());
+
+        // 验证邮箱验证码
+        if (!emailService.verifyCode(request.getEmail(), request.getEmailCode())) {
+            throw new BusinessException("验证码错误或已过期");
+        }
 
         // 检查用户名是否存在
         if (userRepository.findByUsername(request.getUsername()).isPresent()) {
@@ -328,6 +370,9 @@ public class UserController {
 
         @NotBlank(message = "邮箱不能为空")
         private String email;
+
+        @NotBlank(message = "验证码不能为空")
+        private String emailCode;
     }
 
     @Data

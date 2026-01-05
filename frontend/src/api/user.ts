@@ -11,6 +11,7 @@ export interface RegisterData {
     username: string
     email: string
     password: string
+    emailCode: string
 }
 
 export interface User {
@@ -39,6 +40,11 @@ export interface LoginCheckResult {
 // 登录
 export const login = (data: LoginData) => {
     return request.post<any, { code: number; data: LoginResult; message: string }>('/users/login', data)
+}
+
+// 发送邮箱验证码
+export const sendEmailCode = (email: string) => {
+    return request.post<any, { code: number; data: { cooldown: number }; message: string }>('/users/send-email-code', { email })
 }
 
 // 注册
