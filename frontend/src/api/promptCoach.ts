@@ -74,17 +74,29 @@ export const sendCoachMessage = async (
         }
 
         const decoder = new TextDecoder()
+        let buffer = ''
 
         while (true) {
             const { done, value } = await reader.read()
             if (done) break
 
-            const text = decoder.decode(value)
-            const lines = text.split('\n')
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+
+            // 保留最后一个可能不完整的行
+            buffer = lines.pop() || ''
 
             for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const data = line.slice(6)
+                if (line.trim() === '') continue
+
+                // 处理 SSE 数据行 (支持 "data:" 和 "data: " 两种格式)
+                if (line.startsWith('data:')) {
+                    // 去掉 "data:" 前缀，然后 trim 掉可能的前导空格
+                    let data = line.slice(5)
+                    if (data.startsWith(' ')) {
+                        data = data.slice(1)
+                    }
+
                     if (data === '[DONE]') {
                         onComplete()
                         return
@@ -93,6 +105,15 @@ export const sendCoachMessage = async (
                     onChunk(data.replace(/\\n/g, '\n'))
                 }
             }
+        }
+
+        // 处理最后剩余的 buffer
+        if (buffer.startsWith('data:') && !buffer.includes('[DONE]')) {
+            let data = buffer.slice(5)
+            if (data.startsWith(' ')) {
+                data = data.slice(1)
+            }
+            onChunk(data.replace(/\\n/g, '\n'))
         }
 
         onComplete()

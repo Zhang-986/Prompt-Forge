@@ -81,7 +81,7 @@ public class DynamicLlmClientFactory {
                             });
                 })
                 .bodyToFlux(String.class)
-                .retryWhen(reactor.util.retry.Retry.backoff(2, java.time.Duration.ofSeconds(2))
+                .retryWhen(reactor.util.retry.Retry.backoff(3, java.time.Duration.ofSeconds(5))
                         .filter(e -> e.getMessage() != null && e.getMessage().contains("429")))
                 .flatMap(this::parseGoogleResponse);
     }

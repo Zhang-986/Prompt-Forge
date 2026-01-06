@@ -79,7 +79,7 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: false
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 # ==================== Redisson 分布式锁配置 ====================
 redisson:
@@ -218,7 +218,7 @@ springdoc:
 logging:
   level:
     root: INFO
-    com.zzk: DEBUG
+    com.zzk: INFO
     org.springframework.ai: DEBUG
     io.github.resilience4j: DEBUG
   pattern:

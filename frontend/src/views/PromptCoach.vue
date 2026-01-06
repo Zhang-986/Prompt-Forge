@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
+import { marked } from 'marked'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { SendOutlined, RobotOutlined, UserOutlined, CheckOutlined, ArrowLeftOutlined } from '@ant-design/icons-vue'
-import { 
-    startCoachSession, 
-    sendCoachMessage, 
-    getCoachSession, 
+import {
+    startCoachSession,
+    sendCoachMessage,
+    getCoachSession,
     type CoachSession
 } from '../api/promptCoach'
 import { getAvailableModels, type AvailableModelInfo } from '../api/arena'
@@ -21,6 +22,7 @@ const session = ref<CoachSession | null>(null)
 const userInput = ref('')
 const currentAiResponse = ref('')
 const chatContainer = ref<HTMLElement | null>(null)
+const textareaRef = ref<any>(null)  // Ant Design Vue textarea ref
 
 // 模型选择 - 从用户配置动态加载
 const selectedProvider = ref('')
@@ -55,22 +57,29 @@ const startChat = async () => {
         return
     }
 
+    // 先保存输入内容，然后立即清空输入框
+    const initialInput = userInput.value
+    clearInput()  // 使用强制清空函数
+
     loading.value = true
     try {
         const res = await startCoachSession({
-            initialInput: userInput.value,
+            initialInput: initialInput,  // 使用保存的值
             provider: selectedProvider.value || undefined
         })
 
         if (res.code === 200) {
             session.value = res.data
-            userInput.value = ''
             scrollToBottom()
         } else {
             message.error(res.message || '启动失败')
+            // 失败时恢复输入内容
+            userInput.value = initialInput
         }
     } catch (error: any) {
         message.error(error.response?.data?.message || '启动失败')
+        // 出错时恢复输入内容
+        userInput.value = initialInput
     } finally {
         loading.value = false
     }
@@ -82,7 +91,9 @@ const sendMessage = async () => {
     if (sending.value) return
 
     const userMessage = userInput.value
-    userInput.value = ''
+    // 立即清空输入框
+    clearInput()  // 使用强制清空函数
+
     sending.value = true
     currentAiResponse.value = ''
 
@@ -99,11 +110,14 @@ const sendMessage = async () => {
             { sessionId: session.value.sessionId, message: userMessage },
             // onChunk
             (chunk) => {
+                console.log('[SSE] Received chunk:', chunk)
                 currentAiResponse.value += chunk
+                console.log('[SSE] currentAiResponse now:', currentAiResponse.value.length, 'chars')
                 scrollToBottom()
             },
             // onComplete
             async () => {
+                console.log('[SSE] Stream complete, total response:', currentAiResponse.value.length, 'chars')
                 // 流式完成后，添加 AI 回复到历史
                 session.value!.history.push({
                     role: 'assistant',
@@ -169,7 +183,7 @@ const doSave = async () => {
     try {
         // 导入 createPrompt
         const { createPrompt } = await import('../api/prompt')
-        
+
         const res = await createPrompt({
             name: savePromptName.value.trim(),
             description: savePromptDesc.value.trim() || '由 Prompt 教练生成',
@@ -203,6 +217,37 @@ const scrollToBottom = () => {
 // 返回
 const goBack = () => {
     router.back()
+}
+
+// 强制清空输入框 (同步执行)
+const clearInput = () => {
+    // 1. 设置 Vue 响应式变量
+    userInput.value = ''
+
+    // 2. 同步直接操作 DOM（不用 nextTick）
+    try {
+        if (textareaRef.value) {
+            // Ant Design Vue 组件可能嵌套了 textarea
+            const component = textareaRef.value
+            const inputEl = component.$el?.querySelector('textarea')
+                || component.$el
+                || component
+            if (inputEl && inputEl.tagName === 'TEXTAREA') {
+                inputEl.value = ''
+                // 触发 input 事件，确保 Vue 同步状态
+                inputEl.dispatchEvent(new Event('input', { bubbles: true }))
+            }
+        }
+    } catch (e) {
+        console.warn('clearInput DOM 操作失败:', e)
+    }
+}
+
+// Markdown 渲染
+const renderMarkdown = (content: string) => {
+    // 简单的打字机效果：如果不完整，可能 markdown 解析会有问题，但 marked 通常能处理
+    // 为了防止闪烁，可以只渲染已完成的部分，但这里先保持实时渲染
+    return marked.parse(content)
 }
 
 // 处理回车发送
@@ -247,12 +292,8 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
                 <div class="provider-select">
                     <span>选择 AI 模型：</span>
-                    <a-select 
-                        v-model:value="selectedProvider" 
-                        placeholder="自动选择" 
-                        style="width: 240px"
-                        :loading="loadingProviders"
-                    >
+                    <a-select v-model:value="selectedProvider" placeholder="自动选择" style="width: 240px"
+                        :loading="loadingProviders">
                         <a-select-option value="">自动选择</a-select-option>
                         <a-select-option v-for="info in availableProviders" :key="info.provider" :value="info.provider">
                             {{ info.displayName }}
@@ -266,18 +307,12 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
             <!-- 对话消息 -->
             <div v-if="session" class="messages">
-                <div 
-                    v-for="(turn, index) in session.history" 
-                    :key="index"
-                    :class="['message', turn.role]"
-                >
+                <div v-for="(turn, index) in session.history" :key="index" :class="['message', turn.role]">
                     <div class="avatar">
                         <UserOutlined v-if="turn.role === 'user'" />
                         <RobotOutlined v-else />
                     </div>
-                    <div class="content">
-                        <pre>{{ turn.content }}</pre>
-                    </div>
+                    <div class="content markdown-body" v-html="renderMarkdown(turn.content)"></div>
                 </div>
 
                 <!-- 正在生成的回复 -->
@@ -285,8 +320,8 @@ const handleKeydown = async (e: KeyboardEvent) => {
                     <div class="avatar">
                         <RobotOutlined />
                     </div>
-                    <div class="content typing">
-                        <pre>{{ currentAiResponse }}</pre>
+                    <div class="content typing markdown-body">
+                        <div v-html="renderMarkdown(currentAiResponse)"></div>
                         <span class="cursor">▌</span>
                     </div>
                 </div>
@@ -305,13 +340,7 @@ const handleKeydown = async (e: KeyboardEvent) => {
         </div>
 
         <!-- 保存弹窗 -->
-        <a-modal 
-            v-model:open="showSaveDialog" 
-            title="保存 Prompt" 
-            @ok="doSave"
-            :confirmLoading="saving"
-            okText="保存"
-        >
+        <a-modal v-model:open="showSaveDialog" title="保存 Prompt" @ok="doSave" :confirmLoading="saving" okText="保存">
             <a-form layout="vertical">
                 <a-form-item label="Prompt 名称" required>
                     <a-input v-model:value="savePromptName" placeholder="给你的 Prompt 起个名字" />
@@ -324,18 +353,9 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
         <!-- 输入区域 -->
         <div class="input-area">
-            <a-textarea 
-                v-model:value="userInput" 
-                :placeholder="session ? '输入你的回复...' : '描述你想做什么...'"
-                :auto-size="{ minRows: 1, maxRows: 4 }"
-                @keydown="handleKeydown"
-                :disabled="sending"
-            />
-            <a-button 
-                type="primary" 
-                :loading="loading || sending"
-                @click="session ? sendMessage() : startChat()"
-            >
+            <a-textarea ref="textareaRef" v-model:value="userInput" :placeholder="session ? '输入你的回复...' : '描述你想做什么...'"
+                :auto-size="{ minRows: 1, maxRows: 4 }" @keydown="handleKeydown" :disabled="sending" />
+            <a-button type="primary" :loading="loading || sending" @click="session ? sendMessage() : startChat()">
                 <SendOutlined />
             </a-button>
         </div>
@@ -492,13 +512,47 @@ const handleKeydown = async (e: KeyboardEvent) => {
     font-family: inherit;
 }
 
+.markdown-body :deep(p) {
+    margin-bottom: 8px;
+}
+
+.markdown-body :deep(p:last-child) {
+    margin-bottom: 0;
+}
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+    margin-bottom: 8px;
+    padding-left: 20px;
+}
+
+.markdown-body :deep(code) {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
 .typing .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background-color: currentColor;
+    margin-left: 2px;
     animation: blink 1s infinite;
 }
 
 @keyframes blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
+
+    0%,
+    50% {
+        opacity: 1;
+    }
+
+    51%,
+    100% {
+        opacity: 0;
+    }
 }
 
 /* 生成的 Prompt */

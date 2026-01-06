@@ -16,11 +16,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
+import org.springframework.http.codec.ServerSentEvent;
 
 /**
  * Prompt Coach 控制器
  * 
- * <p>多轮对话式 Prompt 引导优化 API
+ * <p>
+ * 多轮对话式 Prompt 引导优化 API
  * 
  * @author zzk
  * @since 1.0.0
@@ -42,16 +44,15 @@ public class PromptCoachController {
     public Result<CoachSessionResponse> startSession(
             @Valid @RequestBody StartCoachRequest request,
             HttpServletRequest httpRequest) {
-        
+
         Long userId = (Long) httpRequest.getAttribute("userId");
         log.info("开始 Coach 会话: userId={}, initialInput={}", userId, request.getInitialInput());
-        
+
         PromptCoachSession session = coachService.startSession(
-                userId, 
-                request.getInitialInput(), 
-                request.getProvider()
-        );
-        
+                userId,
+                request.getInitialInput(),
+                request.getProvider());
+
         return Result.success(CoachSessionResponse.from(session));
     }
 
@@ -60,12 +61,16 @@ public class PromptCoachController {
      */
     @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(summary = "发送消息", description = "发送用户消息，SSE 流式返回 AI 回复")
-    public Flux<String> chat(@Valid @RequestBody CoachChatRequest request) {
+    public Flux<ServerSentEvent<String>> chat(@Valid @RequestBody CoachChatRequest request) {
         log.info("Coach 对话: sessionId={}, message={}", request.getSessionId(), request.getMessage());
-        
+
         return coachService.chat(request.getSessionId(), request.getMessage())
-                .map(chunk -> "data: " + chunk.replace("\n", "\\n") + "\n\n")
-                .concatWith(Flux.just("data: [DONE]\n\n"));
+                .map(chunk -> ServerSentEvent.<String>builder()
+                        .data(chunk.replace("\n", "\\n"))
+                        .build())
+                .concatWith(Flux.just(ServerSentEvent.<String>builder()
+                        .data("[DONE]")
+                        .build()));
     }
 
     /**
@@ -86,11 +91,11 @@ public class PromptCoachController {
     public Result<String> confirmAndSave(
             @Valid @RequestBody ConfirmPromptRequest request,
             HttpServletRequest httpRequest) {
-        
+
         Long userId = (Long) httpRequest.getAttribute("userId");
-        log.info("确认保存 Prompt: userId={}, sessionId={}, templateId={}", 
+        log.info("确认保存 Prompt: userId={}, sessionId={}, templateId={}",
                 userId, request.getSessionId(), request.getPromptTemplateId());
-        
+
         String prompt = coachService.confirmAndSave(request.getSessionId(), request.getPromptTemplateId());
         return Result.success(prompt);
     }

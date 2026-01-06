@@ -11,6 +11,7 @@ import com.zzk.infrastructure.exception.BusinessException;
 import com.zzk.interfaces.dto.response.DiffResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.zzk.domain.repository.WorkspaceRepository;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -22,7 +23,8 @@ import java.util.List;
 /**
  * Prompt 应用服务
  * 
- * <p>负责 Prompt 的 CRUD 和版本管理的业务编排
+ * <p>
+ * 负责 Prompt 的 CRUD 和版本管理的业务编排
  * 
  * @author zzk
  * @since 1.0.0
@@ -35,22 +37,22 @@ public class PromptAppService {
     private final PromptRepository promptRepository;
     private final PromptVersionRepository versionRepository;
     private final PromptDomainService promptDomainService;
-    private final com.zzk.domain.repository.WorkspaceRepository workspaceRepository;
+    private final WorkspaceRepository workspaceRepository;
 
     /**
      * 创建 Prompt
      * 
-     * @param name 名称
+     * @param name        名称
      * @param description 描述
-     * @param content 初始内容
+     * @param content     初始内容
      * @param workspaceId 工作空间 ID
-     * @param userId 创建者 ID
+     * @param userId      创建者 ID
      * @return 创建的 Prompt
      */
     @SensitiveCheck
     @Transactional(rollbackFor = Exception.class)
-    public Prompt createPrompt(String name, String description, String content, 
-                                Long workspaceId, Long userId) {
+    public Prompt createPrompt(String name, String description, String content,
+            Long workspaceId, Long userId) {
         log.info("创建 Prompt: name={}, workspaceId={}", name, workspaceId);
 
         // 1. 创建 Prompt 聚合根
@@ -61,8 +63,8 @@ public class PromptAppService {
 
         // 2. 创建初始版本
         PromptVersion version = promptDomainService.commit(
-                prompt.getId(), content, null, "初始版本", userId);
-        
+                prompt.getId(), content, null, "init version", userId);
+
         log.info("初始版本创建成功: versionId={}", version.getId());
 
         return prompt;
@@ -98,23 +100,23 @@ public class PromptAppService {
         // 检查权限
         Workspace workspace = workspaceRepository.findById(workspaceId)
                 .orElseThrow(() -> new BusinessException("工作空间不存在"));
-                
+
         if (!workspace.isOwner(userId) && !workspaceRepository.isMember(workspaceId, userId)) {
             throw new BusinessException("无权访问该工作空间");
         }
 
         List<Prompt> prompts = promptRepository.findByWorkspaceId(workspaceId);
-        
+
         // 填充版本号
         for (Prompt prompt : prompts) {
             if (prompt.getLatestVersionId() != null) {
                 versionRepository.findById(prompt.getLatestVersionId())
-                    .ifPresent(v -> prompt.setLatestVersionNumber(v.getVersionNumber()));
+                        .ifPresent(v -> prompt.setLatestVersionNumber(v.getVersionNumber()));
             } else {
                 prompt.setLatestVersionNumber(1);
             }
         }
-        
+
         return prompts;
     }
 
@@ -124,8 +126,8 @@ public class PromptAppService {
     @SensitiveCheck
     @CacheEvict(value = "prompt", key = "#promptId")
     @Transactional(rollbackFor = Exception.class)
-    public PromptVersion commitVersion(Long promptId, String content, 
-                                        Long parentVersionId, String commitMessage, Long userId) {
+    public PromptVersion commitVersion(Long promptId, String content,
+            Long parentVersionId, String commitMessage, Long userId) {
         log.info("提交新版本: promptId={}, parentVersionId={}", promptId, parentVersionId);
 
         // 检查权限
@@ -170,7 +172,7 @@ public class PromptAppService {
     /**
      * 回滚到指定版本
      */
-    @CacheEvict(value = {"prompt", "promptVersion"}, allEntries = true)
+    @CacheEvict(value = { "prompt", "promptVersion" }, allEntries = true)
     @Transactional(rollbackFor = Exception.class)
     public PromptVersion rollbackToVersion(Long promptId, Long targetVersionId, Long userId) {
         log.info("回滚版本: promptId={}, targetVersionId={}", promptId, targetVersionId);
