@@ -22,10 +22,10 @@ import java.util.List;
 
 /**
  * Prompt 应用服务
- * 
+ *
  * <p>
  * 负责 Prompt 的 CRUD 和版本管理的业务编排
- * 
+ *
  * @author zzk
  * @since 1.0.0
  */
@@ -41,7 +41,7 @@ public class PromptAppService {
 
     /**
      * 创建 Prompt
-     * 
+     *
      * @param name        名称
      * @param description 描述
      * @param content     初始内容
@@ -51,8 +51,7 @@ public class PromptAppService {
      */
     @SensitiveCheck
     @Transactional(rollbackFor = Exception.class)
-    public Prompt createPrompt(String name, String description, String content,
-            Long workspaceId, Long userId) {
+    public Prompt createPrompt(String name, String description, String content, Long workspaceId, Long userId) {
         log.info("创建 Prompt: name={}, workspaceId={}", name, workspaceId);
 
         // 1. 创建 Prompt 聚合根
@@ -71,7 +70,7 @@ public class PromptAppService {
     }
 
     private static Prompt getPrompt(String name, String description, Long workspaceId, Long userId) {
-        Prompt prompt = Prompt.builder()
+        return Prompt.builder()
                 .name(name)
                 .description(description)
                 .workspaceId(workspaceId)
@@ -81,7 +80,6 @@ public class PromptAppService {
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
-        return prompt;
     }
 
     /**
@@ -126,8 +124,7 @@ public class PromptAppService {
     @SensitiveCheck
     @CacheEvict(value = "prompt", key = "#promptId")
     @Transactional(rollbackFor = Exception.class)
-    public PromptVersion commitVersion(Long promptId, String content,
-            Long parentVersionId, String commitMessage, Long userId) {
+    public PromptVersion commitVersion(Long promptId, String content, Long parentVersionId, String commitMessage, Long userId) {
         log.info("提交新版本: promptId={}, parentVersionId={}", promptId, parentVersionId);
 
         // 检查权限
@@ -172,7 +169,7 @@ public class PromptAppService {
     /**
      * 回滚到指定版本
      */
-    @CacheEvict(value = { "prompt", "promptVersion" }, allEntries = true)
+    @CacheEvict(value = {"prompt", "promptVersion"}, allEntries = true)
     @Transactional(rollbackFor = Exception.class)
     public PromptVersion rollbackToVersion(Long promptId, Long targetVersionId, Long userId) {
         log.info("回滚版本: promptId={}, targetVersionId={}", promptId, targetVersionId);
@@ -227,7 +224,7 @@ public class PromptAppService {
 
     /**
      * 获取两个版本之间的 Diff
-     * 
+     *
      * @param versionId1 版本 1 ID（源版本）
      * @param versionId2 版本 2 ID（目标版本）
      * @return Diff 结果
