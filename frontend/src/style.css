@@ -1,5 +1,5 @@
 /* ======================================
-   PromptForge 全局样式
+   PromptForge 全局样式 - ChatGPT 风格
    ====================================== */
 
 /* 基础重置 */
@@ -14,10 +14,10 @@ html {
 }
 
 body {
-  font-family: var(--font-family, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
   line-height: 1.5;
-  background-color: var(--color-bg-primary, #0a0a0f);
-  color: var(--color-text-primary, #ffffff);
+  background-color: var(--color-bg-primary, #ffffff);
+  color: var(--color-text-primary, #0d0d0d);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
@@ -29,13 +29,13 @@ body {
 
 /* 链接样式 */
 a {
-  color: var(--color-primary, #5e6ad2);
+  color: var(--color-primary, #10a37f);
   text-decoration: none;
   transition: color var(--transition-fast, 0.15s ease);
 }
 
 a:hover {
-  color: var(--color-primary-hover, #4c5bb5);
+  color: var(--color-primary-hover, #0d8a6c);
 }
 
 /* ==================== 响应式设计 ==================== */
@@ -47,12 +47,12 @@ a:hover {
   }
 
   .page-container .main-content {
-    padding: 24px 20px;
+    padding: var(--space-6, 24px) var(--space-5, 20px);
   }
 
   .prompt-grid {
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
-    gap: 16px !important;
+    gap: var(--space-4, 16px) !important;
   }
 }
 
@@ -65,8 +65,8 @@ a:hover {
   /* Header 响应式 */
   .header {
     flex-direction: column !important;
-    gap: 12px !important;
-    padding: 12px 16px !important;
+    gap: var(--space-3, 12px) !important;
+    padding: var(--space-3, 12px) var(--space-4, 16px) !important;
   }
 
   .header-left,
@@ -74,7 +74,7 @@ a:hover {
     width: 100%;
     justify-content: center !important;
     flex-wrap: wrap;
-    gap: 8px !important;
+    gap: var(--space-2, 8px) !important;
   }
 
   .logo-text {
@@ -83,17 +83,17 @@ a:hover {
 
   /* 主内容区响应式 */
   .main-content {
-    padding: 16px !important;
+    padding: var(--space-4, 16px) !important;
   }
 
   .page-header {
     flex-direction: column !important;
-    gap: 16px !important;
+    gap: var(--space-4, 16px) !important;
     align-items: stretch !important;
   }
 
   .page-title {
-    font-size: 22px !important;
+    font-size: var(--text-xl, 20px) !important;
   }
 
   .create-btn {
@@ -104,11 +104,11 @@ a:hover {
   /* 卡片网格响应式 */
   .prompt-grid {
     grid-template-columns: 1fr !important;
-    gap: 12px !important;
+    gap: var(--space-3, 12px) !important;
   }
 
   .prompt-card {
-    padding: 16px !important;
+    padding: var(--space-4, 16px) !important;
   }
 
   /* 对话框响应式 */
@@ -123,21 +123,21 @@ a:hover {
   .arena-btn,
   .settings-btn,
   .logout-btn {
-    padding: 6px 12px !important;
-    font-size: 13px !important;
+    padding: var(--space-2, 8px) var(--space-3, 12px) !important;
+    font-size: var(--text-sm, 14px) !important;
   }
 }
 
 /* 小屏移动端 (< 480px) */
 @media (max-width: 480px) {
   .header-right {
-    gap: 6px !important;
+    gap: var(--space-2, 8px) !important;
   }
 
   .arena-btn,
   .settings-btn {
-    padding: 6px 8px !important;
-    font-size: 12px !important;
+    padding: var(--space-2, 8px) !important;
+    font-size: var(--text-xs, 12px) !important;
   }
 
   .username {
@@ -152,21 +152,21 @@ a:hover {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-bg-secondary, #12121a);
+  background: var(--color-bg-secondary, #2f2f2f);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border, rgba(255, 255, 255, 0.1));
+  background: var(--color-border, #4a4a4a);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-hover, rgba(255, 255, 255, 0.2));
+  background: var(--color-text-tertiary, #8e8e8e);
 }
 
 /* ==================== 选中文本样式 ==================== */
 ::selection {
-  background: var(--color-primary, #5e6ad2);
+  background: var(--color-primary, #10a37f);
   color: #ffffff;
 }
 
@@ -176,7 +176,7 @@ a:hover {
 }
 
 .text-muted {
-  color: var(--color-text-muted, rgba(255, 255, 255, 0.38));
+  color: var(--color-text-muted, #666666);
 }
 
 .hidden-mobile {
@@ -199,45 +199,25 @@ a:hover {
   }
 }
 
-/* ==================== 全局页面容器覆盖 ==================== */
-/* 这些规则通过高优先级覆盖 scoped 样式中的硬编码颜色 */
+/* ==================== 全局页面容器样式 ==================== */
 
-/* 页面容器背景 */
+/* 页面容器背景 - 纯色，无渐变 */
 .page-container,
 .login-container,
 .arena-container,
-.settings-container {
+.settings-container,
+.coach-container {
   background: var(--color-bg-primary) !important;
   color: var(--color-text-primary) !important;
 }
 
-/* 深色主题渐变背景 */
-[data-theme="dark"] .page-container,
-[data-theme="dark"] .login-container,
-[data-theme="dark"] .arena-container,
-[data-theme="dark"] .settings-container,
-:root:not([data-theme="light"]) .page-container,
-:root:not([data-theme="light"]) .login-container,
-:root:not([data-theme="light"]) .arena-container,
-:root:not([data-theme="light"]) .settings-container {
-  background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-tertiary) 100%) !important;
-}
-
-/* 浅色主题纯色背景 */
-[data-theme="light"] .page-container,
-[data-theme="light"] .login-container,
-[data-theme="light"] .arena-container,
-[data-theme="light"] .settings-container {
-  background: var(--color-bg-primary) !important;
-}
-
-/* Header 样式覆盖 */
+/* Header 样式 */
 .header {
   background: var(--color-bg-secondary) !important;
-  border-bottom-color: var(--color-border) !important;
+  border-bottom-color: var(--color-border-light) !important;
 }
 
-/* 卡片样式覆盖 */
+/* 卡片样式 - 简洁无阴影 */
 .login-card,
 .config-section,
 .prompt-info,
@@ -246,23 +226,23 @@ a:hover {
 .info-card,
 .config-card,
 .result-card {
-  background: var(--color-bg-elevated) !important;
-  border-color: var(--color-border) !important;
+  background: var(--color-bg-secondary) !important;
+  border-color: var(--color-border-light) !important;
 }
 
-/* 对话框覆盖 */
+/* 对话框样式 */
 .dialog,
 .diff-modal {
   background: var(--color-bg-elevated) !important;
   border-color: var(--color-border) !important;
 }
 
-/* 输入框覆盖 - 排除 Ant Design 组件 */
+/* 输入框样式 - 排除 Ant Design 组件 */
 input:not(.ant-input):not([class*="ant-"]),
 textarea:not(.ant-input):not([class*="ant-"]),
 select:not([class*="ant-"]) {
   background: var(--color-bg-secondary) !important;
-  border-color: var(--color-border) !important;
+  border-color: var(--color-border-light) !important;
   color: var(--color-text-primary) !important;
 }
 
@@ -273,26 +253,39 @@ select:not([class*="ant-"]):focus {
 }
 
 /* Ant Design 输入框暗色主题适配 */
+/* Ant Design 输入框样式适配 */
 .ant-input,
-.ant-input-password .ant-input,
 .ant-input-affix-wrapper {
-  background: #1a1a2e !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  color: #fff !important;
+  background: var(--color-bg-secondary) !important;
+  border-color: var(--color-border-light) !important;
+  color: var(--color-text-primary) !important;
+}
+
+/* 修复 Password 输入框双重边框问题 */
+.ant-input-affix-wrapper .ant-input,
+.ant-input-affix-wrapper>input.ant-input {
+  border: 0 !important;
+  border-width: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  height: auto !important;
+  line-height: inherit !important;
 }
 
 .ant-input-affix-wrapper:focus,
 .ant-input-affix-wrapper-focused {
-  border-color: #5e6ad2 !important;
-  box-shadow: 0 0 0 2px rgba(94, 106, 210, 0.2) !important;
+  border-color: var(--color-primary) !important;
+  box-shadow: none !important;
 }
 
-/* 标签覆盖 */
+/* 标签样式 */
 label {
-  color: var(--color-text-tertiary) !important;
+  color: var(--color-text-secondary) !important;
 }
 
-/* 按钮覆盖 */
+/* 按钮样式 - 简洁无阴影 */
 .back-btn,
 .logout-btn,
 .settings-btn,
@@ -300,7 +293,8 @@ label {
 .secondary-btn,
 .action-btn {
   border-color: var(--color-border) !important;
-  color: var(--color-text-tertiary) !important;
+  color: var(--color-text-secondary) !important;
+  background: transparent !important;
 }
 
 .back-btn:hover,
@@ -311,6 +305,7 @@ label {
 .action-btn:hover {
   border-color: var(--color-primary) !important;
   color: var(--color-primary) !important;
+  background: var(--color-primary-muted) !important;
 }
 
 /* Tab 样式 */
@@ -329,12 +324,12 @@ label {
 
 /* Timeline */
 .timeline::before {
-  background: var(--color-border) !important;
+  background: var(--color-border-light) !important;
 }
 
 /* 版本标记 */
 .version-marker {
-  background: var(--color-bg-elevated) !important;
+  background: var(--color-bg-secondary) !important;
   border-color: var(--color-primary) !important;
 }
 
@@ -342,9 +337,10 @@ label {
 pre,
 .version-code {
   background: var(--color-bg-secondary) !important;
+  border-radius: var(--radius-md, 8px);
 }
 
-/* 文字颜色覆盖 */
+/* 文字颜色 */
 .prompt-desc,
 .page-desc,
 .commit-message,
@@ -354,5 +350,16 @@ pre,
 .loading,
 .empty-state,
 .empty {
-  color: var(--color-text-tertiary) !important;
+  color: var(--color-text-secondary) !important;
+}
+
+/* ==================== 全局路由过渡动画 ==================== */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }

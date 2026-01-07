@@ -14,7 +14,6 @@ import {
   AppstoreOutlined, ThunderboltOutlined, SettingOutlined, RobotOutlined,
   CommentOutlined
 } from '@ant-design/icons-vue'
-import WorkspaceSelector from '../components/WorkspaceSelector.vue'
 import type { Workspace } from '../api/workspace'
 
 const router = useRouter()
@@ -435,73 +434,21 @@ try {
 } catch { }
 
 onMounted(() => {
-  loadTags()
+  const wsId = localStorage.getItem('currentWorkspaceId')
+  if (wsId) {
+    currentWorkspaceId.value = parseInt(wsId)
+    loadPrompts()
+    loadTags()
+  } else {
+    // try default load or just wait
+    // loadTags() relies on currentWorkspaceId, so no point calling it if empty
+  }
 })
 </script>
 
 <template>
   <div class="page-container">
-    <!-- Header -->
-    <a-layout-header class="header">
-      <div class="header-left">
-        <div class="logo">
-          <img src="/vite.svg" alt="Logo" class="logo-icon" />
-          <span class="logo-text">Prompt-Forge</span>
-        </div>
-        <WorkspaceSelector v-model="currentWorkspaceId" @change="handleWorkspaceChange" />
-      </div>
-      <div class="header-right">
-        <a-space :size="12">
-          <a-tooltip title="广场">
-            <a-button type="text" @click="router.push('/plaza')">
-              <template #icon>
-                <AppstoreOutlined />
-              </template>
-              广场
-            </a-button>
-          </a-tooltip>
-          <a-tooltip title="Prompt 教练">
-            <a-button type="text" @click="router.push('/coach')">
-              <template #icon>
-                <CommentOutlined />
-              </template>
-              教练
-            </a-button>
-          </a-tooltip>
-          <a-tooltip title="竞技场">
-            <a-button type="text" @click="router.push('/arena')">
-              <template #icon>
-                <ThunderboltOutlined />
-              </template>
-              竞技场
-            </a-button>
-          </a-tooltip>
-          <a-tooltip title="模型配置">
-            <a-button type="text" @click="router.push('/settings/models')">
-              <template #icon>
-                <SettingOutlined />
-              </template>
-            </a-button>
-          </a-tooltip>
-          <a-tooltip v-if="currentUser?.role === 'ADMIN'" title="管理后台">
-            <a-button type="text" @click="router.push('/admin')">
-              <template #icon>
-                <SettingOutlined />
-              </template>
-              管理
-            </a-button>
-          </a-tooltip>
-          <span class="username">{{ currentUser?.username }}</span>
-          <a-tooltip title="退出登录">
-            <a-button type="text" danger @click="handleLogout">
-              <template #icon>
-                <LogoutOutlined />
-              </template>
-            </a-button>
-          </a-tooltip>
-        </a-space>
-      </div>
-    </a-layout-header>
+    <!-- Header Removed -->
 
     <!-- Main Content -->
     <main class="main-content">
@@ -569,7 +516,7 @@ onMounted(() => {
           <template #title>
             <div class="card-title">
               <span class="prompt-name">{{ prompt.name }}</span>
-              <a-tag :bordered="false" color="purple" size="small">v{{ prompt.latestVersionNumber || 1 }}</a-tag>
+              <a-tag class="version-tag">v{{ prompt.latestVersionNumber || 1 }}</a-tag>
             </div>
           </template>
           <template #extra>
@@ -725,7 +672,8 @@ onMounted(() => {
       <div class="model-select-content">
         <p class="model-hint">请选择用于优化 Prompt 的 AI 模型：</p>
         <a-radio-group v-model:value="selectedOptimizeModel" class="model-radio-group">
-          <a-radio v-for="model in availableModels" :key="model.provider" :value="model.provider" class="model-radio-item">
+          <a-radio v-for="model in availableModels" :key="model.provider" :value="model.provider"
+            class="model-radio-item">
             {{ model.displayName }}
           </a-radio>
         </a-radio-group>
@@ -739,41 +687,54 @@ onMounted(() => {
     </a-modal>
 
     <!-- Detail Modal -->
-    <a-modal v-model:open="showDetailModal" :title="detailPrompt?.name || 'Prompt 详情'" :footer="null" width="600px">
-      <div v-if="detailPrompt" class="detail-content">
-        <div class="detail-section">
-          <div class="detail-label">描述</div>
-          <div class="detail-value text-desc">{{ detailPrompt.description || '暂无描述' }}</div>
-        </div>
+    <a-modal v-model:open="showDetailModal" :title="null" :footer="null" width="600px" wrapClassName="rounded-modal">
+      <div v-if="detailPrompt" class="detail-container">
 
-        <div class="detail-section">
-          <div class="detail-label">内容</div>
-          <div class="detail-value content-box">
-            <a-spin v-if="loadingDetail" />
-            <pre v-else>{{ detailContent || '暂无内容' }}</pre>
+        <div class="detail-header">
+          <h3>{{ detailPrompt.name }}</h3>
+          <div class="detail-meta-badges">
+            <a-tag color="blue">v{{ detailPrompt.latestVersionNumber || 1 }}</a-tag>
+            <span class="detail-date">{{ new Date(detailPrompt.updatedAt || detailPrompt.createdAt).toLocaleDateString()
+            }}</span>
           </div>
+          <button class="close-btn-absolute" @click="showDetailModal = false">×</button>
         </div>
 
-        <div class="detail-section" v-if="promptTagsMap[detailPrompt.id]?.length">
-          <div class="detail-label">标签</div>
-          <div class="detail-value tags-row">
-            <template v-for="tagId in promptTagsMap[detailPrompt.id]" :key="tagId">
-              <a-tag v-if="tags.find(t => t.id === tagId)" :color="tags.find(t => t.id === tagId)?.color || 'blue'">
+        <div class="detail-body">
+          <div class="detail-section" v-if="detailPrompt.description">
+            <h4 class="section-title">描述</h4>
+            <p class="description-text">{{ detailPrompt.description }}</p>
+          </div>
+
+          <div class="detail-section">
+            <h4 class="section-title">Prompt 内容</h4>
+            <div class="code-preview-box">
+              <a-spin v-if="loadingDetail" />
+              <pre v-else class="code-content">{{ detailContent || '暂无内容' }}</pre>
+            </div>
+          </div>
+
+          <div class="detail-section" v-if="promptTagsMap[detailPrompt.id]?.length">
+            <h4 class="section-title">标签</h4>
+            <div class="tags-row">
+              <a-tag v-for="tagId in promptTagsMap[detailPrompt.id]" :key="tagId" :bordered="false"
+                :color="tags.find(t => t.id === tagId)?.color || 'default'">
                 {{tags.find(t => t.id === tagId)?.name}}
               </a-tag>
-            </template>
+            </div>
           </div>
         </div>
 
-        <div class="detail-meta">
-          <span>最近更新: {{ new Date(detailPrompt.updatedAt || detailPrompt.createdAt).toLocaleString() }}</span>
-          <span>版本: v{{ detailPrompt.latestVersionNumber || 1 }}</span>
+        <div class="detail-footer">
+          <a-button class="modal-btn" @click="showDetailModal = false">关闭</a-button>
+          <a-button type="primary" class="modal-btn primary" @click="viewVersions(detailPrompt)">
+            <template #icon>
+              <HistoryOutlined />
+            </template>
+            查看历史版本
+          </a-button>
         </div>
 
-        <div class="detail-actions">
-          <a-button @click="showDetailModal = false">关闭</a-button>
-          <a-button type="primary" @click="viewVersions(detailPrompt)">查看历史</a-button>
-        </div>
       </div>
     </a-modal>
   </div>
@@ -782,30 +743,30 @@ onMounted(() => {
 <style scoped>
 .page-container {
   min-height: 100vh;
-  background: #0f0f1a;
-  color: #e0e0e0;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 24px;
-  background: #1a1a2e !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  height: 64px;
+  padding: 0 var(--space-6);
+  background: var(--color-bg-secondary) !important;
+  border-bottom: 1px solid var(--color-border-light);
+  height: 56px;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: var(--space-6);
 }
 
 .logo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .logo-icon {
@@ -814,9 +775,9 @@ onMounted(() => {
 }
 
 .logo-text {
-  font-size: 18px;
+  font-size: var(--text-lg);
   font-weight: 600;
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .header-right {
@@ -825,51 +786,51 @@ onMounted(() => {
 }
 
 .username {
-  color: rgba(255, 255, 255, 0.65);
-  margin-right: 8px;
+  color: var(--color-text-secondary);
+  margin-right: var(--space-2);
 }
 
 .main-content {
-  max-width: 1400px;
+  max-width: 960px;
   margin: 0 auto;
-  padding: 32px;
+  padding: var(--space-8);
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
 }
 
 .page-title {
-  font-size: 28px;
+  font-size: var(--text-2xl);
   font-weight: 600;
-  margin-bottom: 8px;
-  color: #fff;
+  margin-bottom: var(--space-2);
+  color: var(--color-text-primary);
 }
 
 .page-desc {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--color-text-secondary);
 }
 
 /* Tag Filter Bar */
 .tag-filter-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 24px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
   flex-wrap: wrap;
 }
 
 .filter-label {
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 14px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
 }
 
 .filter-tag {
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
 .filter-tag:hover {
@@ -881,53 +842,53 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 80px;
+  padding: var(--space-12);
 }
 
 /* Prompt Grid */
 .prompt-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-5);
 }
 
 .prompt-card {
-  background: #1a1a2e;
-  border-radius: 12px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
 }
 
 .prompt-card :deep(.ant-card-head) {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .prompt-card :deep(.ant-card-actions) {
   background: transparent;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--color-border-light);
 }
 
 .prompt-card :deep(.ant-card-actions > li) {
-  margin: 8px 0;
+  margin: var(--space-2) 0;
 }
 
 .card-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .prompt-name {
   font-weight: 500;
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .date {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
 }
 
 .prompt-desc {
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 14px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -939,21 +900,21 @@ onMounted(() => {
 .tag-create-form {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .color-picker {
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .color-option {
   width: 24px;
   height: 24px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   border: 2px solid transparent;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
 .color-option:hover {
@@ -961,138 +922,285 @@ onMounted(() => {
 }
 
 .color-option.active {
-  border-color: #fff;
+  border-color: var(--color-text-primary);
 }
 
 .existing-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 /* Editor Header */
 .editor-header {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 /* Publish */
 .publish-prompt-name {
-  padding: 12px;
-  background: rgba(124, 58, 237, 0.1);
-  border-radius: 8px;
-  margin-bottom: 16px;
+  padding: var(--space-3);
+  background: var(--color-primary-muted);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
   font-weight: 500;
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .publish-hint {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.45);
-  margin-top: 12px;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-3);
 }
 </style>
 
 <style scoped>
 /* Modal Styling */
 .model-select-content {
-  padding: 20px 0;
+  padding: var(--space-5) 0;
 }
 
 .model-hint {
-  margin-bottom: 16px;
-  color: #fff;
-  font-size: 14px;
+  margin-bottom: var(--space-4);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
 }
 
 .model-radio-group {
   display: flex !important;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   width: 100%;
 }
 
 .model-radio-item {
   display: flex;
   align-items: center;
-  padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  transition: all 0.3s;
-  color: #e0e0e0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  color: var(--color-text-primary);
 }
 
 .model-radio-item:hover {
-  border-color: #7c3aed;
-  background: rgba(124, 58, 237, 0.1);
+  border-color: var(--color-primary);
+  background: var(--color-primary-muted);
 }
 
 .modal-actions {
-  margin-top: 24px;
+  margin-top: var(--space-6);
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--space-3);
 }
 </style>
 
 <style scoped>
 /* Detail Modal */
 .detail-section {
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
 }
 
 .detail-label {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.45);
-  margin-bottom: 8px;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
 }
 
 .detail-value {
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .text-desc {
   font-style: italic;
-  color: #ccc;
+  color: var(--color-text-secondary);
 }
 
 .content-box {
-  background: rgba(0, 0, 0, 0.3);
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-tertiary);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-light);
 }
 
 .content-box pre {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
-  font-family: monospace;
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
 .tags-row {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .detail-meta {
   display: flex;
   justify-content: space-between;
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-light);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
 }
 
 .detail-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+/* Refined UI Elements for Premium Feel */
+.version-tag {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  padding: 0 6px;
+  line-height: 20px;
+}
+
+.delete-btn {
+  color: var(--color-text-tertiary);
+  transition: all var(--transition-fast);
+}
+
+.delete-btn:hover {
+  color: var(--color-danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.logout-btn {
+  color: var(--color-text-secondary);
+}
+
+.logout-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-tertiary);
+}
+
+/* Detail Modal Styles */
+.detail-container {
+  /* No padding here, use inner sections */
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+  position: relative;
+}
+
+.detail-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.detail-meta-badges {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: var(--space-4);
+}
+
+.detail-date {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+.close-btn-absolute {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  margin-left: var(--space-4);
+  /* Reset */
+}
+
+.close-btn-absolute:hover {
+  color: var(--color-text-primary);
+}
+
+.detail-body {
+  padding: var(--space-6);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.detail-section {
+  margin-bottom: var(--space-6);
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.section-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-2) 0;
+}
+
+.description-text {
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.code-preview-box {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  /* border: 1px solid var(--color-border); */
+  /* Optional: subtle border */
+}
+
+.code-content {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  line-height: 1.6;
+}
+
+.tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.detail-footer {
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  background: var(--color-bg-secondary);
+  /* Slight contrast for footer */
+  border-bottom-left-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+}
+
+.modal-btn {
+  border-radius: var(--radius-md);
 }
 </style>

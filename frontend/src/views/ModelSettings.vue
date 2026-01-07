@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { 
-  getProviders, 
-  getModelConfigs, 
-  createConfig, 
-  updateConfig, 
-  deleteConfig, 
+import {
+  getProviders,
+  getModelConfigs,
+  createConfig,
+  updateConfig,
+  deleteConfig,
   toggleConfig,
   type ProviderInfo,
   type ModelConfig,
   type CreateConfigRequest
 } from '../api/modelConfig'
 import { message, Modal } from 'ant-design-vue'
-import { ArrowLeftOutlined, SettingOutlined, BulbOutlined, PlusOutlined } from '@ant-design/icons-vue'
+import { ArrowLeftOutlined, SettingOutlined, BulbOutlined, PlusOutlined, DeleteOutlined, StopOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
 
 const router = useRouter()
 
@@ -60,7 +60,7 @@ const currentProviderModels = computed(() => {
 const editProviderModels = computed(() => {
   const provider = providers.value.find(p => p.id === editingConfig.value?.provider)
   const defaultModels = provider?.models || []
-  
+
   // 如果有自动获取的模型，合并显示
   if (editingConfig.value?.availableModels) {
     try {
@@ -70,13 +70,13 @@ const editProviderModels = computed(() => {
         name: id,
         description: '自动获取'
       }))
-      
+
       // 合并去重 (优先使用 defaultModels 的详细信息)
       const map = new Map<string, any>()
       defaultModels.forEach(m => map.set(m.id, m))
       fetchedOptions.forEach(m => {
         if (!map.has(m.id)) {
-            map.set(m.id, m)
+          map.set(m.id, m)
         }
       })
       return Array.from(map.values())
@@ -204,21 +204,21 @@ const handleToggle = async (config: ModelConfig) => {
 
 // 刷新可用模型
 const handleRefresh = async (config: ModelConfig) => {
-    const hide = message.loading('正在获取模型列表...', 0)
-    try {
-        const res = await refreshModelConfig(config.id)
-        if (res.code === 200) {
-            message.success(`成功获取 ${res.data.length} 个模型`)
-            // 更新本地数据
-            config.availableModels = JSON.stringify(res.data)
-        } else {
-            message.error(res.message || '获取失败')
-        }
-    } catch (e) {
-        message.error('获取失败，请检查 Base URL 和 API Key')
-    } finally {
-        hide()
+  const hide = message.loading('正在获取模型列表...', 0)
+  try {
+    const res = await refreshModelConfig(config.id)
+    if (res.code === 200) {
+      message.success(`成功获取 ${res.data.length} 个模型`)
+      // 更新本地数据
+      config.availableModels = JSON.stringify(res.data)
+    } else {
+      message.error(res.message || '获取失败')
     }
+  } catch (e) {
+    message.error('获取失败，请检查 Base URL 和 API Key')
+  } finally {
+    hide()
+  }
 }
 
 // 删除配置
@@ -251,76 +251,72 @@ onMounted(() => {
 
 <template>
   <div class="settings-container">
-    <!-- Header -->
-    <header class="header">
-      <div class="header-left">
-        <a-button @click="goBack">
-          <template #icon><ArrowLeftOutlined /></template>
-          返回
-        </a-button>
-        <SettingOutlined class="logo-icon" />
-        <span class="page-title">模型配置</span>
-      </div>
-    </header>
+    <!-- Header Removed -->
 
     <main class="main-content">
-      <!-- 说明卡片 -->
+      <!-- Minimalist Info Block -->
       <div class="info-card">
-        <h3><BulbOutlined /> 配置说明</h3>
-        <p>在这里配置您自己的 AI 模型 API Key，配置后将在竞技场中使用您的配置调用模型。</p>
-        <p>如果没有配置某个提供商，系统将使用默认配置（如果可用）。</p>
+        <div class="info-icon">
+          <BulbOutlined />
+        </div>
+        <div class="info-content">
+          <h3>配置说明</h3>
+          <p>在这里配置您的 AI 模型 API Key。配置后将在竞技场中使用您的配置调用模型。</p>
+          <p>未配置的提供商将尝试使用系统默认配置（如果可用）。</p>
+        </div>
       </div>
 
-      <!-- 已配置列表 -->
+      <!-- Config List Section -->
       <div class="config-section">
         <div class="section-header">
           <h3>已配置的模型</h3>
-          <a-button type="primary" @click="openAddDialog" :disabled="availableProviders.length === 0">
-            <template #icon><PlusOutlined /></template>
-            添加配置
-          </a-button>
+          <button class="add-btn" @click="openAddDialog" :disabled="availableProviders.length === 0">
+            <PlusOutlined /> 添加配置
+          </button>
         </div>
 
-        <div v-if="loading" class="loading">加载中...</div>
+        <div v-if="loading" class="loading-state">
+          <a-skeleton active :paragraph="{ rows: 3 }" />
+        </div>
 
         <div v-else-if="configs.length === 0" class="empty-state">
           <p>暂无配置，点击上方按钮添加您的第一个模型配置</p>
         </div>
 
-        <div v-else class="config-grid">
-          <div v-for="config in configs" :key="config.id" class="config-card" :class="{ disabled: !config.enabled }">
-            <div class="card-header">
-              <div class="provider-info">
-                <span class="provider-icon">{{ getProviderIcon(config.provider) }}</span>
-                <span class="provider-name">{{ getProviderInfo(config.provider)?.name || config.provider }}</span>
+        <div v-else class="config-list">
+          <div v-for="config in configs" :key="config.id" class="config-item-row"
+            :class="{ disabled: !config.enabled }">
+
+            <div class="row-left">
+              <div class="provider-icon-wrapper">
+                {{ getProviderIcon(config.provider) || '🤖' }}
               </div>
+              <div class="row-info">
+                <span class="provider-name">{{ getProviderInfo(config.provider)?.name || config.provider }}</span>
+                <span class="model-name">
+                  {{ config.modelName || getProviderInfo(config.provider)?.defaultModel }}
+                </span>
+              </div>
+            </div>
+
+            <div class="row-right">
               <div class="status-badge" :class="{ enabled: config.enabled, disabled: !config.enabled }">
                 {{ config.enabled ? '已启用' : '已禁用' }}
               </div>
-            </div>
 
-            <div class="card-body">
-              <div class="config-item">
-                <label>API Key</label>
-                <span class="value masked">••••••••••••{{ config.apiKey.slice(-4) }}</span>
-              </div>
-              <div class="config-item">
-                <label>Base URL</label>
-                <span class="value">{{ config.baseUrl || getProviderInfo(config.provider)?.defaultBaseUrl }}</span>
-              </div>
-              <div class="config-item">
-                <label>模型</label>
-                <span class="value">{{ config.modelName || getProviderInfo(config.provider)?.defaultModel }}</span>
+              <div class="row-actions">
+                <button class="icon-btn" @click="handleToggle(config)" :title="config.enabled ? '禁用' : '启用'">
+                  <component :is="config.enabled ? 'StopOutlined' : 'PlayCircleOutlined'" />
+                </button>
+                <button class="icon-btn edit" @click="openEditDialog(config)" title="编辑">
+                  <SettingOutlined />
+                </button>
+                <button class="icon-btn delete" @click="handleDelete(config)" title="删除">
+                  <DeleteOutlined />
+                </button>
               </div>
             </div>
 
-            <div class="card-actions">
-              <button class="action-btn toggle" @click="handleToggle(config)">
-                {{ config.enabled ? '禁用' : '启用' }}
-              </button>
-              <button class="action-btn edit" @click="openEditDialog(config)">编辑</button>
-              <button class="action-btn delete" @click="handleDelete(config)">删除</button>
-            </div>
           </div>
         </div>
       </div>
@@ -377,7 +373,7 @@ onMounted(() => {
         </div>
         <div class="dialog-body">
           <div class="form-item">
-            <label>API Key（留空则不修改）</label>
+            <label>API Key</label>
             <input v-model="editForm.apiKey" type="password" placeholder="不修改请留空" />
           </div>
           <div class="form-item">
@@ -393,11 +389,9 @@ onMounted(() => {
               </option>
             </select>
           </div>
-          <div class="form-item checkbox">
-            <label>
-              <input type="checkbox" v-model="editForm.enabled" />
-              启用此配置
-            </label>
+          <div class="form-item switch-row">
+            <span class="switch-label">启用此配置</span>
+            <a-switch v-model:checked="editForm.enabled" />
           </div>
         </div>
         <div class="dialog-footer">
@@ -414,290 +408,261 @@ onMounted(() => {
   min-height: 100vh;
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
+  padding-bottom: var(--space-8);
 }
 
-/* 深色主题渐变 */
-[data-theme="dark"] .settings-container,
-:root:not([data-theme="light"]) .settings-container {
-  background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-tertiary) 100%);
+.loading-state {
+  padding: var(--space-8);
+  background: #fff;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 32px;
+  padding: var(--space-4) var(--space-8);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg-secondary);
-  backdrop-filter: blur(10px);
+  background: var(--color-bg-primary);
   position: sticky;
   top: 0;
   z-index: 100;
 }
 
-.header-left {
+.main-content {
+  max-width: 800px;
+  /* Reduced max-width for better reading flow in list view */
+  margin: 0 auto;
+  padding: var(--space-8);
+}
+
+/* Minimalist Info Block */
+.info-card {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-8);
   display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
+  align-items: flex-start;
 }
 
-.back-btn {
-  padding: 8px 16px;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-  transition: all 0.2s;
+.info-icon {
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
+  margin-top: 2px;
 }
 
-.back-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.logo-icon {
-  font-size: 24px;
-}
-
-.page-title {
-  font-size: 20px;
+.info-content h3 {
+  margin: 0 0 var(--space-1) 0;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
-.main-content {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 32px;
-}
-
-.info-card {
-  background: var(--color-primary-light);
-  border: 1px solid rgba(94, 106, 210, 0.3);
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 32px;
-}
-
-.info-card h3 {
-  margin: 0 0 12px 0;
-  font-size: 16px;
-  color: var(--color-text-primary);
-}
-
-.info-card p {
-  margin: 0 0 8px 0;
+.info-content p {
+  margin: 0;
   color: var(--color-text-secondary);
-  font-size: 14px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
 }
 
-.info-card p:last-child {
-  margin-bottom: 0;
-}
-
-.config-section {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  padding: 24px;
-}
-
+/* Section Header */
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: var(--space-5);
 }
 
 .section-header h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--text-lg);
+  font-weight: 600;
   color: var(--color-text-primary);
 }
 
 .add-btn {
-  padding: 10px 20px;
-  background: var(--color-primary-gradient);
+  padding: var(--space-2) var(--space-4);
+  background: #000;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: #fff;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .add-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(94, 106, 210, 0.4);
+  background: #333;
 }
 
-.add-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+/* Config List (Replaces Grid) */
+.config-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
-.loading, .empty-state {
-  text-align: center;
-  padding: 40px;
-  color: var(--color-text-tertiary);
-}
-
-.config-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 20px;
-}
-
-.config-card {
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  overflow: hidden;
-  transition: all 0.2s;
-}
-
-.config-card:hover {
-  border-color: rgba(94, 106, 210, 0.5);
-}
-
-.config-card.disabled {
-  opacity: 0.6;
-}
-
-.card-header {
+.config-item-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  background: var(--color-bg-tertiary);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-5);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-fast);
 }
 
-.provider-info {
+.config-item-row:hover {
+  border-color: var(--color-text-tertiary);
+  box-shadow: var(--shadow-sm);
+}
+
+.config-item-row.disabled {
+  opacity: 0.6;
+  background: var(--color-bg-secondary);
+}
+
+.row-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-4);
 }
 
-.provider-icon {
-  font-size: 24px;
+.provider-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xl);
+}
+
+.row-info {
+  display: flex;
+  flex-direction: column;
 }
 
 .provider-name {
   font-weight: 600;
-  font-size: 16px;
+  font-size: var(--text-base);
   color: var(--color-text-primary);
+}
+
+.model-name {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+
+.row-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
 }
 
 .status-badge {
   padding: 4px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-full);
   font-size: 12px;
+  font-weight: 500;
 }
 
 .status-badge.enabled {
-  background: rgba(39, 174, 96, 0.2);
-  color: #27ae60;
+  background: #000;
+  color: #fff;
 }
 
 .status-badge.disabled {
-  background: rgba(231, 76, 60, 0.2);
-  color: #e74c3c;
-}
-
-.card-body {
-  padding: 20px;
-}
-
-.config-item {
-  margin-bottom: 12px;
-}
-
-.config-item:last-child {
-  margin-bottom: 0;
-}
-
-.config-item label {
-  display: block;
-  font-size: 12px;
-  color: var(--color-text-tertiary);
-  margin-bottom: 4px;
-}
-
-.config-item .value {
-  font-size: 14px;
+  background: var(--color-bg-tertiary);
   color: var(--color-text-secondary);
-  word-break: break-all;
 }
 
-.config-item .value.masked {
-  font-family: monospace;
-  color: var(--color-primary);
-}
-
-.card-actions {
+.row-actions {
   display: flex;
-  gap: 8px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--color-border);
+  gap: var(--space-3);
 }
 
-.action-btn {
-  flex: 1;
-  padding: 8px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
   background: transparent;
   color: var(--color-text-tertiary);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
-.action-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+.icon-btn:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
 }
 
-.action-btn.delete:hover {
-  border-color: var(--color-danger);
-  color: var(--color-danger);
+.icon-btn.delete:hover {
+  background: #fee2e2;
+  color: #dc2626;
 }
 
-/* 对话框样式 */
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: var(--space-10);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-tertiary);
+}
+
+/* Dialog Styles */
 .dialog-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  backdrop-filter: blur(2px);
 }
 
 .dialog {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  width: 450px;
+  background: #fff;
+  border-radius: var(--radius-xl);
+  width: 480px;
   max-width: 90vw;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
 }
 
 .dialog-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px;
+  padding: var(--space-5);
   border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
 }
 
 .dialog-header h3 {
   margin: 0;
   font-size: 18px;
-  color: var(--color-text-primary);
+  font-weight: 600;
 }
 
 .close-btn {
@@ -706,102 +671,89 @@ onMounted(() => {
   border: none;
   background: transparent;
   color: var(--color-text-tertiary);
-  font-size: 24px;
+  font-size: 20px;
   cursor: pointer;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .close-btn:hover {
+  background: var(--color-bg-secondary);
   color: var(--color-text-primary);
 }
 
 .dialog-body {
-  padding: 20px;
+  padding: var(--space-6);
 }
 
 .form-item {
-  margin-bottom: 16px;
-}
-
-.form-item:last-child {
-  margin-bottom: 0;
+  margin-bottom: var(--space-5);
 }
 
 .form-item label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
   font-size: 14px;
-  color: var(--color-text-secondary);
-}
-
-.form-item .required {
-  color: var(--color-danger);
+  font-weight: 500;
+  color: var(--color-text-primary);
 }
 
 .form-item input,
 .form-item select {
   width: 100%;
   padding: 12px;
-  background: var(--color-bg-secondary);
+  background: #fff;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  color: var(--color-text-primary);
+  border-radius: var(--radius-md);
   font-size: 14px;
   outline: none;
-  box-sizing: border-box;
+  transition: border 0.2s;
 }
 
 .form-item input:focus,
 .form-item select:focus {
-  border-color: var(--color-primary);
-}
-
-.form-item.checkbox label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.form-item.checkbox input {
-  width: auto;
-  accent-color: var(--color-primary);
+  border-color: #000;
 }
 
 .dialog-footer {
-  display: flex;
-  gap: 12px;
-  padding: 20px;
+  padding: var(--space-5);
   border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  background: var(--color-bg-primary);
 }
 
 .btn {
-  flex: 1;
-  padding: 12px;
-  border-radius: 8px;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s;
+  font-weight: 500;
+  transition: all var(--transition-fast);
 }
 
 .btn.cancel {
   background: transparent;
   border: 1px solid var(--color-border);
-  color: var(--color-text-tertiary);
+  color: var(--color-text-primary);
 }
 
 .btn.cancel:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  background: var(--color-bg-secondary);
 }
 
 .btn.primary {
-  background: var(--color-primary-gradient);
-  border: none;
+  background: #000;
+  border: 1px solid #000;
   color: #fff;
 }
 
 .btn.primary:hover {
+  background: #333;
+  border-color: #333;
   transform: translateY(-1px);
-  box-shadow: 0 4px 15px rgba(94, 106, 210, 0.4);
 }
 </style>

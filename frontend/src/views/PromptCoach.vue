@@ -265,19 +265,9 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
 <template>
     <div class="coach-container">
-        <!-- 头部 -->
-        <div class="coach-header">
-            <a-button type="text" @click="goBack" class="back-btn">
-                <ArrowLeftOutlined /> 返回
-            </a-button>
-            <div class="header-title">
-                <RobotOutlined />
-                <span>Prompt 教练</span>
-            </div>
-            <div class="header-right">
-                <span v-if="session" class="phase-badge">{{ session.phaseDescription }}</span>
-            </div>
-        </div>
+        <!-- Header Removed -->
+                
+        <!-- 对话区域 -->
 
         <!-- 对话区域 -->
         <div class="chat-area" ref="chatContainer">
@@ -367,49 +357,49 @@ const handleKeydown = async (e: KeyboardEvent) => {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
-    color: #fff;
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
 }
 
 .coach-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 24px;
-    background: rgba(26, 26, 46, 0.9);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: var(--space-4) var(--space-6);
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border-light);
 }
 
 .back-btn {
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--color-text-secondary);
 }
 
 .header-title {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 18px;
+    gap: var(--space-2);
+    font-size: var(--text-lg);
     font-weight: 600;
 }
 
 .header-title .anticon {
-    font-size: 24px;
-    color: #5e6ad2;
+    font-size: var(--text-2xl);
+    color: var(--color-primary);
 }
 
 .phase-badge {
-    padding: 4px 12px;
-    background: rgba(94, 106, 210, 0.2);
-    border: 1px solid rgba(94, 106, 210, 0.4);
-    border-radius: 16px;
-    font-size: 12px;
-    color: #5e6ad2;
+    padding: var(--space-1) var(--space-3);
+    background: var(--color-primary-muted);
+    border: 1px solid var(--color-primary);
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    color: var(--color-primary);
 }
 
 .chat-area {
     flex: 1;
     overflow-y: auto;
-    padding: 24px;
+    padding: var(--space-6);
 }
 
 /* 欢迎区域 */
@@ -423,43 +413,43 @@ const handleKeydown = async (e: KeyboardEvent) => {
 }
 
 .welcome-icon {
-    font-size: 64px;
-    color: #5e6ad2;
-    margin-bottom: 24px;
+    font-size: 48px;
+    color: var(--color-primary);
+    margin-bottom: var(--space-6);
 }
 
 .welcome-section h2 {
-    font-size: 28px;
-    margin-bottom: 8px;
+    font-size: var(--text-2xl);
+    margin-bottom: var(--space-2);
 }
 
 .welcome-section p {
-    color: rgba(255, 255, 255, 0.6);
-    margin-bottom: 8px;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-2);
 }
 
 .welcome-section .hint {
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.4);
+    font-size: var(--text-sm);
+    color: var(--color-text-tertiary);
 }
 
 .provider-select {
-    margin-top: 24px;
+    margin-top: var(--space-6);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
 }
 
 /* 消息样式 */
 .messages {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--space-4);
 }
 
 .message {
     display: flex;
-    gap: 12px;
+    gap: var(--space-3);
     max-width: 80%;
 }
 
@@ -473,8 +463,8 @@ const handleKeydown = async (e: KeyboardEvent) => {
 }
 
 .avatar {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -483,27 +473,27 @@ const handleKeydown = async (e: KeyboardEvent) => {
 }
 
 .message.user .avatar {
-    background: #5e6ad2;
+    background: var(--color-primary);
 }
 
 .message.assistant .avatar {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--color-bg-tertiary);
 }
 
 .content {
-    padding: 12px 16px;
-    border-radius: 12px;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-lg);
     line-height: 1.6;
 }
 
 .message.user .content {
-    background: #5e6ad2;
-    border-radius: 12px 12px 0 12px;
+    background: var(--color-primary);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 var(--radius-lg);
 }
 
 .message.assistant .content {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 12px 12px 12px 0;
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 0;
 }
 
 .content pre {
@@ -513,7 +503,7 @@ const handleKeydown = async (e: KeyboardEvent) => {
 }
 
 .markdown-body :deep(p) {
-    margin-bottom: 8px;
+    margin-bottom: var(--space-2);
 }
 
 .markdown-body :deep(p:last-child) {
@@ -522,15 +512,15 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
 .markdown-body :deep(ul),
 .markdown-body :deep(ol) {
-    margin-bottom: 8px;
-    padding-left: 20px;
+    margin-bottom: var(--space-2);
+    padding-left: var(--space-5);
 }
 
 .markdown-body :deep(code) {
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--color-bg-tertiary);
     padding: 2px 4px;
-    border-radius: 4px;
-    font-family: monospace;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
 }
 
 .typing .cursor {
@@ -557,63 +547,63 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
 /* 生成的 Prompt */
 .generated-prompt {
-    margin-top: 24px;
-    padding: 16px;
-    background: rgba(94, 106, 210, 0.1);
-    border: 1px solid rgba(94, 106, 210, 0.3);
-    border-radius: 12px;
+    margin-top: var(--space-6);
+    padding: var(--space-4);
+    background: var(--color-primary-muted);
+    border: 1px solid var(--color-primary);
+    border-radius: var(--radius-lg);
 }
 
 .prompt-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: #5e6ad2;
+    gap: var(--space-2);
+    color: var(--color-primary);
     font-weight: 600;
-    margin-bottom: 12px;
+    margin-bottom: var(--space-3);
 }
 
 .prompt-content {
-    background: rgba(0, 0, 0, 0.3);
-    padding: 16px;
-    border-radius: 8px;
+    background: var(--color-bg-tertiary);
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
     white-space: pre-wrap;
-    font-family: monospace;
+    font-family: var(--font-mono);
     max-height: 300px;
     overflow-y: auto;
 }
 
 .confirm-btn {
-    margin-top: 16px;
+    margin-top: var(--space-4);
 }
 
 /* 输入区域 */
 .input-area {
     display: flex;
-    gap: 12px;
-    padding: 16px 24px;
-    background: rgba(26, 26, 46, 0.9);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-6);
+    background: var(--color-bg-secondary);
+    border-top: 1px solid var(--color-border-light);
 }
 
 .input-area :deep(.ant-input) {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #fff;
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border-light);
+    color: var(--color-text-primary);
     resize: none;
 }
 
 .input-area :deep(.ant-input:focus) {
-    border-color: #5e6ad2;
+    border-color: var(--color-primary);
 }
 
 .input-area :deep(.ant-btn) {
     height: auto;
-    padding: 8px 16px;
+    padding: var(--space-2) var(--space-4);
 }
 
 .no-model-hint {
-    color: #ff7875;
-    font-size: 12px;
+    color: var(--color-danger);
+    font-size: var(--text-xs);
 }
 </style>

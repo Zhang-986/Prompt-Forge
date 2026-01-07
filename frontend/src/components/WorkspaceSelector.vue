@@ -279,61 +279,62 @@ onMounted(() => {
 .current-workspace {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.2s;
-  color: #fff;
+  transition: all var(--transition-fast);
+  color: var(--color-text-primary);
 }
 
 .current-workspace:hover {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--color-primary);
 }
 
 .ws-icon {
-  font-size: 16px;
-  color: #facc15;
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
 }
 
 .ws-name {
-  font-size: 14px;
+  font-size: var(--text-sm);
   max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--color-text-primary);
 }
 
 .ws-arrow {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--color-text-tertiary);
 }
 
 .ws-menu {
   min-width: 260px;
-  background: #1a1a2e !important;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-primary) !important;
+  border: 1px solid var(--color-border) !important;
 }
 
 .ws-item {
   display: flex;
   align-items: center;
   width: 100%;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .dropdown-ws-name {
   flex: 1;
+  color: var(--color-text-primary);
 }
 
 .ws-actions {
   display: flex;
   gap: 2px;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity var(--transition-fast);
 }
 
 .ws-item:hover .ws-actions {
@@ -341,12 +342,12 @@ onMounted(() => {
 }
 
 .check-icon {
-  color: #7c3aed;
-  margin-left: 4px;
+  color: var(--color-primary);
+  margin-left: var(--space-1);
 }
 
 .add-icon {
-  margin-right: 8px;
-  color: #7c3aed;
+  margin-right: var(--space-2);
+  color: var(--color-text-secondary);
 }
 </style>

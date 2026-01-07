@@ -10,24 +10,24 @@
   --color-bg-secondary: #f8f9fa;
   --color-bg-tertiary: #f1f3f5;
   --color-bg-elevated: #ffffff;
-  
+
   /* 文字颜色 */
   --color-text-primary: #1a1a2e;
   --color-text-secondary: #495057;
   --color-text-tertiary: #868e96;
   --color-text-muted: #adb5bd;
-  
+
   /* 边框颜色 */
   --color-border: #e9ecef;
   --color-border-light: #f1f3f5;
   --color-border-hover: #ced4da;
-  
+
   /* 品牌色 */
   --color-primary: #5e6ad2;
   --color-primary-hover: #4c5bb5;
   --color-primary-light: rgba(94, 106, 210, 0.1);
   --color-primary-gradient: linear-gradient(135deg, #5e6ad2, #8b5cf6);
-  
+
   /* 功能色 */
   --color-success: #10b981;
   --color-success-light: rgba(16, 185, 129, 0.1);
@@ -37,25 +37,30 @@
   --color-danger-light: rgba(239, 68, 68, 0.1);
   --color-info: #3b82f6;
   --color-info-light: rgba(59, 130, 246, 0.1);
-  
+
   /* 阴影 */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
   --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
-  
+
   /* 圆角 */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  /* 圆角 - ChatGPT 风格 (Softer/Rounder) */
+  --radius-sm: 6px;
+  /* Small inputs/tags */
+  --radius-md: 12px;
+  /* Buttons/Inputs/Small Cards */
+  --radius-lg: 16px;
+  /* Main Cards/Containers */
+  --radius-xl: 24px;
+  /* Modals/Large Panels */
   --radius-full: 9999px;
-  
+
   /* 过渡 */
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s ease;
   --transition-slow: 0.35s ease;
-  
+
   /* 间距 */
   --spacing-xs: 4px;
   --spacing-sm: 8px;
@@ -63,11 +68,11 @@
   --spacing-lg: 24px;
   --spacing-xl: 32px;
   --spacing-2xl: 48px;
-  
+
   /* 字体 */
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-  
+
   /* 层级 */
   --z-dropdown: 100;
   --z-modal: 200;
@@ -81,18 +86,18 @@
   --color-bg-secondary: #12121a;
   --color-bg-tertiary: #1a1a2e;
   --color-bg-elevated: #1e1e2e;
-  
+
   /* 文字颜色 */
   --color-text-primary: #ffffff;
   --color-text-secondary: rgba(255, 255, 255, 0.87);
   --color-text-tertiary: rgba(255, 255, 255, 0.6);
   --color-text-muted: rgba(255, 255, 255, 0.38);
-  
+
   /* 边框颜色 */
   --color-border: rgba(255, 255, 255, 0.1);
   --color-border-light: rgba(255, 255, 255, 0.05);
   --color-border-hover: rgba(255, 255, 255, 0.2);
-  
+
   /* 阴影 (深色主题使用较淡阴影) */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
@@ -108,18 +113,18 @@
     --color-bg-secondary: #12121a;
     --color-bg-tertiary: #1a1a2e;
     --color-bg-elevated: #1e1e2e;
-    
+
     /* 文字颜色 */
     --color-text-primary: #ffffff;
     --color-text-secondary: rgba(255, 255, 255, 0.87);
     --color-text-tertiary: rgba(255, 255, 255, 0.6);
     --color-text-muted: rgba(255, 255, 255, 0.38);
-    
+
     /* 边框颜色 */
     --color-border: rgba(255, 255, 255, 0.1);
     --color-border-light: rgba(255, 255, 255, 0.05);
     --color-border-hover: rgba(255, 255, 255, 0.2);
-    
+
     /* 阴影 */
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
@@ -132,8 +137,8 @@
 body,
 body * {
   transition: background-color var(--transition-normal),
-              border-color var(--transition-normal),
-              color var(--transition-fast);
+    border-color var(--transition-normal),
+    color var(--transition-fast);
 }
 
 /* ==================== 响应式断点 ==================== */

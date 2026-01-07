@@ -2,6 +2,8 @@ package com.zzk.domain.service;
 
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.crypto.digest.DigestUtil;
+import com.alibaba.fastjson2.JSON;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.difflib.DiffUtils;
 import com.github.difflib.patch.AbstractDelta;
 import com.github.difflib.patch.Patch;
@@ -43,6 +45,7 @@ public class PromptDomainService {
 
     private final PromptRepository promptRepository;
     private final PromptVersionRepository versionRepository;
+    private final ObjectMapper objectMapper;
 
     /**
      * 提交新版本
@@ -188,8 +191,12 @@ public class PromptDomainService {
         int deletedCount = 0;
 
         int deltaIndex = 0;
+
+        // 有变化的地方，拿出来变化的地方
         AbstractDelta<String> currentDelta = CollectionUtil.isNotEmpty(deltas) ? deltas.get(0) : null;
         int maxLines = Math.max(sourceLines.size(), targetLines.size());
+        log.info("FastJSON2 得到变化补丁{}", JSON.toJSONString(currentDelta));
+
 
         // 4. 双指针遍历与缝合
         int i = 0;

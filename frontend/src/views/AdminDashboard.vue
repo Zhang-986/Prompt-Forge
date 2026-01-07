@@ -98,7 +98,7 @@ try {
     if (userStr) {
         currentUser.value = JSON.parse(userStr)
     }
-} catch {}
+} catch { }
 
 // 加载仪表盘数据
 const loadDashboardStats = async () => {
@@ -235,7 +235,7 @@ const handleTabChange = (tab: string) => {
 const handleToggleUserStatus = async (user: AdminUser) => {
     const newStatus = user.status === 1 ? false : true
     const action = newStatus ? '启用' : '禁用'
-    
+
     Modal.confirm({
         title: `确认${action}用户？`,
         content: `确定要${action}用户 "${user.username}" 吗？`,
@@ -308,7 +308,7 @@ const handleDeleteTemplate = async (template: AdminTemplate) => {
 const handleToggleOfficial = async (template: AdminTemplate) => {
     const newStatus = !template.isOfficial
     const action = newStatus ? '设为官方推荐' : '取消官方推荐'
-    
+
     try {
         await setTemplateOfficial(template.id, newStatus)
         message.success(`${action}成功`)
@@ -413,48 +413,34 @@ onMounted(() => {
 
 <template>
     <div class="admin-container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-left">
-                <img src="/vite.svg" alt="Logo" class="logo-icon" />
-                <span class="logo-text">Prompt-Forge</span>
-                <a-tag color="orange"><SettingOutlined /> 管理后台</a-tag>
-            </div>
-            <div class="header-right">
-                <a-button @click="router.push('/prompts')">
-                    <template #icon><HomeOutlined /></template>
-                    返回首页
-                </a-button>
-                <span class="username">{{ currentUser?.username }}</span>
-                <a-button @click="handleLogout">退出</a-button>
-            </div>
-        </header>
-
-        <div class="main-layout">
-            <!-- Sidebar -->
-            <aside class="sidebar">
-                <div class="menu-item" :class="{ active: activeTab === 'dashboard' }" @click="handleTabChange('dashboard')">
+        <div class="admin-layout">
+            <!-- Top Navigation Tabs (Replaces Sidebar) -->
+            <div class="admin-nav">
+                <div class="nav-item" :class="{ active: activeTab === 'dashboard' }"
+                    @click="handleTabChange('dashboard')">
                     <DashboardOutlined /> 仪表盘
                 </div>
-                <div class="menu-item" :class="{ active: activeTab === 'users' }" @click="handleTabChange('users')">
+                <div class="nav-item" :class="{ active: activeTab === 'users' }" @click="handleTabChange('users')">
                     <UserOutlined /> 用户管理
                 </div>
-                <div class="menu-item" :class="{ active: activeTab === 'workspaces' }" @click="handleTabChange('workspaces')">
+                <div class="nav-item" :class="{ active: activeTab === 'workspaces' }"
+                    @click="handleTabChange('workspaces')">
                     <FolderOutlined /> 工作空间
                 </div>
-                <div class="menu-item" :class="{ active: activeTab === 'prompts' }" @click="handleTabChange('prompts')">
+                <div class="nav-item" :class="{ active: activeTab === 'prompts' }" @click="handleTabChange('prompts')">
                     <FileTextOutlined /> Prompt管理
                 </div>
-                <div class="menu-item" :class="{ active: activeTab === 'templates' }" @click="handleTabChange('templates')">
+                <div class="nav-item" :class="{ active: activeTab === 'templates' }"
+                    @click="handleTabChange('templates')">
                     <AppstoreOutlined /> 广场模板
                 </div>
-                <div class="menu-item" :class="{ active: activeTab === 'arena' }" @click="handleTabChange('arena')">
+                <div class="nav-item" :class="{ active: activeTab === 'arena' }" @click="handleTabChange('arena')">
                     <ThunderboltOutlined /> 竞技场会话
                 </div>
-                <div class="menu-item" :class="{ active: activeTab === 'logs' }" @click="handleTabChange('logs')">
+                <div class="nav-item" :class="{ active: activeTab === 'logs' }" @click="handleTabChange('logs')">
                     <SettingOutlined /> 登录日志
                 </div>
-            </aside>
+            </div>
 
             <!-- Content -->
             <main class="content">
@@ -467,7 +453,9 @@ onMounted(() => {
                         <!-- 主要数据卡片 - 大尺寸 -->
                         <div class="stats-row main-stats">
                             <div class="stat-card clickable" @click="handleTabChange('users')">
-                                <div class="stat-icon users"><UserOutlined /></div>
+                                <div class="stat-icon users">
+                                    <UserOutlined />
+                                </div>
                                 <div class="stat-info">
                                     <div class="stat-value">{{ stats.totalUsers }}</div>
                                     <div class="stat-label">总用户数</div>
@@ -475,7 +463,9 @@ onMounted(() => {
                                 <div class="stat-arrow">→</div>
                             </div>
                             <div class="stat-card clickable" @click="handleTabChange('workspaces')">
-                                <div class="stat-icon workspaces"><FolderOutlined /></div>
+                                <div class="stat-icon workspaces">
+                                    <FolderOutlined />
+                                </div>
                                 <div class="stat-info">
                                     <div class="stat-value">{{ stats.totalWorkspaces }}</div>
                                     <div class="stat-label">工作空间</div>
@@ -483,7 +473,9 @@ onMounted(() => {
                                 <div class="stat-arrow">→</div>
                             </div>
                             <div class="stat-card clickable" @click="handleTabChange('templates')">
-                                <div class="stat-icon templates"><AppstoreOutlined /></div>
+                                <div class="stat-icon templates">
+                                    <AppstoreOutlined />
+                                </div>
                                 <div class="stat-info">
                                     <div class="stat-value">{{ stats.totalTemplates }}</div>
                                     <div class="stat-label">广场模板</div>
@@ -491,32 +483,40 @@ onMounted(() => {
                                 <div class="stat-arrow">→</div>
                             </div>
                         </div>
-                        
+
                         <!-- 次要数据卡片 - 中等尺寸 -->
                         <div class="stats-row secondary-stats">
                             <div class="stat-card-sm">
-                                <div class="stat-icon-sm prompts"><FileTextOutlined /></div>
+                                <div class="stat-icon-sm prompts">
+                                    <FileTextOutlined />
+                                </div>
                                 <div class="stat-info-sm">
                                     <div class="stat-value-sm">{{ stats.totalPrompts }}</div>
                                     <div class="stat-label-sm">总 Prompt</div>
                                 </div>
                             </div>
                             <div class="stat-card-sm">
-                                <div class="stat-icon-sm public"><AppstoreOutlined /></div>
+                                <div class="stat-icon-sm public">
+                                    <AppstoreOutlined />
+                                </div>
                                 <div class="stat-info-sm">
                                     <div class="stat-value-sm">{{ stats.publicPrompts }}</div>
                                     <div class="stat-label-sm">公开 Prompt</div>
                                 </div>
                             </div>
                             <div class="stat-card-sm">
-                                <div class="stat-icon-sm arena"><ThunderboltOutlined /></div>
+                                <div class="stat-icon-sm arena">
+                                    <ThunderboltOutlined />
+                                </div>
                                 <div class="stat-info-sm">
                                     <div class="stat-value-sm">{{ stats.totalArenaSessions }}</div>
                                     <div class="stat-label-sm">竞技场次数</div>
                                 </div>
                             </div>
                             <div class="stat-card-sm">
-                                <div class="stat-icon-sm active"><UserOutlined /></div>
+                                <div class="stat-icon-sm active">
+                                    <UserOutlined />
+                                </div>
                                 <div class="stat-info-sm">
                                     <div class="stat-value-sm">{{ stats.activeUsersLast7Days }}</div>
                                     <div class="stat-label-sm">7天活跃</div>
@@ -552,21 +552,21 @@ onMounted(() => {
                                     <td>{{ user.username }}</td>
                                     <td>{{ user.email }}</td>
                                     <td>
-                                        <a-select
-                                            :value="user.role"
-                                            style="width: 100px"
+                                        <a-select :value="user.role" style="width: 100px"
                                             @change="(val: string) => handleChangeRole(user, val)"
-                                            :disabled="user.role === 'ADMIN'"
-                                        >
-                                            <a-select-option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">
+                                            :disabled="user.role === 'ADMIN'">
+                                            <a-select-option v-for="opt in roleOptions" :key="opt.value"
+                                                :value="opt.value">
                                                 {{ opt.label }}
                                             </a-select-option>
                                         </a-select>
                                     </td>
                                     <td>
-                                        <div v-if="user.workspaces && user.workspaces.length > 0" class="workspace-list">
-                                            <a-tooltip v-for="ws in user.workspaces" :key="ws.id" :title="ws.isOwner ? '所有者 - ' + ws.role : ws.role">
-                                                <a-tag :color="ws.isOwner ? 'gold' : 'blue'" class="ws-tag">
+                                        <div v-if="user.workspaces && user.workspaces.length > 0"
+                                            class="workspace-list">
+                                            <a-tooltip v-for="ws in user.workspaces" :key="ws.id"
+                                                :title="ws.isOwner ? '所有者 - ' + ws.role : ws.role">
+                                                <a-tag class="ws-tag">
                                                     {{ ws.name }}
                                                 </a-tag>
                                             </a-tooltip>
@@ -576,18 +576,14 @@ onMounted(() => {
                                     <td>{{ user.promptCount || 0 }}</td>
                                     <td>{{ user.arenaSessionCount || 0 }}</td>
                                     <td>
-                                        <a-tag :color="user.status === 1 ? 'green' : 'red'">
+                                        <a-tag>
                                             {{ user.status === 1 ? '正常' : '禁用' }}
                                         </a-tag>
                                     </td>
                                     <td>{{ formatDate(user.createdAt) }}</td>
                                     <td>
-                                        <a-button
-                                            v-if="user.role !== 'ADMIN'"
-                                            size="small"
-                                            :type="user.status === 1 ? 'default' : 'primary'"
-                                            @click="handleToggleUserStatus(user)"
-                                        >
+                                        <a-button v-if="user.role !== 'ADMIN'" size="small" :type="'default'"
+                                            @click="handleToggleUserStatus(user)">
                                             <template #icon>
                                                 <CloseOutlined v-if="user.status === 1" />
                                                 <CheckOutlined v-else />
@@ -600,13 +596,8 @@ onMounted(() => {
                             </tbody>
                         </table>
                         <div class="pagination">
-                            <a-pagination
-                                :current="usersPage + 1"
-                                :total="usersTotal"
-                                :pageSize="usersSize"
-                                @change="handleUsersPageChange"
-                                show-quick-jumper
-                            />
+                            <a-pagination :current="usersPage + 1" :total="usersTotal" :pageSize="usersSize"
+                                @change="handleUsersPageChange" show-quick-jumper />
                         </div>
                     </div>
                 </div>
@@ -635,8 +626,10 @@ onMounted(() => {
                                     <td>{{ ws.ownerId }}</td>
                                     <td>{{ formatDate(ws.createdAt) }}</td>
                                     <td>
-                                        <a-button size="small" danger @click="handleDeleteWorkspace(ws)">
-                                            <template #icon><DeleteOutlined /></template>
+                                        <a-button size="small" class="delete-btn" @click="handleDeleteWorkspace(ws)">
+                                            <template #icon>
+                                                <DeleteOutlined />
+                                            </template>
                                             删除
                                         </a-button>
                                     </td>
@@ -644,13 +637,8 @@ onMounted(() => {
                             </tbody>
                         </table>
                         <div class="pagination">
-                            <a-pagination
-                                :current="workspacesPage + 1"
-                                :total="workspacesTotal"
-                                :pageSize="workspacesSize"
-                                @change="handleWorkspacesPageChange"
-                                show-quick-jumper
-                            />
+                            <a-pagination :current="workspacesPage + 1" :total="workspacesTotal"
+                                :pageSize="workspacesSize" @change="handleWorkspacesPageChange" show-quick-jumper />
                         </div>
                     </div>
                 </div>
@@ -701,8 +689,11 @@ onMounted(() => {
                                                 </template>
                                                 {{ tpl.isOfficial ? '取消官方' : '设为官方' }}
                                             </a-button>
-                                            <a-button size="small" danger @click="handleDeleteTemplate(tpl)" v-if="tpl.isActive">
-                                                <template #icon><DeleteOutlined /></template>
+                                            <a-button size="small" danger @click="handleDeleteTemplate(tpl)"
+                                                v-if="tpl.isActive">
+                                                <template #icon>
+                                                    <DeleteOutlined />
+                                                </template>
                                                 删除
                                             </a-button>
                                         </a-space>
@@ -711,13 +702,8 @@ onMounted(() => {
                             </tbody>
                         </table>
                         <div class="pagination">
-                            <a-pagination
-                                :current="templatesPage + 1"
-                                :total="templatesTotal"
-                                :pageSize="templatesSize"
-                                @change="handleTemplatesPageChange"
-                                show-quick-jumper
-                            />
+                            <a-pagination :current="templatesPage + 1" :total="templatesTotal" :pageSize="templatesSize"
+                                @change="handleTemplatesPageChange" show-quick-jumper />
                         </div>
                     </div>
                 </div>
@@ -768,8 +754,11 @@ onMounted(() => {
                                     </td>
                                     <td>{{ formatDate(prompt.createdAt) }}</td>
                                     <td>
-                                        <a-button size="small" danger @click="handleDeletePrompt(prompt)" v-if="prompt.status === 1">
-                                            <template #icon><DeleteOutlined /></template>
+                                        <a-button size="small" danger @click="handleDeletePrompt(prompt)"
+                                            v-if="prompt.status === 1">
+                                            <template #icon>
+                                                <DeleteOutlined />
+                                            </template>
                                             删除
                                         </a-button>
                                     </td>
@@ -777,13 +766,8 @@ onMounted(() => {
                             </tbody>
                         </table>
                         <div class="pagination">
-                            <a-pagination
-                                :current="promptsPage + 1"
-                                :total="promptsTotal"
-                                :pageSize="promptsSize"
-                                @change="handlePromptsPageChange"
-                                show-quick-jumper
-                            />
+                            <a-pagination :current="promptsPage + 1" :total="promptsTotal" :pageSize="promptsSize"
+                                @change="handlePromptsPageChange" show-quick-jumper />
                         </div>
                     </div>
                 </div>
@@ -810,34 +794,31 @@ onMounted(() => {
                                 <tr v-for="session in arenaSessions" :key="session.id">
                                     <td>{{ session.id }}</td>
                                     <td>{{ session.promptVersionId || '-' }}</td>
-                                    <td class="text-ellipsis" :title="session.finalPrompt">{{ session.finalPrompt?.substring(0, 50) || '-' }}...</td>
+                                    <td class="text-ellipsis" :title="session.finalPrompt">{{
+                                        session.finalPrompt?.substring(0, 50) ||
+                                        '-' }}...</td>
                                     <td>
                                         <div class="model-tags">
-                                            <a-tag v-for="model in parseModels(session.models)" :key="model" color="purple">
-                                                {{ model }}
-                                            </a-tag>
-                                            <span v-if="!parseModels(session.models).length">-</span>
+                                            <a-tag color="blue">{{ session.modelAProvider }}</a-tag>
+                                            <a-tag color="purple">{{ session.modelBProvider }}</a-tag>
                                         </div>
                                     </td>
                                     <td>
-                                        <a-tag :color="session.status === 'COMPLETED' ? 'green' : 'blue'">
-                                            {{ session.status }}
+                                        <a-tag
+                                            :color="session.winner ? 'green' : (session.status === 'COMPLETED' ? 'blue' : 'orange')">
+                                            {{ session.winner ? '已决出胜负' : session.status }}
                                         </a-tag>
                                     </td>
                                     <td>{{ session.creatorId }}</td>
                                     <td>{{ formatDate(session.createdAt) }}</td>
-                                    <td>{{ session.completedAt ? formatDate(session.completedAt) : '-' }}</td>
+                                    <td>{{ formatDate(session.completedAt) || '-' }}</td>
                                 </tr>
                             </tbody>
                         </table>
                         <div class="pagination">
-                            <a-pagination
-                                :current="arenaSessionsPage + 1"
-                                :total="arenaSessionsTotal"
-                                :pageSize="arenaSessionsSize"
-                                @change="handleArenaSessionsPageChange"
-                                show-quick-jumper
-                            />
+                            <a-pagination :current="arenaSessionsPage + 1" :total="arenaSessionsTotal"
+                                :pageSize="arenaSessionsSize" @change="handleArenaSessionsPageChange"
+                                show-quick-jumper />
                         </div>
                     </div>
                 </div>
@@ -851,40 +832,27 @@ onMounted(() => {
                             <thead>
                                 <tr>
                                     <th>ID</th>
+                                    <th>用户ID</th>
                                     <th>用户名</th>
                                     <th>IP地址</th>
-                                    <th>地理位置</th>
-                                    <th>结果</th>
-                                    <th>失败原因</th>
-                                    <th>UA</th>
-                                    <th>创建时间</th>
+                                    <th>User Agent</th>
+                                    <th>登录时间</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="log in loginLogs" :key="log.id">
                                     <td>{{ log.id }}</td>
+                                    <td>{{ log.userId }}</td>
                                     <td>{{ log.username }}</td>
-                                    <td>{{ log.ipAddress || '-' }}</td>
-                                    <td>{{ log.geoLocation || '-' }}</td>
-                                    <td>
-                                        <a-tag :color="log.result === 'SUCCESS' ? 'green' : 'red'">
-                                            {{ log.result }}
-                                        </a-tag>
-                                    </td>
-                                    <td>{{ log.failureReason || '-' }}</td>
-                                    <td class="text-ellipsis" :title="log.userAgent">{{ log.userAgent?.substring(0, 30) || '-' }}...</td>
+                                    <td>{{ log.ipAddress }}</td>
+                                    <td class="text-ellipsis" :title="log.userAgent">{{ log.userAgent }}</td>
                                     <td>{{ formatDate(log.createdAt) }}</td>
                                 </tr>
                             </tbody>
                         </table>
                         <div class="pagination">
-                            <a-pagination
-                                :current="loginLogsPage + 1"
-                                :total="loginLogsTotal"
-                                :pageSize="loginLogsSize"
-                                @change="handleLoginLogsPageChange"
-                                show-quick-jumper
-                            />
+                            <a-pagination :current="loginLogsPage + 1" :total="loginLogsTotal" :pageSize="loginLogsSize"
+                                @change="handleLoginLogsPageChange" show-quick-jumper />
                         </div>
                     </div>
                 </div>
@@ -895,212 +863,153 @@ onMounted(() => {
 
 <style scoped>
 .admin-container {
-    min-height: 100vh;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-6);
     background: var(--color-bg-primary);
-    color: var(--color-text-primary);
 }
 
-.header {
+.admin-layout {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px 32px;
+    flex-direction: column;
+    gap: var(--space-6);
+    height: 100%;
+}
+
+/* New Top Navigation Styles */
+.admin-nav {
+    display: flex;
+    gap: var(--space-2);
+    padding-bottom: var(--space-4);
     border-bottom: 1px solid var(--color-border);
-    background: var(--color-bg-secondary);
+    overflow-x: auto;
 }
 
-.header-left {
+.nav-item {
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
+    transition: all var(--transition-fast);
+    white-space: nowrap;
 }
 
-.logo-icon {
-    width: 32px;
-    height: 32px;
-}
-
-.logo-text {
-    font-size: 18px;
-    font-weight: 600;
+.nav-item:hover {
+    background: var(--color-bg-secondary);
     color: var(--color-text-primary);
 }
 
-.header-right {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-}
-
-.username {
-    color: var(--color-text-tertiary);
-}
-
-.main-layout {
-    display: flex;
-    min-height: calc(100vh - 65px);
-}
-
-.sidebar {
-    width: 220px;
-    background: var(--color-bg-secondary);
-    border-right: 1px solid var(--color-border);
-    padding: 16px 0;
-}
-
-.menu-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 24px;
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.menu-item:hover {
-    background: var(--color-bg-tertiary);
-    color: var(--color-primary);
-}
-
-.menu-item.active {
+.nav-item.active {
     background: var(--color-primary);
-    color: white;
+    color: #fff;
 }
 
 .content {
     flex: 1;
-    padding: 24px;
     overflow-y: auto;
-}
-
-.tab-content {
-    max-width: 1400px;
+    background: #fff;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+    padding: var(--space-6);
 }
 
 .tab-title {
-    font-size: 24px;
-    font-weight: 600;
-    margin-bottom: 24px;
+    font-size: var(--text-xl);
+    margin-bottom: var(--space-2);
     color: var(--color-text-primary);
 }
 
-.loading {
-    text-align: center;
-    padding: 40px;
-    color: var(--color-text-tertiary);
-}
-
 .tab-desc {
-    color: var(--color-text-tertiary);
-    margin-bottom: 24px;
-    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-6);
 }
 
 .stats-container {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: var(--space-6);
 }
 
 .stats-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
+    display: grid;
+    gap: var(--space-6);
 }
 
-.main-stats .stat-card {
-    flex: 1;
-    min-width: 280px;
+.main-stats {
+    grid-template-columns: repeat(3, 1fr);
 }
 
 .secondary-stats {
-    margin-top: 12px;
+    grid-template-columns: repeat(4, 1fr);
 }
 
-/* 大卡片 - 可点击 */
-.stat-card {
+.stat-card,
+.stat-card-sm {
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 28px 24px;
-    background: linear-gradient(145deg, var(--color-bg-elevated), var(--color-bg-secondary));
-    border: 1px solid var(--color-border);
-    border-radius: 16px;
-    transition: all 0.3s ease;
-    position: relative;
-}
-
-.stat-card.clickable {
-    cursor: pointer;
+    justify-content: space-between;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .stat-card.clickable:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-    border-color: var(--color-primary);
-}
-
-.stat-card.clickable:hover .stat-arrow {
-    opacity: 1;
-    transform: translateX(4px);
-}
-
-.stat-arrow {
-    position: absolute;
-    right: 20px;
-    font-size: 20px;
-    color: var(--color-primary);
-    opacity: 0;
-    transition: all 0.3s ease;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    cursor: pointer;
 }
 
 .stat-icon {
-    width: 60px;
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 16px;
-    font-size: 26px;
-    color: white;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    font-size: 32px;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: #fff;
 }
 
-.stat-icon.users { background: linear-gradient(135deg, #667eea, #764ba2); }
-.stat-icon.workspaces { background: linear-gradient(135deg, #f093fb, #f5576c); }
-.stat-icon.prompts { background: linear-gradient(135deg, #4facfe, #00f2fe); }
-.stat-icon.public { background: linear-gradient(135deg, #43e97b, #38f9d7); }
-.stat-icon.arena { background: linear-gradient(135deg, #fa709a, #fee140); }
-.stat-icon.active { background: linear-gradient(135deg, #a8edea, #fed6e3); color: #333; }
-.stat-icon.templates { background: linear-gradient(135deg, #ffecd2, #fcb69f); color: #333; }
+.stat-icon.users {
+    color: #3b82f6;
+}
+
+.stat-icon.workspaces {
+    color: #10b981;
+}
+
+.stat-icon.templates {
+    color: #f59e0b;
+}
 
 .stat-info {
     flex: 1;
 }
 
 .stat-value {
-    font-size: 36px;
+    font-size: var(--text-2xl);
     font-weight: 700;
     color: var(--color-text-primary);
     line-height: 1.2;
 }
 
 .stat-label {
-    font-size: 14px;
-    color: var(--color-text-tertiary);
-    margin-top: 4px;
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    margin-top: var(--space-1);
 }
 
 /* 小卡片 - 仅展示 */
 .stat-card-sm {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px 20px;
-    background: var(--color-bg-elevated);
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    background: var(--color-bg-secondary);
     border: 1px solid var(--color-border);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     min-width: 150px;
     flex: 1;
 }
@@ -1111,42 +1020,66 @@ onMounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 10px;
-    font-size: 18px;
+    border-radius: var(--radius-md);
+    font-size: var(--text-lg);
     color: white;
 }
 
-.stat-icon-sm.prompts { background: linear-gradient(135deg, #4facfe, #00f2fe); }
-.stat-icon-sm.public { background: linear-gradient(135deg, #43e97b, #38f9d7); }
-.stat-icon-sm.arena { background: linear-gradient(135deg, #fa709a, #fee140); }
-.stat-icon-sm.active { background: linear-gradient(135deg, #a8edea, #fed6e3); color: #333; }
+.stat-icon-sm.prompts {
+    background: #0d0d0d;
+}
+
+.stat-icon-sm.public {
+    background: #404040;
+}
+
+.stat-icon-sm.arena {
+    background: #606060;
+}
+
+.stat-icon-sm.active {
+    background: #0d0d0d;
+}
 
 .stat-info-sm {
     flex: 1;
 }
 
+/* Refined UI Elements */
+.delete-btn {
+    color: var(--color-text-tertiary);
+    transition: all var(--transition-fast);
+}
+
+.delete-btn:hover {
+    color: var(--color-danger);
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
 .stat-value-sm {
-    font-size: 22px;
+    font-size: var(--text-xl);
     font-weight: 600;
     color: var(--color-text-primary);
 }
 
 .stat-label-sm {
-    font-size: 12px;
+    font-size: var(--text-xs);
     color: var(--color-text-tertiary);
 }
 
 .data-table {
     width: 100%;
     border-collapse: collapse;
-    background: var(--color-bg-elevated);
-    border-radius: 8px;
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
     overflow: hidden;
 }
 
 .data-table th,
 .data-table td {
-    padding: 12px 16px;
+    padding: var(--space-3) var(--space-4);
     text-align: left;
     border-bottom: 1px solid var(--color-border);
 }
@@ -1158,24 +1091,24 @@ onMounted(() => {
 }
 
 .data-table tr:hover {
-    background: var(--color-bg-tertiary);
+    background: var(--color-bg-secondary);
 }
 
 .pagination {
-    margin-top: 20px;
+    margin-top: var(--space-5);
     display: flex;
     justify-content: flex-end;
 }
 
 .admin-label {
     color: var(--color-text-tertiary);
-    font-size: 12px;
+    font-size: var(--text-xs);
 }
 
 .workspace-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: var(--space-1);
     max-width: 200px;
 }
 
@@ -1191,7 +1124,7 @@ onMounted(() => {
 .model-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: var(--space-1);
 }
 
 .text-ellipsis {
@@ -1201,4 +1134,3 @@ onMounted(() => {
     white-space: nowrap;
 }
 </style>
-

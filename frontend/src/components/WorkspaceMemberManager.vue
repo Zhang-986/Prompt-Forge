@@ -233,7 +233,7 @@ onMounted(() => {
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -244,73 +244,73 @@ onMounted(() => {
   width: 500px;
   max-height: 80vh;
   overflow-y: auto;
-  padding: 24px;
-  background: #1a1a2e;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  padding: var(--space-6);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
 .dialog-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
 }
 
 .dialog-header h3 {
-  font-size: 18px;
-  color: #fff;
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
   margin: 0;
 }
 
 .close-btn {
   background: transparent;
   border: none;
-  color: #888;
-  font-size: 24px;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-2xl);
   cursor: pointer;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
 }
 
 .close-btn:hover {
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .invite-section, .members-section {
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
 }
 
 .invite-section h4, .members-section h4 {
-  font-size: 14px;
-  color: #888;
-  margin-bottom: 12px;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-3);
 }
 
 .invite-form {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .invite-form input {
   flex: 1;
-  padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  color: #fff;
-  font-size: 14px;
+  padding: var(--space-3);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
   outline: none;
 }
 
 .invite-form input:focus {
-  border-color: #5e6ad2;
+  border-color: var(--color-primary);
 }
 
 .search-btn {
-  padding: 10px 16px;
-  background: #5e6ad2;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-primary);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: #fff;
   cursor: pointer;
   white-space: nowrap;
@@ -323,12 +323,12 @@ onMounted(() => {
 .search-result {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 12px;
-  padding: 12px;
-  background: rgba(94, 106, 210, 0.1);
-  border: 1px solid rgba(94, 106, 210, 0.3);
-  border-radius: 8px;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .user-info {
@@ -337,29 +337,29 @@ onMounted(() => {
 
 .user-info .username {
   font-weight: 500;
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .user-info .email {
-  font-size: 12px;
-  color: #888;
-  margin-left: 8px;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  margin-left: var(--space-2);
 }
 
 .role-select {
-  padding: 6px 10px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  color: #fff;
-  font-size: 12px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--text-xs);
 }
 
 .invite-btn {
-  padding: 6px 16px;
-  background: #27ae60;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-primary);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: #fff;
   cursor: pointer;
 }
@@ -367,62 +367,63 @@ onMounted(() => {
 .member-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .member-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
+  padding: var(--space-3);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
 }
 
 .member-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .member-name {
   font-weight: 500;
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .member-role {
-  font-size: 12px;
-  padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-sm);
 }
 
 .role-select-inline {
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  font-size: 12px;
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
 .role-select-inline:hover {
-  border-color: #5e6ad2;
+  border-color: var(--color-primary);
 }
 
 .role-select-inline option {
-  background: #1a1a2e;
-  color: #fff;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
 }
 
 .remove-btn {
-  padding: 4px 8px;
+  padding: var(--space-1) var(--space-2);
   background: transparent;
   border: none;
+  color: var(--color-danger);
   cursor: pointer;
   opacity: 0.6;
-  transition: opacity 0.2s;
+  transition: opacity var(--transition-fast);
 }
 
 .remove-btn:hover {
@@ -431,7 +432,7 @@ onMounted(() => {
 
 .loading, .empty {
   text-align: center;
-  padding: 24px;
-  color: #888;
+  padding: var(--space-6);
+  color: var(--color-text-tertiary);
 }
 </style>

@@ -307,32 +307,7 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 
 <template>
   <div class="page-container">
-    <!-- Header -->
-    <header class="header">
-      <div class="header-left">
-        <img src="/vite.svg" alt="Logo" class="logo-icon" />
-        <span class="logo-text">Prompt-Forge</span>
-        <a-tag color="purple">
-          <AppstoreOutlined /> 广场
-        </a-tag>
-      </div>
-      <div class="header-right">
-        <a-button @click="router.push('/prompts')">
-          <template #icon>
-            <FileTextOutlined />
-          </template>
-          我的 Prompt
-        </a-button>
-        <a-button @click="router.push('/arena')">
-          <template #icon>
-            <ThunderboltOutlined />
-          </template>
-          竞技场
-        </a-button>
-        <span class="username">{{ currentUser?.username }}</span>
-        <a-button @click="handleLogout">退出</a-button>
-      </div>
-    </header>
+    <!-- Header Removed -->
 
     <!-- Main Content -->
     <main class="main-content">
@@ -564,62 +539,57 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
   color: var(--color-text-primary);
 }
 
-[data-theme="dark"] .page-container,
-:root:not([data-theme="light"]) .page-container {
-  background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-tertiary) 100%);
-}
-
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 32px;
+  padding: var(--space-4) var(--space-8);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg-secondary);
+  background: var(--color-bg-primary);
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .logo-icon {
-  width: 32px;
-  height: 32px;
-  font-size: 24px;
+  width: 28px;
+  height: 28px;
+  font-size: var(--text-2xl);
   color: var(--color-primary);
 }
 
 .logo-text {
-  font-size: 18px;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
 .page-badge {
-  margin-left: 12px;
-  padding: 4px 12px;
-  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  margin-left: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-primary);
   color: white;
-  border-radius: 20px;
-  font-size: 13px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .nav-btn {
-  padding: 8px 16px;
+  padding: var(--space-2) var(--space-4);
   background: transparent;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
-  color: var(--color-text-tertiary);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
 .nav-btn:hover {
@@ -628,17 +598,17 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 }
 
 .username {
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
 }
 
 .logout-btn {
-  padding: 8px 16px;
+  padding: var(--space-2) var(--space-4);
   background: transparent;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
-  color: var(--color-text-tertiary);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
 .logout-btn:hover {
@@ -647,45 +617,45 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 }
 
 .main-content {
-  max-width: 1400px;
+  max-width: 960px;
   margin: 0 auto;
-  padding: 32px;
+  padding: var(--space-8);
 }
 
 .page-header {
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
 }
 
 .page-title {
-  font-size: 28px;
+  font-size: var(--text-2xl);
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
   color: var(--color-text-primary);
 }
 
 .page-desc {
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
 }
 
 /* Category Tabs */
 .category-tabs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
   flex-wrap: wrap;
 }
 
 .category-tab {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: var(--color-bg-elevated);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
 .category-tab:hover {
@@ -700,44 +670,42 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 }
 
 .cat-icon {
-  font-size: 16px;
+  font-size: var(--text-base);
 }
 
 .cat-label {
-  font-size: 14px;
+  font-size: var(--text-sm);
 }
 
 /* Template Grid */
 .template-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-5);
 }
 
 .template-card {
-  padding: 20px;
-  background: var(--color-bg-elevated);
+  padding: var(--space-5);
+  background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
 .template-card:hover {
   border-color: var(--color-primary);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .card-header {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
 .template-icon {
-  font-size: 32px;
+  font-size: var(--text-2xl);
   line-height: 1;
 }
 
@@ -747,31 +715,31 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 
 .template-name {
   display: block;
-  font-size: 16px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--color-text-primary);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .template-category {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--color-text-tertiary);
 }
 
 .official-badge {
-  padding: 2px 8px;
-  background: linear-gradient(90deg, #f59e0b, #f97316);
+  padding: 2px var(--space-2);
+  background: var(--color-warning);
   color: white;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
   font-weight: 500;
 }
 
 .template-desc {
-  font-size: 14px;
+  font-size: var(--text-sm);
   color: var(--color-text-secondary);
   line-height: 1.5;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -786,20 +754,20 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 
 .footer-left {
   display: flex;
-  gap: 12px;
-  font-size: 12px;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
   color: var(--color-text-tertiary);
 }
 
 .clone-btn {
-  padding: 6px 16px;
+  padding: var(--space-2) var(--space-4);
   background: var(--color-primary);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: white;
-  font-size: 13px;
+  font-size: var(--text-sm);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
 .clone-btn:hover {
@@ -807,15 +775,15 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 }
 
 .clone-btn.large {
-  padding: 10px 24px;
-  font-size: 14px;
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--text-sm);
 }
 
 /* Dialog */
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -824,10 +792,10 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 
 .dialog {
   width: 400px;
-  padding: 24px;
-  background: var(--color-bg-elevated);
+  padding: var(--space-6);
+  background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
 }
 
 .preview-dialog {
@@ -838,61 +806,61 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 }
 
 .dialog h3 {
-  margin-bottom: 16px;
-  font-size: 18px;
+  margin-bottom: var(--space-4);
+  font-size: var(--text-lg);
   color: var(--color-text-primary);
 }
 
 .clone-template-name {
-  padding: 12px;
+  padding: var(--space-3);
   background: var(--color-bg-secondary);
-  border-radius: 8px;
-  margin-bottom: 16px;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
   font-weight: 500;
 }
 
 .form-group {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .form-group label {
   display: block;
-  margin-bottom: 8px;
-  font-size: 14px;
-  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
 }
 
 .workspace-select {
   width: 100%;
-  padding: 10px 12px;
+  padding: var(--space-3);
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--color-text-primary);
-  font-size: 14px;
+  font-size: var(--text-sm);
 }
 
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 20px;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
 }
 
 .cancel-btn {
-  padding: 10px 20px;
+  padding: var(--space-3) var(--space-5);
   background: transparent;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  color: var(--color-text-tertiary);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
 .submit-btn {
-  padding: 10px 20px;
+  padding: var(--space-3) var(--space-5);
   background: var(--color-primary);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: white;
   cursor: pointer;
 }
@@ -906,7 +874,7 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
 .preview-header h3 {
@@ -916,12 +884,12 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 .close-btn {
   width: 32px;
   height: 32px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-secondary);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--color-text-tertiary);
   cursor: pointer;
-  font-size: 20px;
+  font-size: var(--text-xl);
 }
 
 .close-btn:hover {
@@ -930,24 +898,24 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 
 .preview-desc {
   color: var(--color-text-secondary);
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .preview-content {
   flex: 1;
   overflow-y: auto;
   max-height: 400px;
-  padding: 16px;
+  padding: var(--space-4);
   background: var(--color-bg-secondary);
-  border-radius: 8px;
-  margin-bottom: 16px;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
 }
 
 .preview-content pre {
   margin: 0;
   white-space: pre-wrap;
-  font-family: 'Consolas', monospace;
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: var(--color-text-primary);
 }
@@ -959,14 +927,14 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 }
 
 .preview-meta {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--color-text-tertiary);
 }
 
 .loading,
 .empty-state {
   text-align: center;
-  padding: 60px;
+  padding: var(--space-12);
   color: var(--color-text-tertiary);
 }
 
@@ -974,7 +942,7 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 .footer-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .action-btn {
@@ -983,22 +951,23 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
+  background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
+  border-radius: var(--radius-md);
   color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
 .action-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
 }
 
 .action-btn.delete-btn:hover {
-  border-color: #ef4444;
-  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-danger);
+  border-color: rgba(239, 68, 68, 0.2);
 }
 
 /* Edit Dialog */
@@ -1010,12 +979,12 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 
 .form-input {
   width: 100%;
-  padding: 10px 12px;
+  padding: var(--space-3);
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--color-text-primary);
-  font-size: 14px;
+  font-size: var(--text-sm);
 }
 
 .form-input:focus {
@@ -1025,13 +994,13 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 
 .form-textarea {
   width: 100%;
-  padding: 10px 12px;
+  padding: var(--space-3);
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--color-text-primary);
-  font-size: 14px;
-  font-family: 'Consolas', monospace;
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
   resize: vertical;
   min-height: 120px;
 }
@@ -1056,16 +1025,16 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 .category-list {
   max-height: 250px;
   overflow-y: auto;
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .category-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  gap: var(--space-3);
+  padding: var(--space-3);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -1074,7 +1043,7 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 }
 
 .category-item .cat-icon {
-  font-size: 20px;
+  font-size: var(--text-xl);
 }
 
 .category-item .cat-info {
@@ -1085,34 +1054,34 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 
 .category-item .cat-info small {
   color: var(--color-text-tertiary);
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .category-item .cat-order {
   color: var(--color-text-tertiary);
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .category-item .cat-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .category-form {
-  padding: 16px;
+  padding: var(--space-4);
   background: var(--color-bg-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .category-form h4 {
-  margin: 0 0 12px;
-  font-size: 14px;
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
   color: var(--color-text-secondary);
 }
 
 .form-row {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .form-row .form-group {

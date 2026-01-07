@@ -191,7 +191,7 @@ const handleRegister = async () => {
   <div class="login-container">
     <div class="login-card">
       <div class="logo">
-        <img src="/vite.svg" alt="Logo" class="logo-icon" />
+        <img src="/logo.svg?v=4" alt="Logo" class="logo-icon" />
         <span class="logo-text">Prompt-Forge</span>
       </div>
 
@@ -292,41 +292,40 @@ const handleRegister = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
+  background: var(--color-bg-primary);
 }
 
 .login-card {
-  width: 420px;
-  padding: 40px;
-  background: #1a1a2e;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  backdrop-filter: blur(10px);
+  width: 400px;
+  padding: var(--space-8);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
 }
 
 .logo {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  margin-bottom: 32px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
 }
 
 .logo-icon {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
 }
 
 .logo-text {
-  font-size: 22px;
+  font-size: var(--text-xl);
   font-weight: 600;
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 /* 验证码样式 */
 .captcha-row {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: center;
 }
 
@@ -338,11 +337,11 @@ const handleRegister = async () => {
   position: relative;
   width: 120px;
   height: 40px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   cursor: pointer;
-  background: #2a2a4e;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border-light);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -355,8 +354,8 @@ const handleRegister = async () => {
 }
 
 .captcha-placeholder {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
 }
 
 .captcha-refresh {
@@ -370,10 +369,10 @@ const handleRegister = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--color-text-primary);
   font-size: 10px;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity var(--transition-fast);
 }
 
 .captcha-image-wrapper:hover .captcha-refresh {
@@ -383,7 +382,7 @@ const handleRegister = async () => {
 /* 邮箱验证码样式 */
 .email-code-row {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: center;
 }
 
@@ -394,5 +393,28 @@ const handleRegister = async () => {
 .send-code-btn {
   min-width: 120px;
   white-space: nowrap;
+}
+
+/* 强制修复密码框内部边框 */
+:deep(.ant-input-affix-wrapper) {
+  padding: 0;
+  background: transparent !important;
+  border-color: var(--color-border-light) !important;
+}
+
+:deep(.ant-input-affix-wrapper > input.ant-input) {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  margin: 0 !important;
+  padding: 4px 11px !important; /* 恢复默认内边距 */
+  height: 38px !important; /* 匹配 large size */
+}
+
+/* 聚焦时只改变外层 wrapper 的边框 */
+:deep(.ant-input-affix-wrapper:focus),
+:deep(.ant-input-affix-wrapper-focused) {
+  border-color: var(--color-primary) !important;
+  box-shadow: none !important;
 }
 </style>

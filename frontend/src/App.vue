@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
-import { ConfigProvider, theme } from 'ant-design-vue'
+import { ConfigProvider } from 'ant-design-vue'
 
-// Ant Design Vue 暗色主题配置
+// Ant Design Vue ChatGPT 风格主题配置 - 黑色按钮
 const themeConfig = {
-  algorithm: theme.darkAlgorithm,
   token: {
-    colorPrimary: '#7c3aed', // 紫色主色调
+    colorPrimary: '#0d0d0d',             // 黑色按钮
     borderRadius: 8,
-    colorBgContainer: '#1a1a2e',
-    colorBgElevated: '#252542',
-    colorBgLayout: '#0f0f1a',
+    colorBgContainer: '#ffffff',         // 纯白容器背景
+    colorBgElevated: '#ffffff',          // 弹窗背景
+    colorBgLayout: '#ffffff',            // 页面背景
+    colorBorder: '#e5e5e5',              // 淡边框
+    colorText: '#0d0d0d',                // 主文字 - 近黑
+    colorTextSecondary: '#6e6e80',       // 次要文字
+    colorTextTertiary: '#8e8ea0',        // 辅助文字
   },
 }
 </script>
@@ -23,25 +26,61 @@ const themeConfig = {
 
 <style>
 :root {
-  /* 暗色主题变量 */
-  --color-bg-primary: #0f0f1a;
-  --color-bg-secondary: #1a1a2e;
-  --color-bg-tertiary: #16162a;
-  --color-bg-elevated: #252542;
+  /* ===== ChatGPT 纯净风格颜色系统 ===== */
+  --color-bg-primary: #ffffff;        /* 主背景 - 纯白 */
+  --color-bg-secondary: #f7f7f8;      /* 次级背景 - 极浅灰 */
+  --color-bg-tertiary: #ececec;       /* 三级背景 - 悬浮/高亮 */
+  --color-bg-elevated: #ffffff;       /* 弹窗/下拉菜单 */
   
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #a0a0b0;
-  --color-text-tertiary: #707080;
+  --color-text-primary: #0d0d0d;      /* 主文字 - 近黑 */
+  --color-text-secondary: #6e6e80;    /* 次要文字 */
+  --color-text-tertiary: #8e8ea0;     /* 辅助文字/占位符 */
+  --color-text-muted: #acacbe;        /* 禁用/最弱文字 */
   
-  --color-border: rgba(255, 255, 255, 0.1);
-  --color-primary: #7c3aed;
-  --color-primary-hover: #8b5cf6;
-  --color-primary-light: rgba(124, 58, 237, 0.15);
-  --color-primary-gradient: linear-gradient(135deg, #7c3aed, #a855f7);
+  --color-border: #e5e5e5;            /* 主边框 - 浅灰 */
+  --color-border-light: #ebebeb;      /* 淡边框 */
+  
+  /* 主色 = 黑色 (ChatGPT 按钮风格) */
+  --color-primary: #0d0d0d;
+  --color-primary-hover: #353535;
+  --color-primary-muted: rgba(13, 13, 13, 0.05);
   
   --color-danger: #ef4444;
   --color-success: #22c55e;
   --color-warning: #f59e0b;
+  
+  /* ===== 字体系统 ===== */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Fira Code', 'Monaco', monospace;
+  
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  
+  /* ===== 间距系统 ===== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  
+  /* ===== 圆角 ===== */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+  
+  /* ===== 过渡 ===== */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.2s ease;
 }
 
 * {
@@ -51,74 +90,169 @@ const themeConfig = {
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-family);
+  font-size: var(--text-base);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
 }
 
-/* 强制所有页面使用暗色背景 */
+/* 页面容器 - 纯白背景 */
 .page-container,
 .arena-container,
-.settings-container {
+.settings-container,
+.coach-container,
+.login-container,
+.admin-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-tertiary) 100%) !important;
+  background: var(--color-bg-primary) !important;
   color: var(--color-text-primary) !important;
 }
 
-/* 确保 Ant Design 组件在暗色模式下正常显示 */
-.ant-btn {
-  font-weight: 500;
+/* ===== Ant Design 组件全局覆盖 ===== */
+
+/* 主按钮 - 黑色 */
+.ant-btn-primary {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  color: #ffffff !important;
 }
 
+.ant-btn-primary:hover {
+  background: var(--color-primary-hover) !important;
+  border-color: var(--color-primary-hover) !important;
+}
+
+/* 默认按钮 */
+.ant-btn-default {
+  background: var(--color-bg-primary) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.ant-btn-default:hover {
+  border-color: var(--color-primary) !important;
+  color: var(--color-primary) !important;
+}
+
+/* 下拉菜单 - 确保白色背景 */
+.ant-dropdown,
+.ant-dropdown-menu,
+.ant-select-dropdown,
+.ant-picker-dropdown,
+.ant-popover-inner {
+  background: var(--color-bg-primary) !important;
+  border: 1px solid var(--color-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+
+.ant-dropdown-menu-item,
+.ant-select-item {
+  color: var(--color-text-primary) !important;
+}
+
+.ant-dropdown-menu-item:hover,
+.ant-select-item-option-active {
+  background: var(--color-bg-secondary) !important;
+}
+
+.ant-select-item-option-selected {
+  background: var(--color-bg-tertiary) !important;
+}
+
+/* 弹窗 Modal */
+.ant-modal-content {
+  background: var(--color-bg-primary) !important;
+}
+
+.ant-modal-header {
+  background: var(--color-bg-primary) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+}
+
+.ant-modal-footer {
+  border-top: 1px solid var(--color-border) !important;
+}
+
+/* 标签 Tag */
+.ant-tag {
+  border-radius: var(--radius-md);
+}
+
+/* 卡片 */
 .ant-card {
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-primary);
   border-color: var(--color-border);
 }
 
-/* 选择框 select 暗色样式 */
+/* 选择框 */
+.ant-select-selector {
+  background: var(--color-bg-primary) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* 输入框 */
+.ant-input,
+.ant-input-affix-wrapper {
+  background: var(--color-bg-primary) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* 原生表单元素 */
 select {
-  background: var(--color-bg-secondary) !important;
+  background: var(--color-bg-primary) !important;
   color: var(--color-text-primary) !important;
   border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-md);
 }
 
 select option {
-  background: var(--color-bg-secondary);
+  background: var(--color-bg-primary);
   color: var(--color-text-primary);
 }
 
-/* 输入框暗色样式 */
 input, textarea {
-  background: var(--color-bg-secondary) !important;
+  background: var(--color-bg-primary) !important;
   color: var(--color-text-primary) !important;
   border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast);
+}
+
+input:focus, textarea:focus {
+  border-color: var(--color-primary) !important;
+  outline: none;
 }
 
 input::placeholder, textarea::placeholder {
   color: var(--color-text-tertiary);
 }
 
-/* header 暗色样式 */
+/* Header 通用样式 */
 .header {
-  background: var(--color-bg-secondary) !important;
+  background: var(--color-bg-primary) !important;
   border-bottom: 1px solid var(--color-border) !important;
 }
 
-/* 全局 logo-icon 样式 */
+/* Logo 样式 - 简洁黑色 */
 .logo-icon {
-  width: 32px !important;
-  height: 32px !important;
-  max-width: 32px !important;
-  max-height: 32px !important;
-  font-size: 24px;
+  width: 28px !important;
+  height: 28px !important;
   color: var(--color-primary);
 }
 
-/* 头部按钮间距 */
+.logo-text {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* 头部布局 */
 .header-left, .header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 </style>
+

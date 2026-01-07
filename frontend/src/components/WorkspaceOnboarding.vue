@@ -136,18 +136,18 @@ const handleCreate = async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+  background: var(--color-bg-primary);
   z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .onboarding-container {
   width: 100%;
   max-width: 500px;
-  padding: 40px;
+  padding: var(--space-10);
   text-align: center;
 }
 
@@ -162,59 +162,59 @@ const handleCreate = async () => {
 
 /* 欢迎页 */
 .logo-section {
-  margin-bottom: 48px;
+  margin-bottom: var(--space-12);
 }
 
 .logo-icon {
   width: 80px;
   height: 80px;
-  margin: 0 auto 24px;
-  background: linear-gradient(135deg, #5e6ad2, #8b5cf6);
-  border-radius: 20px;
+  margin: 0 auto var(--space-6);
+  background: var(--color-primary);
+  border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 40px;
+  color: white;
 }
 
 .logo-section h1 {
-  font-size: 32px;
+  font-size: var(--text-2xl);
   font-weight: 700;
-  margin-bottom: 8px;
-  background: linear-gradient(135deg, #fff, #a5b4fc);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  margin-bottom: var(--space-2);
+  color: var(--color-text-primary);
 }
 
 .subtitle {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 16px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-base);
 }
 
 .feature-list {
-  margin-bottom: 48px;
+  margin-bottom: var(--space-12);
   text-align: left;
 }
 
 .feature-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
-  margin-bottom: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  transition: all 0.2s;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-fast);
 }
 
 .feature-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-bg-tertiary);
 }
 
 .feature-icon {
   width: 32px;
   height: 32px;
-  background: linear-gradient(135deg, #5e6ad2, #8b5cf6);
+  background: var(--color-primary);
+  color: white;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -226,101 +226,102 @@ const handleCreate = async () => {
 .next-btn {
   width: 100%;
   height: 50px;
-  font-size: 16px;
+  font-size: var(--text-base);
   font-weight: 600;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
 }
 
 /* 创建工作空间页 */
 .step-header {
-  margin-bottom: 40px;
+  margin-bottom: var(--space-10);
 }
 
 .step-icon {
   width: 64px;
   height: 64px;
-  margin: 0 auto 20px;
-  background: rgba(250, 204, 21, 0.2);
-  border-radius: 16px;
+  margin: 0 auto var(--space-5);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 32px;
-  color: #facc15;
+  color: var(--color-text-secondary);
 }
 
 .step-header h2 {
-  font-size: 24px;
+  font-size: var(--text-xl);
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
+  color: var(--color-text-primary);
 }
 
 .step-desc {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
 }
 
 .form-section {
-  margin-bottom: 32px;
+  margin-bottom: var(--space-8);
 }
 
 .form-item {
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
   text-align: left;
 }
 
 .form-item label {
   display: block;
-  margin-bottom: 8px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
 }
 
 .required {
-  color: #ff6b6b;
+  color: var(--color-danger);
 }
 
 .form-item :deep(.ant-input) {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border-radius: 10px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-md);
 }
 
 .form-item :deep(.ant-input:focus) {
-  border-color: #5e6ad2;
+  border-color: var(--color-primary);
 }
 
 .form-item :deep(.ant-input::placeholder) {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-tertiary);
 }
 
 .create-btn {
   width: 100%;
   height: 50px;
-  font-size: 16px;
+  font-size: var(--text-base);
   font-weight: 600;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
 }
 
 /* 进度指示器 */
 .progress-dots {
   display: flex;
   justify-content: center;
-  gap: 8px;
-  margin-top: 40px;
+  gap: var(--space-2);
+  margin-top: var(--space-10);
 }
 
 .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  transition: all 0.3s;
+  background: var(--color-border);
+  transition: all var(--transition-base);
 }
 
 .dot.active {
   width: 24px;
-  border-radius: 4px;
-  background: #5e6ad2;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
 }
 </style>
