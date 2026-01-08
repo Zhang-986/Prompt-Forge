@@ -23,6 +23,7 @@ public class UserConverter {
                 .username(po.getUsername())
                 .password(po.getPassword())
                 .email(po.getEmail())
+                .nickname(po.getNickname())
                 .avatar(po.getAvatar())
                 .role(po.getRole())
                 .status(po.getStatus())
@@ -41,6 +42,7 @@ public class UserConverter {
         UserPO po = new UserPO();
         po.setId(domain.getId());
         po.setUsername(domain.getUsername());
+        po.setNickname(domain.getNickname());
         po.setPassword(domain.getPassword());
         po.setEmail(domain.getEmail());
         po.setAvatar(domain.getAvatar());

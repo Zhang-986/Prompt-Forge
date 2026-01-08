@@ -43,6 +43,72 @@ public class UserController {
     private final JwtUtil jwtUtil;
     private final LoginGuardService loginGuardService;
     private final EmailService emailService;
+    private final com.zzk.domain.service.StorageService storageService;
+
+    /**
+     * 上传头像
+     */
+    @PostMapping(value = "/avatar", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "上传头像")
+    public Result<String> uploadAvatar(
+            @RequestAttribute("userId") Long userId,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+
+        // 校验文件
+        if (file.isEmpty()) {
+            throw new BusinessException("文件不能为空");
+        }
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new BusinessException("文件大小不能超过 5MB");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new BusinessException("仅支持图片文件");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException("用户不存在"));
+
+        // 生成文件名: avatars/userId/timestamp_filename
+        String filename = "avatars/" + userId + "/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
+
+        // 上传
+        String avatarUrl = storageService.upload(filename, file);
+
+        // 更新用户头像
+        user.setAvatar(avatarUrl);
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user); // Repository implementation usually handles Entity -> PO conversion and
+                                   // verifies ID
+
+        return Result.success("上传成功", avatarUrl);
+    }
+
+    /**
+     * 更新个人资料 (昵称)
+     */
+    @PutMapping("/profile")
+    @Operation(summary = "更新个人资料")
+    public Result<Void> updateProfile(
+            @RequestAttribute("userId") Long userId,
+            @RequestBody Map<String, String> request) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException("用户不存在"));
+
+        if (request.containsKey("nickname")) {
+            String nickname = request.get("nickname");
+            if (nickname != null && nickname.length() > 50) {
+                throw new BusinessException("昵称长度不能超过 50 个字符");
+            }
+            user.setNickname(nickname);
+        }
+
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        return Result.success("更新成功", null);
+    }
 
     /**
      * 发送邮箱验证码
@@ -51,30 +117,30 @@ public class UserController {
     @Operation(summary = "发送邮箱验证码", description = "发送验证码到指定邮箱，用于注册验证")
     public Result<Map<String, Object>> sendEmailCode(@RequestBody Map<String, String> request) {
         String email = request.get("email");
-        
+
         if (email == null || email.isBlank()) {
             throw new BusinessException("邮箱不能为空");
         }
-        
+
         // 简单的邮箱格式验证
         if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
             throw new BusinessException("邮箱格式不正确");
         }
-        
+
         // 检查邮箱是否已注册
         if (userRepository.findByEmail(email).isPresent()) {
             throw new BusinessException("该邮箱已被注册");
         }
-        
+
         // 发送验证码
         int cooldown = emailService.sendVerificationCode(email);
-        
+
         Map<String, Object> data = new HashMap<>();
         if (cooldown > 0) {
             data.put("cooldown", cooldown);
             return Result.success("请稍后再试", data);
         }
-        
+
         data.put("cooldown", 60); // 返回默认冷却时间
         return Result.success("验证码已发送", data);
     }
@@ -134,26 +200,26 @@ public class UserController {
     public Result<Map<String, Object>> login(
             HttpServletRequest httpRequest,
             @Valid @RequestBody LoginRequest request) {
-        
+
         String ip = getClientIp(httpRequest);
         String username = request.getUsername();
         String userAgent = httpRequest.getHeader("User-Agent");
-        
+
         log.info("用户登录: username={}, ip={}", username, ip);
 
         // 1. 登录前检查（封禁/验证码）
         LoginAttemptInfo attemptInfo = loginGuardService.preLoginCheck(ip, username);
-        
+
         if (attemptInfo.banned()) {
             // 记录审计日志
             loginGuardService.logAudit(LoginAuditLog.failure(
                     username, ip, userAgent, LoginResult.BANNED, "账号被封禁"));
-            
+
             String bannedUntilStr = attemptInfo.bannedUntil()
                     .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
             throw new BusinessException("账号已被临时封禁，解封时间：" + bannedUntilStr);
         }
-        
+
         // 2. 验证码校验（需要验证码时必须校验）
         if (attemptInfo.captchaRequired()) {
             if (request.getCaptchaKey() == null || request.getCaptchaCode() == null) {
@@ -181,7 +247,7 @@ public class UserController {
             LoginAttemptInfo newAttempt = loginGuardService.recordFailure(ip, username, "密码错误");
             loginGuardService.logAudit(LoginAuditLog.failure(
                     username, ip, userAgent, LoginResult.FAILED_PASSWORD, "密码错误"));
-            
+
             // 返回友好提示
             if (newAttempt.banned()) {
                 String bannedUntilStr = newAttempt.bannedUntil()
@@ -203,7 +269,7 @@ public class UserController {
         // 6. 登录成功
         loginGuardService.recordSuccess(ip, username);
         loginGuardService.logAudit(LoginAuditLog.success(username, ip, userAgent));
-        
+
         // 生成 JWT Token
         String token = jwtUtil.generateToken(user.getId(), user.getUsername());
 
@@ -233,10 +299,10 @@ public class UserController {
     public Result<Map<String, Object>> checkLoginStatus(
             HttpServletRequest httpRequest,
             @RequestParam String username) {
-        
+
         String ip = getClientIp(httpRequest);
         LoginAttemptInfo attemptInfo = loginGuardService.preLoginCheck(ip, username);
-        
+
         Map<String, Object> data = new HashMap<>();
         data.put("captchaRequired", attemptInfo.captchaRequired());
         data.put("banned", attemptInfo.banned());
@@ -244,7 +310,7 @@ public class UserController {
             data.put("bannedUntil", attemptInfo.bannedUntil()
                     .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         }
-        
+
         return Result.success(data);
     }
 
@@ -334,15 +400,13 @@ public class UserController {
     }
 
     private String hashPassword(String password) {
-        org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder encoder = 
-            new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+        org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder encoder = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
         return encoder.encode(password);
     }
 
     private boolean verifyPassword(String rawPassword, String hashedPassword) {
         if (hashedPassword != null && hashedPassword.startsWith("$2a$")) {
-            org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder encoder = 
-                new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+            org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder encoder = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
             return encoder.matches(rawPassword, hashedPassword);
         }
         return String.valueOf(rawPassword.hashCode()).equals(hashedPassword);
@@ -352,6 +416,7 @@ public class UserController {
         Map<String, Object> info = new HashMap<>();
         info.put("id", user.getId());
         info.put("username", user.getUsername());
+        info.put("nickname", user.getNickname());
         info.put("email", user.getEmail());
         info.put("avatar", user.getAvatar());
         info.put("role", user.getRole());

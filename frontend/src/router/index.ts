@@ -40,6 +40,11 @@ const router = createRouter({
                     component: () => import('../views/ModelSettings.vue')
                 },
                 {
+                    path: 'settings/profile',
+                    name: 'UserProfile',
+                    component: () => import('../views/UserProfile.vue')
+                },
+                {
                     path: 'plaza',
                     name: 'Plaza',
                     component: () => import('../views/PromptPlaza.vue')

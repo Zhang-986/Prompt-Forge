@@ -200,6 +200,13 @@
             <version>4.12</version>
         </dependency>
 
+        <!-- ==================== Object Storage (R2/S3) ==================== -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.21.46</version>
+        </dependency>
+
         <!-- ==================== Testing ==================== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

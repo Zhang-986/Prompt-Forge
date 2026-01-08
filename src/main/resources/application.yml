@@ -199,6 +199,16 @@ cache:
 # 用户需要在"模型配置"页面添加自己的 API Key 才能使用竞技场功能
 # 支持的提供商: google, zhipu, deepseek, openai, claude
 
+# ==================== 对象存储配置 (Cloudflare R2) ====================
+storage:
+  r2:
+    endpoint: ${R2_ENDPOINT:https://68804c0b3846c9310e05d7245b86275a.r2.cloudflarestorage.com}
+    access-key: ${R2_ACCESS_KEY:5c562f198c2be13a654ede288caa51b9}
+    secret-key: ${R2_SECRET_KEY:be6057163a75fb3b973a2b0655b256ae03daaa316240761ba72859c3a77c34fd}
+    bucket-name: ${R2_BUCKET_NAME:prompt-forge}
+    region: ${R2_REGION:auto}
+    public-domain: ${R2_PUBLIC_DOMAIN:https://pub-51a06f6cca7d4620a8f119c9122507e4.r2.dev}
+
 # ==================== API 文档配置 ====================
 springdoc:
   api-docs:

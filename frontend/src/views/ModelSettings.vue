@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   getProviders,
@@ -13,7 +13,19 @@ import {
   type CreateConfigRequest
 } from '../api/modelConfig'
 import { message, Modal } from 'ant-design-vue'
-import { ArrowLeftOutlined, SettingOutlined, BulbOutlined, PlusOutlined, DeleteOutlined, StopOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
+import { ArrowLeftOutlined, SettingOutlined, BulbOutlined, PlusOutlined, DeleteOutlined, StopOutlined, PlayCircleOutlined, CheckCircleFilled } from '@ant-design/icons-vue'
+
+// Import Config Assets
+import iconOpenAI from '@/assets/openai.svg'
+import iconGemini from '@/assets/gemini-color.svg'
+import iconClaude from '@/assets/claude-color.svg'
+import iconDeepSeek from '@/assets/deepseek-color.svg'
+import iconQwen from '@/assets/qwen-color.svg'
+import iconZhipu from '@/assets/zhipu-color.svg'
+import iconHunyuan from '@/assets/hunyuan-color.svg'
+import iconCloudflare from '@/assets/cloudflare-color.svg'
+import iconGithub from '@/assets/githubcopilot.svg'
+import iconMoonshot from '@/assets/moonshot.svg'
 
 const router = useRouter()
 
@@ -39,6 +51,42 @@ const editForm = ref({
   modelName: '',
   enabled: true
 })
+
+// Provider Logos Map
+const logoMap: Record<string, string> = {
+  openai: iconOpenAI,
+  google: iconGemini,
+  claude: iconClaude,
+  deepseek: iconDeepSeek,
+  aliyun: iconQwen,
+  zhipu: iconZhipu,
+  hunyuan: iconHunyuan,
+  cloudflare: iconCloudflare,
+  github: iconGithub,
+  moonshot: iconMoonshot
+}
+
+// Provider Logos Component
+const ProviderLogo = (props: { providerId: string, size?: number }) => {
+  const size = props.size || 24
+  const style = { width: `${size}px`, height: `${size}px`, objectFit: 'contain' as const }
+  const pid = props.providerId?.toLowerCase()
+
+  if (logoMap[pid]) {
+    return h('img', { src: logoMap[pid], alt: pid, style })
+  }
+
+  // Fallback for providers without assets
+  switch (pid) {
+    default:
+      // Default robot icon
+      return h('svg', { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", 'stroke-width': 2, style }, [
+        h('rect', { x: 3, y: 11, width: 18, height: 10, rx: 2 }),
+        h('circle', { cx: 12, cy: 16, r: 2 }),
+        h('path', { d: "M8.5 11V7a3.5 3.5 0 0 1 7 0v4" })
+      ])
+  }
+}
 
 // 计算已配置的提供商
 const configuredProviders = computed(() => {
@@ -87,6 +135,53 @@ const editProviderModels = computed(() => {
   return defaultModels
 })
 
+// Preferences Logic
+// Preferences Logic
+const defaultOptimizeModel = ref<string | null>(localStorage.getItem('PF_DEFAULT_OPTIMIZE_MODEL') || null)
+const showPrefDialog = ref(false)
+
+// Compute all available models across all enabled configurations
+const availableModelsForPref = computed(() => {
+  const options: { label: string, value: string, provider: string, modelName: string, providerName: string }[] = []
+
+  configs.value.filter(c => c.enabled).forEach(config => {
+    const provider = providers.value.find(p => p.id === config.provider)
+    const providerName = provider?.name || config.provider
+
+    // Use default provider models
+    if (provider?.models) {
+      provider.models.forEach(m => {
+        options.push({
+          label: `${providerName} - ${m.name}`,
+          value: `${config.provider}:${m.id}`, // Format: "openai:gpt-4"
+          provider: config.provider,
+          modelName: m.name,
+          providerName: providerName
+        })
+      })
+    }
+  })
+  return options
+})
+
+const selectedModelInfoForPref = computed(() => {
+  if (!defaultOptimizeModel.value) return null
+  return availableModelsForPref.value.find(m => m.value === defaultOptimizeModel.value)
+})
+
+const selectPreference = (value: string) => {
+  defaultOptimizeModel.value = value
+  localStorage.setItem('PF_DEFAULT_OPTIMIZE_MODEL', value)
+  message.success('已保存默认优化模型')
+  showPrefDialog.value = false
+}
+
+const clearPreferences = () => {
+  defaultOptimizeModel.value = null
+  localStorage.removeItem('PF_DEFAULT_OPTIMIZE_MODEL')
+  message.info('已清除默认优化模型')
+}
+
 // 加载数据
 const loadData = async () => {
   loading.value = true
@@ -113,17 +208,12 @@ const getProviderInfo = (providerId: string) => {
   return providers.value.find(p => p.id === providerId)
 }
 
-// 获取提供商图标 - 返回空字符串，使用组件渲染图标
-const getProviderIcon = (_providerId: string) => {
-  return '' // 不再使用 emoji
-}
-
 // 选择提供商时填充默认值
 const onProviderSelect = (providerId: string) => {
   const provider = getProviderInfo(providerId)
   if (provider) {
     addForm.value.baseUrl = provider.defaultBaseUrl
-    addForm.value.modelName = provider.defaultModel
+    addForm.value.modelName = provider.defaultModel // 默认选中默认模型
   }
 }
 
@@ -141,8 +231,16 @@ const openAddDialog = () => {
 // 添加配置
 const handleAdd = async () => {
   if (!addForm.value.provider || !addForm.value.apiKey) {
-    message.warning('请填写必填项')
+    message.warning('请填写提供商和 API Key')
     return
+  }
+
+  // 如果没有选择模型，使用默认的 (已经在 onProviderSelect 中设置了，但防万一)
+  if (!addForm.value.modelName) {
+    const provider = getProviderInfo(addForm.value.provider)
+    if (provider) {
+      addForm.value.modelName = provider.defaultModel
+    }
   }
 
   try {
@@ -204,21 +302,8 @@ const handleToggle = async (config: ModelConfig) => {
 
 // 刷新可用模型
 const handleRefresh = async (config: ModelConfig) => {
-  const hide = message.loading('正在获取模型列表...', 0)
-  try {
-    const res = await refreshModelConfig(config.id)
-    if (res.code === 200) {
-      message.success(`成功获取 ${res.data.length} 个模型`)
-      // 更新本地数据
-      config.availableModels = JSON.stringify(res.data)
-    } else {
-      message.error(res.message || '获取失败')
-    }
-  } catch (e) {
-    message.error('获取失败，请检查 Base URL 和 API Key')
-  } finally {
-    hide()
-  }
+  // 此功能已废弃，现在由后端自动处理模型列表
+  message.info('系统会自动列出所有支持的模型')
 }
 
 // 删除配置
@@ -251,8 +336,6 @@ onMounted(() => {
 
 <template>
   <div class="settings-container">
-    <!-- Header Removed -->
-
     <main class="main-content">
       <!-- Minimalist Info Block -->
       <div class="info-card">
@@ -261,8 +344,46 @@ onMounted(() => {
         </div>
         <div class="info-content">
           <h3>配置说明</h3>
-          <p>在这里配置您的 AI 模型 API Key。配置后将在竞技场中使用您的配置调用模型。</p>
-          <p>未配置的提供商将尝试使用系统默认配置（如果可用）。</p>
+          <p>在这里配置您的 AI 模型 API Key。配置后即可在竞技场、Prompt 教练和 AI 优化功能中调用对应厂商的所有模型。</p>
+        </div>
+      </div>
+
+      <!-- Preferences Section (Global Settings) -->
+      <div class="preferences-section">
+        <div class="section-header">
+          <h3>偏好设置</h3>
+        </div>
+
+        <div class="config-list">
+          <!-- Default Optimize Model Card -->
+          <div class="config-item-row">
+            <div class="row-left">
+              <div class="provider-icon-wrapper"
+                :style="selectedModelInfoForPref ? {} : { background: '#f5f5f5', color: '#ccc' }">
+                <ProviderLogo v-if="selectedModelInfoForPref" :providerId="selectedModelInfoForPref.provider"
+                  :size="24" />
+                <SettingOutlined v-else />
+              </div>
+              <div class="row-info">
+                <span class="provider-name">默认 AI 优化模型</span>
+                <span class="model-status" v-if="selectedModelInfoForPref" style="color: #4b5563;">
+                  当前选择: <strong>{{ selectedModelInfoForPref.label }}</strong>
+                </span>
+                <span class="model-status disabled" v-else>
+                  未设置 (每次询问)
+                </span>
+              </div>
+            </div>
+            <div class="row-right">
+              <button class="add-btn" @click="showPrefDialog = true"
+                style="background: #fff; color: #000; border: 1px solid #e5e7eb;">
+                <SettingOutlined /> 配置
+              </button>
+              <button v-if="defaultOptimizeModel" class="icon-btn delete" @click="clearPreferences" title="清除设置">
+                <DeleteOutlined />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -280,6 +401,9 @@ onMounted(() => {
         </div>
 
         <div v-else-if="configs.length === 0" class="empty-state">
+          <div class="empty-icon">
+            <SettingOutlined />
+          </div>
           <p>暂无配置，点击上方按钮添加您的第一个模型配置</p>
         </div>
 
@@ -289,26 +413,26 @@ onMounted(() => {
 
             <div class="row-left">
               <div class="provider-icon-wrapper">
-                {{ getProviderIcon(config.provider) || '🤖' }}
+                <ProviderLogo :providerId="config.provider" :size="24" />
               </div>
               <div class="row-info">
                 <span class="provider-name">{{ getProviderInfo(config.provider)?.name || config.provider }}</span>
-                <span class="model-name">
-                  {{ config.modelName || getProviderInfo(config.provider)?.defaultModel }}
+                <!-- 隐藏具体模型名，因为现在支持选任意模型，这里显示状态即可 -->
+                <span class="model-status" v-if="config.enabled">
+                  <CheckCircleFilled class="status-icon" /> 已准备就绪
+                </span>
+                <span class="model-status disabled" v-else>
+                  <StopOutlined class="status-icon" /> 已暂停使用
                 </span>
               </div>
             </div>
 
             <div class="row-right">
-              <div class="status-badge" :class="{ enabled: config.enabled, disabled: !config.enabled }">
-                {{ config.enabled ? '已启用' : '已禁用' }}
-              </div>
-
               <div class="row-actions">
-                <button class="icon-btn" @click="handleToggle(config)" :title="config.enabled ? '禁用' : '启用'">
+                <button class="icon-btn" @click="handleToggle(config)" :title="config.enabled ? '暂停' : '启用'">
                   <component :is="config.enabled ? 'StopOutlined' : 'PlayCircleOutlined'" />
                 </button>
-                <button class="icon-btn edit" @click="openEditDialog(config)" title="编辑">
+                <button class="icon-btn edit" @click="openEditDialog(config)" title="编辑高级配置">
                   <SettingOutlined />
                 </button>
                 <button class="icon-btn delete" @click="handleDelete(config)" title="删除">
@@ -332,34 +456,47 @@ onMounted(() => {
         <div class="dialog-body">
           <div class="form-item">
             <label>选择提供商 <span class="required">*</span></label>
-            <select v-model="addForm.provider" @change="onProviderSelect(addForm.provider)">
-              <option value="" disabled>请选择提供商</option>
-              <option v-for="p in availableProviders" :key="p.id" :value="p.id">
-                {{ getProviderIcon(p.id) }} {{ p.name }}
-              </option>
-            </select>
+            <div class="provider-grid">
+              <div v-for="p in availableProviders" :key="p.id" class="provider-option"
+                :class="{ selected: addForm.provider === p.id }"
+                @click="addForm.provider = p.id; onProviderSelect(p.id)">
+                <ProviderLogo :providerId="p.id" :size="24" />
+                <span>{{ p.name }}</span>
+              </div>
+            </div>
           </div>
-          <div class="form-item">
-            <label>API Key <span class="required">*</span></label>
-            <input v-model="addForm.apiKey" type="password" placeholder="请输入 API Key" />
-          </div>
-          <div class="form-item">
-            <label>Base URL</label>
-            <input v-model="addForm.baseUrl" type="text" placeholder="留空使用默认值" />
-          </div>
-          <div class="form-item">
-            <label>模型选择</label>
-            <select v-model="addForm.modelName" :disabled="!addForm.provider">
-              <option value="">使用默认模型</option>
-              <option v-for="m in currentProviderModels" :key="m.id" :value="m.id">
-                {{ m.name }} - {{ m.description }}
-              </option>
-            </select>
-          </div>
+
+          <template v-if="addForm.provider">
+            <div class="form-item">
+              <label>API Key <span class="required">*</span></label>
+              <input v-model="addForm.apiKey" type="password" placeholder="请输入 API Key" class="dialog-input" />
+            </div>
+
+            <!-- 高级设置折叠 -->
+            <div class="advanced-settings-toggle">
+              <a-collapse ghost>
+                <a-collapse-panel key="1" header="高级设置 (Base URL / 代理)">
+                  <div class="form-item">
+                    <label>Base URL</label>
+                    <input v-model="addForm.baseUrl" type="text" placeholder="https://..." class="dialog-input" />
+                    <div class="field-hint">如果您使用代理或中转服务，请在此输入。</div>
+                  </div>
+                  <div class="form-item">
+                    <label>默认模型 (可选)</label>
+                    <select v-model="addForm.modelName" class="dialog-input">
+                      <option v-for="m in currentProviderModels" :key="m.id" :value="m.id">
+                        {{ m.name }}
+                      </option>
+                    </select>
+                  </div>
+                </a-collapse-panel>
+              </a-collapse>
+            </div>
+          </template>
         </div>
         <div class="dialog-footer">
           <button class="btn cancel" @click="showAddDialog = false">取消</button>
-          <button class="btn primary" @click="handleAdd">确认添加</button>
+          <button class="btn primary" @click="handleAdd" :disabled="!addForm.provider || !addForm.apiKey">确认添加</button>
         </div>
       </div>
     </div>
@@ -368,27 +505,29 @@ onMounted(() => {
     <div v-if="showEditDialog" class="dialog-overlay" @click.self="showEditDialog = false">
       <div class="dialog">
         <div class="dialog-header">
-          <h3>编辑配置 - {{ getProviderInfo(editingConfig?.provider || '')?.name }}</h3>
+          <h3>配置管理 - {{ getProviderInfo(editingConfig?.provider || '')?.name }}</h3>
           <button class="close-btn" @click="showEditDialog = false">×</button>
         </div>
         <div class="dialog-body">
           <div class="form-item">
-            <label>API Key</label>
-            <input v-model="editForm.apiKey" type="password" placeholder="不修改请留空" />
+            <label>更新 API Key</label>
+            <input v-model="editForm.apiKey" type="password" placeholder="如果要修改 Key，请在此输入新的 Key" class="dialog-input" />
           </div>
           <div class="form-item">
-            <label>Base URL</label>
-            <input v-model="editForm.baseUrl" type="text" placeholder="留空使用默认值" />
+            <label>Base URL (代理地址)</label>
+            <input v-model="editForm.baseUrl" type="text" placeholder="留空使用默认官方地址" class="dialog-input" />
           </div>
-          <div class="form-item">
-            <label>模型选择</label>
-            <select v-model="editForm.modelName">
-              <option value="">使用默认模型</option>
+
+          <!-- 隐藏具体模型选择，因为现在更推荐动态选择，这里只作为底层默认值 -->
+          <div class="form-item" style="display: none;">
+            <select v-model="editForm.modelName" class="dialog-input">
               <option v-for="m in editProviderModels" :key="m.id" :value="m.id">
-                {{ m.name }} - {{ m.description }}
+                {{ m.name }}
               </option>
             </select>
           </div>
+
+
           <div class="form-item switch-row">
             <span class="switch-label">启用此配置</span>
             <a-switch v-model:checked="editForm.enabled" />
@@ -400,6 +539,32 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+
+
+    <!-- Preference Selection Modal -->
+    <div v-if="showPrefDialog" class="dialog-overlay" @click.self="showPrefDialog = false">
+      <div class="dialog">
+        <div class="dialog-header">
+          <h3>选择默认 AI 优化模型</h3>
+          <button class="close-btn" @click="showPrefDialog = false">×</button>
+        </div>
+        <div class="dialog-body">
+          <div class="provider-grid">
+            <div v-for="m in availableModelsForPref" :key="m.value" class="provider-option"
+              :class="{ selected: defaultOptimizeModel === m.value }" @click="selectPreference(m.value)">
+              <ProviderLogo :providerId="m.provider" :size="32" />
+              <span style="font-weight: 500;">{{ m.modelName }}</span>
+              <span style="font-size: 11px; color: #999;">{{ m.providerName }}</span>
+            </div>
+          </div>
+          <div v-if="availableModelsForPref.length === 0" class="empty-state" style="padding: 20px;">
+            <p>暂无可用模型，请先添加模型配置</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -418,21 +583,8 @@ onMounted(() => {
   border: 1px solid var(--color-border);
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-4) var(--space-8);
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg-primary);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
 .main-content {
   max-width: 800px;
-  /* Reduced max-width for better reading flow in list view */
   margin: 0 auto;
   padding: var(--space-8);
 }
@@ -484,7 +636,7 @@ onMounted(() => {
 }
 
 .add-btn {
-  padding: var(--space-2) var(--space-4);
+  padding: 8px 16px;
   background: #000;
   border: none;
   border-radius: var(--radius-md);
@@ -495,11 +647,16 @@ onMounted(() => {
   font-weight: 500;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
 }
 
 .add-btn:hover:not(:disabled) {
   background: #333;
+}
+
+.add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Config List (Replaces Grid) */
@@ -522,12 +679,16 @@ onMounted(() => {
 
 .config-item-row:hover {
   border-color: var(--color-text-tertiary);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .config-item-row.disabled {
-  opacity: 0.6;
-  background: var(--color-bg-secondary);
+  opacity: 0.8;
+  background: #fafafa;
+}
+
+.config-item-row.disabled .provider-name {
+  color: var(--color-text-secondary);
 }
 
 .row-left {
@@ -537,32 +698,39 @@ onMounted(() => {
 }
 
 .provider-icon-wrapper {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   background: var(--color-bg-secondary);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--text-xl);
+  color: var(--color-text-primary);
 }
 
 .row-info {
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
 .provider-name {
   font-weight: 600;
-  font-size: var(--text-base);
+  font-size: 15px;
   color: var(--color-text-primary);
 }
 
-.model-name {
-  font-size: var(--text-sm);
+.model-status {
+  font-size: 12px;
+  color: #10B981;
+  /* Green */
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.model-status.disabled {
   color: var(--color-text-secondary);
-  font-family: var(--font-mono);
-  margin-top: 2px;
 }
 
 .row-right {
@@ -571,35 +739,18 @@ onMounted(() => {
   gap: var(--space-4);
 }
 
-.status-badge {
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.status-badge.enabled {
-  background: #000;
-  color: #fff;
-}
-
-.status-badge.disabled {
-  background: var(--color-bg-tertiary);
-  color: var(--color-text-secondary);
-}
-
 .row-actions {
   display: flex;
-  gap: var(--space-3);
+  gap: 8px;
 }
 
 .icon-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--color-text-tertiary);
   border-radius: var(--radius-md);
@@ -610,20 +761,31 @@ onMounted(() => {
 .icon-btn:hover {
   background: var(--color-bg-secondary);
   color: var(--color-text-primary);
+  border-color: var(--color-border);
 }
 
 .icon-btn.delete:hover {
   background: #fee2e2;
   color: #dc2626;
+  border-color: #fecaca;
 }
 
 /* Empty State */
 .empty-state {
   text-align: center;
-  padding: var(--space-10);
+  padding: 60px 20px;
   background: var(--color-bg-secondary);
   border-radius: var(--radius-lg);
   color: var(--color-text-tertiary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
 }
 
 /* Dialog Styles */
@@ -638,25 +800,28 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
 }
 
 .dialog {
   background: #fff;
   border-radius: var(--radius-xl);
-  width: 480px;
+  width: 500px;
   max-width: 90vw;
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   overflow: hidden;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .dialog-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-5);
+  padding: 16px 24px;
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg-primary);
+  background: #fff;
 }
 
 .dialog-header h3 {
@@ -677,6 +842,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  line-height: 1;
 }
 
 .close-btn:hover {
@@ -685,75 +851,147 @@ onMounted(() => {
 }
 
 .dialog-body {
-  padding: var(--space-6);
+  padding: 24px;
+  overflow-y: auto;
 }
 
 .form-item {
-  margin-bottom: var(--space-5);
+  margin-bottom: 20px;
 }
 
 .form-item label {
   display: block;
-  margin-bottom: var(--space-2);
+  margin-bottom: 8px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--color-text-primary);
 }
 
-.form-item input,
-.form-item select {
+.form-item label .required {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+.dialog-input {
   width: 100%;
-  padding: 12px;
+  padding: 10px 12px;
   background: #fff;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   font-size: 14px;
   outline: none;
-  transition: border 0.2s;
+  transition: all 0.2s;
 }
 
-.form-item input:focus,
-.form-item select:focus {
+.dialog-input:focus {
   border-color: #000;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
 }
+
+.field-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+/* Provider Grid */
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 12px;
+}
+
+.provider-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.provider-option:hover {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-text-tertiary);
+}
+
+.provider-option.selected {
+  border-color: #000;
+  background: #fdfdfd;
+  box-shadow: 0 0 0 1px #000 inset;
+}
+
+.provider-option span {
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.2;
+  color: var(--color-text-secondary);
+}
+
+.provider-option.selected span {
+  color: #000;
+  font-weight: 500;
+}
+
 
 .dialog-footer {
-  padding: var(--space-5);
+  padding: 16px 24px;
   border-top: 1px solid var(--color-border);
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-3);
-  background: var(--color-bg-primary);
+  gap: 12px;
+  background: #f9fafe;
 }
 
 .btn {
-  padding: 10px 20px;
+  padding: 8px 20px;
   border-radius: var(--radius-md);
   font-size: 14px;
   cursor: pointer;
   font-weight: 500;
-  transition: all var(--transition-fast);
+  transition: all 0.2s;
+  border: 1px solid transparent;
 }
 
 .btn.cancel {
-  background: transparent;
-  border: 1px solid var(--color-border);
+  background: white;
+  border-color: var(--color-border);
   color: var(--color-text-primary);
 }
 
 .btn.cancel:hover {
   background: var(--color-bg-secondary);
+  border-color: var(--color-text-tertiary);
 }
 
 .btn.primary {
   background: #000;
-  border: 1px solid #000;
   color: #fff;
 }
 
-.btn.primary:hover {
+.btn.primary:hover:not(:disabled) {
   background: #333;
-  border-color: #333;
   transform: translateY(-1px);
+}
+
+.btn.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Switch Styles */
+.switch-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.switch-label {
+  font-size: 14px;
+  font-weight: 500;
 }
 </style>

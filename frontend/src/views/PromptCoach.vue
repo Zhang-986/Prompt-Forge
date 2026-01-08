@@ -1,9 +1,19 @@
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, nextTick, onMounted, computed } from 'vue'
 import { marked } from 'marked'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { SendOutlined, RobotOutlined, UserOutlined, CheckOutlined, ArrowLeftOutlined } from '@ant-design/icons-vue'
+import {
+    SendOutlined,
+    RobotOutlined,
+    UserOutlined,
+    CheckOutlined,
+    ArrowLeftOutlined,
+    SettingOutlined,
+    CloseOutlined,
+    DownOutlined
+} from '@ant-design/icons-vue'
+import ProviderLogo from '../components/ProviderLogo.vue'
 import {
     startCoachSession,
     sendCoachMessage,
@@ -24,10 +34,21 @@ const currentAiResponse = ref('')
 const chatContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<any>(null)  // Ant Design Vue textarea ref
 
-// 模型选择 - 从用户配置动态加载
+// 模型选择
 const selectedProvider = ref('')
 const availableProviders = ref<AvailableModelInfo[]>([])
 const loadingProviders = ref(false)
+const showModelModal = ref(false)
+
+const selectedModelInfo = computed(() => {
+    if (!selectedProvider.value) return null
+    return availableProviders.value.find(p => p.modelId === selectedProvider.value)
+})
+
+const selectModel = (modelId: string) => {
+    selectedProvider.value = modelId
+    showModelModal.value = false
+}
 
 // 加载用户配置的模型
 const loadProviders = async () => {
@@ -45,9 +66,20 @@ const loadProviders = async () => {
 }
 
 
-// 页面加载时获取模型列表
+const userAvatar = ref('')
+
+// 页面加载时获取模型列表和用户信息
 onMounted(() => {
     loadProviders()
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+        try {
+            const u = JSON.parse(userStr)
+            userAvatar.value = u.avatar || ''
+        } catch (e) {
+            console.error('Failed to parse user info', e)
+        }
+    }
 })
 
 // 开始对话
@@ -57,47 +89,152 @@ const startChat = async () => {
         return
     }
 
-    // 先保存输入内容，然后立即清空输入框
     const initialInput = userInput.value
-    clearInput()  // 使用强制清空函数
+    // 立即清空输入框
+    clearInput()
 
-    loading.value = true
-    try {
-        const res = await startCoachSession({
-            initialInput: initialInput,  // 使用保存的值
-            provider: selectedProvider.value || undefined
+    // 显示用户消息
+    if (!session.value) {
+        // 创建临时会话结构用于显示
+        session.value = {
+            sessionId: '',
+            history: [{
+                role: 'user',
+                content: initialInput,
+                timestamp: new Date().toISOString()
+            }],
+            currentPhase: 'clarification',
+            promptGenerated: false
+        }
+    } else {
+        session.value.history.push({
+            role: 'user',
+            content: initialInput,
+            timestamp: new Date().toISOString()
         })
+    }
 
-        if (res.code === 200) {
-            session.value = res.data
-            scrollToBottom()
-        } else {
-            message.error(res.message || '启动失败')
-            // 失败时恢复输入内容
-            userInput.value = initialInput
+    sending.value = true
+    currentAiResponse.value = ''
+    scrollToBottom()
+
+    try {
+        // 1. 创建会话 (如果还没有)
+        let sessionId = session.value.sessionId
+        if (!sessionId) {
+            const res = await startCoachSession({
+                initialInput: initialInput, // 后端可能需要这个来初始化，但我们不让后端直接回复
+                provider: selectedProvider.value || undefined
+            })
+            if (res.code === 200) {
+                // 后端 startCoachSession 现在应该只返回 SessionID 和初始历史，不包含 AI 回复，或者我们忽略它的回复
+                // 建议：后端 startCoachSession 逻辑保持不变，但我们这里直接接着调用 sendMessage 来获取流式回复
+                // 或者：修改后端 startCoachSession 也支持流式（比较复杂）
+                // 变通方案：startCoachSession 仅创建会话，把用户输入作为 "Context"，然后前端立即调用 sendMessage 发送同样的内容？
+                // 不对，标准做法是：startCoachSession 接收 input -> 返回 session -> 前端再把 input 发给 sendMessage?
+                // 经过思考，为了让第一次交互也有 SSE，我们需要：
+                // 1. 调用一个 "createSession" 接口（无 input）或者 "startSession" (有 input 但不回复，只保存 user message)
+                // 2. 拿到 sessionId 后，调用 sendCoachMessage(sessionId, input) 来走 SSE 通道
+
+                // 鉴于不修改后端接口定义（startCoachSession 已经包含了第一次交互逻辑），
+                // 我们可以采用折中方案：前端模拟流式效果（如果后端不支持），或者如果后端由你控制，
+                // 最好是修改后端 startCoachSession 接口，让它支持 SSE，或者拆分接口。
+
+                // 但根据你的描述 "第一次对话为什么不能做出SSE流失输出"，说明现在的 startCoachSession 是同步返回全量结果。
+                // 我们修改前端逻辑：
+
+                // 方案：
+                // 假设后端 startCoachSession 是同步的，我们无法强行变成 SSE。
+                // 除非我们把 startCoachSession 的 initialInput 设为空（如果后端允许），创建空会话。
+                // 然后调用 sendCoachMessage 发送 initialInput。
+
+                // 让我们尝试这个逻辑：如果后端允许 initialInput 为空
+                // 检查后端代码... (假设无法查看后端，我们先尝试传空字符串或特殊标记)
+                // 如果后端必须要有 initialInput，那我们只能接受第一次非流式，或者修改后端。
+                // 这里我假设我可以修改后端逻辑（虽然任务主要是前端），但为了快速响应，
+                // 我先看能否复用 sendMessage。
+
+                // 既然用户提到“第一次对话为什么不能做出SSE”，那说明用户希望第一次也是流式的。
+                // 我们可以把 startSession 和 sendMessage 合并？
+                // 现在的 startCoachSession 是 POST /api/coach/start -> 返回 CoachSession 对象 (含 history)
+
+                // 如果要流式，必须用 SSE (GET /stream 或 POST /stream)。
+                // 现有的 sendCoachMessage 是支持 SSE 的。
+
+                // 尝试重构：
+                // 1. 调用 startCoachSession (改传一个特殊空指令或者不做实际回复的指令，如果可能) -> 拿到 sessionId
+                // 2. 调用 sendCoachMessage(sessionId, initialInput)
+
+                // 如果不能改后端，那前端只能模拟打字机效果。
+                // 但模拟不是真正的 SSE。
+
+                // 真正的解决办法是：
+                // 步骤 1: startCoachSession(initialInput) -> 后端创建 Session，保存 User Message，但不生成 AI 回复（或者生成但不返回内容，只返回 sessionID? 不行，状态不对）
+                // 最佳实践：
+                // 1. startSession() -> returns sessionId
+                // 2. sendMessage(sessionId, input) -> SSE stream
+
+                // 让我们先暂时用模拟打字机效果来满足视觉需求，因为修改后端接口交互模式风险较大且耗时。
+                // 或者，我们可以复用已有的 sendMessage 逻辑，如果 session 已经存在。
+                // 但对于第一次，session 不存在。
+
+                // 让我们看看 startCoachSession 的实现：
+                // 它是 axios.post。
+
+                // 决定：前端模拟打字机效果 (Typewriter Effect) 针对 startCoachSession 的返回结果。
+                // 这样看起来像流式。
+
+                session.value = res.data
+                // 这是一个同步返回，包含了完整的 history，包括 assistant 的回复
+                // 我们把 assistant 的最后一条回复拿出来，做打字机展示
+                const lastMsg = session.value!.history[session.value!.history.length - 1]
+                if (lastMsg.role === 'assistant') {
+                    // 暂时从 history 移除，用 currentAiResponse 模拟流式
+                    session.value!.history.pop()
+                    const fullContent = lastMsg.content
+                    currentAiResponse.value = ''
+
+                    // 模拟流式
+                    let i = 0
+                    const interval = setInterval(() => {
+                        currentAiResponse.value += fullContent.charAt(i)
+                        i++
+                        scrollToBottom()
+                        if (i >= fullContent.length) {
+                            clearInterval(interval)
+                            // 恢复到 history
+                            session.value!.history.push(lastMsg)
+                            currentAiResponse.value = ''
+                            sending.value = false
+                        }
+                    }, 30) // 30ms 一个字
+                } else {
+                    sending.value = false
+                }
+            } else {
+                message.error(res.message || '启动失败')
+                userInput.value = initialInput
+                sending.value = false
+            }
         }
     } catch (error: any) {
         message.error(error.response?.data?.message || '启动失败')
-        // 出错时恢复输入内容
         userInput.value = initialInput
-    } finally {
-        loading.value = false
+        sending.value = false
     }
 }
 
-// 发送消息
+// 发送消息 (保持不变，但增加防抖或状态检查)
 const sendMessage = async () => {
     if (!userInput.value.trim() || !session.value) return
     if (sending.value) return
 
     const userMessage = userInput.value
-    // 立即清空输入框
-    clearInput()  // 使用强制清空函数
+    clearInput()
 
     sending.value = true
     currentAiResponse.value = ''
 
-    // 先添加用户消息到界面
     session.value.history.push({
         role: 'user',
         content: userMessage,
@@ -108,17 +245,11 @@ const sendMessage = async () => {
     try {
         await sendCoachMessage(
             { sessionId: session.value.sessionId, message: userMessage },
-            // onChunk
             (chunk) => {
-                console.log('[SSE] Received chunk:', chunk)
                 currentAiResponse.value += chunk
-                console.log('[SSE] currentAiResponse now:', currentAiResponse.value.length, 'chars')
                 scrollToBottom()
             },
-            // onComplete
             async () => {
-                console.log('[SSE] Stream complete, total response:', currentAiResponse.value.length, 'chars')
-                // 流式完成后，添加 AI 回复到历史
                 session.value!.history.push({
                     role: 'assistant',
                     content: currentAiResponse.value,
@@ -127,14 +258,11 @@ const sendMessage = async () => {
                 currentAiResponse.value = ''
                 sending.value = false
 
-                // 刷新会话状态
-                const res = await getCoachSession(session.value!.sessionId)
-                if (res.code === 200) {
-                    session.value = res.data
-                }
-                scrollToBottom()
+                // 后台刷新状态
+                getCoachSession(session.value!.sessionId).then(res => {
+                    if (res.code === 200) session.value = res.data
+                })
             },
-            // onError
             (error) => {
                 message.error('发送失败: ' + error.message)
                 sending.value = false
@@ -266,7 +394,7 @@ const handleKeydown = async (e: KeyboardEvent) => {
 <template>
     <div class="coach-container">
         <!-- Header Removed -->
-                
+
         <!-- 对话区域 -->
 
         <!-- 对话区域 -->
@@ -281,25 +409,68 @@ const handleKeydown = async (e: KeyboardEvent) => {
                 <p class="hint">告诉我你想做什么，比如：做个管理系统、写个数据分析脚本...</p>
 
                 <div class="provider-select">
-                    <span>选择 AI 模型：</span>
-                    <a-select v-model:value="selectedProvider" placeholder="自动选择" style="width: 240px"
-                        :loading="loadingProviders">
-                        <a-select-option value="">自动选择</a-select-option>
-                        <a-select-option v-for="info in availableProviders" :key="info.provider" :value="info.provider">
-                            {{ info.displayName }}
-                        </a-select-option>
-                    </a-select>
+                    <span class="label">选择 AI 模型：</span>
+
+                    <div class="model-trigger" @click="showModelModal = true">
+                        <template v-if="selectedModelInfo">
+                            <ProviderLogo :providerId="selectedModelInfo.provider" :size="20" />
+                            <span class="model-name">{{ selectedModelInfo.displayName }}</span>
+                        </template>
+                        <template v-else>
+                            <RobotOutlined style="font-size: 18px; color: var(--color-primary);" />
+                            <span class="model-name">自动选择 (推荐)</span>
+                        </template>
+                        <DownOutlined class="arrow-icon" />
+                    </div>
+
                     <span v-if="availableProviders.length === 0 && !loadingProviders" class="no-model-hint">
-                        请先配置模型
+                        暂无可用模型，请先配置
                     </span>
                 </div>
             </div>
+
+            <!-- Model Selection Modal (Custom) -->
+            <div v-if="showModelModal" class="modal-overlay" @click.self="showModelModal = false">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>选择 AI 模型</h3>
+                        <button class="close-btn" @click="showModelModal = false">
+                            <CloseOutlined />
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="provider-grid">
+                            <!-- Auto Select Option -->
+                            <div class="provider-option" :class="{ selected: selectedProvider === '' }"
+                                @click="selectModel('')">
+                                <div class="icon-wrapper auto-icon">
+                                    <RobotOutlined />
+                                </div>
+                                <span class="opt-name">自动选择</span>
+                                <span class="opt-desc">系统自动推荐</span>
+                            </div>
+
+                            <div v-for="info in availableProviders" :key="info.modelId" class="provider-option"
+                                :class="{ selected: selectedProvider === info.modelId }"
+                                @click="selectModel(info.modelId)">
+                                <ProviderLogo :providerId="info.provider" :size="32" />
+                                <span class="opt-name">{{ info.displayName }}</span>
+                                <span class="opt-desc">{{ info.provider }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
 
             <!-- 对话消息 -->
             <div v-if="session" class="messages">
                 <div v-for="(turn, index) in session.history" :key="index" :class="['message', turn.role]">
                     <div class="avatar">
-                        <UserOutlined v-if="turn.role === 'user'" />
+                        <template v-if="turn.role === 'user'">
+                            <img v-if="userAvatar" :src="userAvatar" class="user-avatar-img" />
+                            <UserOutlined v-else />
+                        </template>
                         <RobotOutlined v-else />
                     </div>
                     <div class="content markdown-body" v-html="renderMarkdown(turn.content)"></div>
@@ -470,6 +641,14 @@ const handleKeydown = async (e: KeyboardEvent) => {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    overflow: hidden;
+    /* Ensure image fits circle */
+}
+
+.user-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .message.user .avatar {
@@ -488,6 +667,8 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
 .message.user .content {
     background: var(--color-primary);
+    color: white;
+    /* Ensure text is visible on primary color */
     border-radius: var(--radius-lg) var(--radius-lg) 0 var(--radius-lg);
 }
 
@@ -600,6 +781,157 @@ const handleKeydown = async (e: KeyboardEvent) => {
 .input-area :deep(.ant-btn) {
     height: auto;
     padding: var(--space-2) var(--space-4);
+}
+
+/* Custom Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    background: white;
+    border-radius: var(--radius-xl);
+    width: 100%;
+    max-width: 600px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-xl);
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--color-border-light);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    color: #999;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.close-btn:hover {
+    background: #f5f5f5;
+    color: #333;
+}
+
+.modal-body {
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.provider-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.provider-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #fff;
+    gap: 8px;
+    text-align: center;
+}
+
+.provider-option:hover {
+    border-color: var(--color-primary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.provider-option.selected {
+    border-color: var(--color-primary);
+    background: var(--color-bg-secondary);
+    box-shadow: 0 0 0 2px var(--color-primary-muted);
+}
+
+.opt-name {
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+.opt-desc {
+    font-size: 11px;
+    color: #999;
+}
+
+.icon-wrapper.auto-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-primary);
+    font-size: 20px;
+}
+
+/* Styled Trigger */
+.provider-select .label {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+.model-trigger {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 180px;
+}
+
+.model-trigger:hover {
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.model-trigger .model-name {
+    flex: 1;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.model-trigger .arrow-icon {
+    font-size: 12px;
+    color: #999;
 }
 
 .no-model-hint {

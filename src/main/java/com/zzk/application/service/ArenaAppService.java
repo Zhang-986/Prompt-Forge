@@ -33,12 +33,13 @@ import java.util.stream.Collectors;
 /**
  * 竞技场应用服务
  * 
- * <p>负责业务编排：
+ * <p>
+ * 负责业务编排：
  * <ul>
- *   <li>解析 Prompt 模板，渲染变量</li>
- *   <li>并行调用多个 AI 模型（使用用户配置）</li>
- *   <li>SSE 流式推送结果</li>
- *   <li>保存竞技历史记录</li>
+ * <li>解析 Prompt 模板，渲染变量</li>
+ * <li>并行调用多个 AI 模型（使用用户配置）</li>
+ * <li>SSE 流式推送结果</li>
+ * <li>保存竞技历史记录</li>
  * </ul>
  * 
  * @author zzk
@@ -57,6 +58,7 @@ public class ArenaAppService {
     private final DynamicLlmClientFactory dynamicLlmFactory;
     private final ObjectMapper objectMapper;
     private final ArenaVoteMapper arenaVoteMapper;
+    private final com.zzk.application.service.UserModelConfigAppService userModelConfigAppService;
 
     @Qualifier("arenaExecutor")
     private final ThreadPoolExecutor arenaExecutor;
@@ -64,8 +66,8 @@ public class ArenaAppService {
     /**
      * 启动竞技场对比（SSE 流式）- 使用用户配置
      */
-    public SseEmitter compete(Long promptVersionId, Map<String, Object> variables, 
-                               List<String> modelIds, Long userId) {
+    public SseEmitter compete(Long promptVersionId, Map<String, Object> variables,
+            List<String> modelIds, Long userId) {
         log.info("启动竞技场对比: versionId={}, models={}, userId={}", promptVersionId, modelIds, userId);
 
         // 1. 获取 Prompt 版本
@@ -90,7 +92,7 @@ public class ArenaAppService {
         } catch (Exception e) {
             log.warn("序列化变量/模型失败", e);
         }
-        
+
         ArenaSession session = ArenaSession.builder()
                 .promptVersionId(promptVersionId)
                 .finalPrompt(finalPrompt)
@@ -141,12 +143,12 @@ public class ArenaAppService {
                                         .provider(userConfig.getProvider())
                                         .apiKey(userConfig.getApiKey())
                                         .baseUrl(userConfig.getBaseUrl())
-                                        .modelName(specificModel)  // 使用指定的模型
+                                        .modelName(specificModel) // 使用指定的模型
                                         .enabled(userConfig.getEnabled())
                                         .availableModels(userConfig.getAvailableModels())
                                         .build();
                             }
-                            callModelWithUserConfig(emitter, modelId, finalPrompt, effectiveConfig, 
+                            callModelWithUserConfig(emitter, modelId, finalPrompt, effectiveConfig,
                                     resultBuffers, completedCount, totalModels);
                             // 保存成功结果
                             saveArenaResult(sessionId, modelId, resultBuffers.get(modelId).toString(),
@@ -154,13 +156,13 @@ public class ArenaAppService {
                         } else {
                             log.warn("用户未配置模型: {}", provider);
                             sendErrorEvent(emitter, modelId, "您没有配置该模型的 API Key，请先在模型配置中添加");
-                            saveArenaResult(sessionId, modelId, null, startTimes.get(modelId), 
+                            saveArenaResult(sessionId, modelId, null, startTimes.get(modelId),
                                     "FAILED", "用户未配置该模型的 API Key");
                         }
                     } catch (Exception e) {
                         log.error("模型调用失败: modelId={}, error={}", modelId, e.getMessage());
                         sendErrorEvent(emitter, modelId, e.getMessage());
-                        saveArenaResult(sessionId, modelId, null, startTimes.get(modelId), 
+                        saveArenaResult(sessionId, modelId, null, startTimes.get(modelId),
                                 "FAILED", e.getMessage());
                     }
                 }, arenaExecutor))
@@ -198,16 +200,16 @@ public class ArenaAppService {
 
         return emitter;
     }
-    
+
     /**
      * 保存竞技结果
      */
-    private void saveArenaResult(Long sessionId, String modelId, String content, 
-                                  Long startTime, String status, String errorMessage) {
+    private void saveArenaResult(Long sessionId, String modelId, String content,
+            Long startTime, String status, String errorMessage) {
         try {
             int latencyMs = (int) (System.currentTimeMillis() - startTime);
             int tokensUsed = content != null ? estimateTokens(content) : 0;
-            
+
             ArenaResult result = ArenaResult.builder()
                     .sessionId(sessionId)
                     .modelId(modelId)
@@ -224,12 +226,13 @@ public class ArenaAppService {
             log.error("保存竞技结果失败: sessionId={}, modelId={}, error={}", sessionId, modelId, e.getMessage());
         }
     }
-    
+
     /**
      * 估算 token 数（简单按字符数估算）
      */
     private int estimateTokens(String content) {
-        if (content == null) return 0;
+        if (content == null)
+            return 0;
         // 中文约 1.5 字符/token，英文约 4 字符/token，取平均
         return content.length() / 2;
     }
@@ -238,14 +241,14 @@ public class ArenaAppService {
      * 使用用户配置调用模型
      */
     private void callModelWithUserConfig(SseEmitter emitter, String modelId, String prompt,
-                                          UserModelConfig config,
-                                          Map<String, StringBuilder> resultBuffers,
-                                          AtomicInteger completedCount, int totalModels) {
+            UserModelConfig config,
+            Map<String, StringBuilder> resultBuffers,
+            AtomicInteger completedCount, int totalModels) {
         log.debug("使用用户配置调用模型: {}", modelId);
-        
+
         StringBuilder buffer = new StringBuilder();
         resultBuffers.put(modelId, buffer);
-        
+
         AtomicInteger sequence = new AtomicInteger(0);
         long startTime = System.currentTimeMillis();
 
@@ -274,13 +277,13 @@ public class ArenaAppService {
     /**
      * 发送 SSE 事件
      */
-    private void sendEvent(SseEmitter emitter, String modelId, String eventType, 
-                           String content, int sequence, boolean finished) {
+    private void sendEvent(SseEmitter emitter, String modelId, String eventType,
+            String content, int sequence, boolean finished) {
         try {
             String data = String.format(
                     "{\"modelId\":\"%s\",\"type\":\"%s\",\"content\":\"%s\",\"sequence\":%d,\"finished\":%s}",
                     modelId, eventType, escapeJson(content), sequence, finished);
-            
+
             emitter.send(SseEmitter.event()
                     .name("message")
                     .data(data));
@@ -297,7 +300,7 @@ public class ArenaAppService {
             String data = String.format(
                     "{\"modelId\":\"%s\",\"type\":\"error\",\"content\":\"%s\",\"finished\":true}",
                     modelId, escapeJson(errorMessage));
-            
+
             emitter.send(SseEmitter.event()
                     .name("error")
                     .data(data));
@@ -314,34 +317,55 @@ public class ArenaAppService {
             return "";
         }
         return text.replace("\\", "\\\\")
-                   .replace("\"", "\\\"")
-                   .replace("\n", "\\n")
-                   .replace("\r", "\\r")
-                   .replace("\t", "\\t");
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 
     /**
      * 可用模型信息 DTO
      */
     public record AvailableModelInfo(
-            String provider,      // 提供商 ID，如 "cloudflare"
-            String modelId,       // 完整标识，如 "cloudflare:@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-            String modelName,     // 原始模型名，如 "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-            String displayName    // 显示名，如 "Cloudflare - Llama 3.3 70B"
-    ) {}
+            String provider, // 提供商 ID，如 "cloudflare"
+            String modelId, // 完整标识，如 "cloudflare:@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+            String modelName, // 原始模型名，如 "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+            String displayName // 显示名，如 "Cloudflare - Llama 3.3 70B"
+    ) {
+    }
 
     /**
      * 获取用户可用的模型列表（返回详细模型信息）
      */
+    /**
+     * 获取用户可用的模型列表（返回详细模型信息）
+     */
     public List<AvailableModelInfo> getAvailableModels(Long userId) {
-        return userConfigRepository.findEnabledByUserId(userId)
-                .stream()
-                .map(config -> {
-                    String provider = config.getProvider();
-                    String modelName = config.getEffectiveModelName();
-                    String modelId = provider + ":" + modelName;
-                    String displayName = getProviderDisplayName(provider) + " - " + getModelShortName(modelName);
-                    return new AvailableModelInfo(provider, modelId, modelName, displayName);
+        List<UserModelConfig> enabledConfigs = userConfigRepository.findEnabledByUserId(userId);
+        List<com.zzk.application.service.UserModelConfigAppService.ProviderInfo> supportedProviders = userModelConfigAppService
+                .getSupportedProviders();
+
+        return enabledConfigs.stream()
+                .flatMap(config -> {
+                    String providerId = config.getProvider();
+                    // 查找该提供商的所有支持模型
+                    return supportedProviders.stream()
+                            .filter(p -> p.id().equals(providerId))
+                            .findFirst()
+                            .map(providerInfo -> providerInfo.models().stream()
+                                    .map(modelInfo -> {
+                                        String modelId = providerId + ":" + modelInfo.id();
+                                        // 显示名称格式：Provider - ModelName (e.g., OpenAI - GPT-4o)
+                                        String displayName = providerInfo.name() + " - " + modelInfo.name();
+                                        return new AvailableModelInfo(providerId, modelId, modelInfo.id(), displayName);
+                                    }))
+                            .orElse(java.util.stream.Stream.of(
+                                    // 如果没找到支持列表（可能是自定义或旧数据），至少返回当前配置的默认模型
+                                    new AvailableModelInfo(providerId,
+                                            providerId + ":" + config.getEffectiveModelName(),
+                                            config.getEffectiveModelName(),
+                                            getProviderDisplayName(providerId) + " - "
+                                                    + getModelShortName(config.getEffectiveModelName()))));
                 })
                 .toList();
     }
@@ -368,7 +392,8 @@ public class ArenaAppService {
      * 获取模型简短名称（裁剪过长的模型 ID）
      */
     private String getModelShortName(String modelName) {
-        if (modelName == null) return "Default";
+        if (modelName == null)
+            return "Default";
         // 处理 Cloudflare 格式如 @cf/meta/llama-3.3-70b-instruct-fp8-fast
         if (modelName.startsWith("@")) {
             String[] parts = modelName.split("/");
@@ -387,18 +412,17 @@ public class ArenaAppService {
      * 提交投票
      */
     public void submitVote(Long sessionId, String winnerModel, String loserModel, Long voterId) {
-        log.info("提交投票: sessionId={}, winner={}, loser={}, voter={}", 
+        log.info("提交投票: sessionId={}, winner={}, loser={}, voter={}",
                 sessionId, winnerModel, loserModel, voterId);
-        
+
         arenaVoteMapper.insert(
-            com.zzk.infrastructure.persistence.po.ArenaVotePO.builder()
-                .sessionId(sessionId)
-                .winnerModel(winnerModel)
-                .loserModel(loserModel)
-                .voterId(voterId)
-                .createdAt(LocalDateTime.now())
-                .build()
-        );
+                com.zzk.infrastructure.persistence.po.ArenaVotePO.builder()
+                        .sessionId(sessionId)
+                        .winnerModel(winnerModel)
+                        .loserModel(loserModel)
+                        .voterId(voterId)
+                        .createdAt(LocalDateTime.now())
+                        .build());
     }
 
     /**
@@ -408,26 +432,24 @@ public class ArenaAppService {
         // 获取胜负统计
         var wins = arenaVoteMapper.countWinsByModel();
         var losses = arenaVoteMapper.countLossesByModel();
-        
+
         // 合并统计
         Map<String, Long> winMap = wins.stream()
                 .collect(Collectors.toMap(
-                    w -> w.getModelId(), 
-                    w -> w.getCount(),
-                    (a, b) -> a
-                ));
+                        w -> w.getModelId(),
+                        w -> w.getCount(),
+                        (a, b) -> a));
         Map<String, Long> lossMap = losses.stream()
                 .collect(Collectors.toMap(
-                    l -> l.getModelId(), 
-                    l -> l.getCount(),
-                    (a, b) -> a
-                ));
-        
+                        l -> l.getModelId(),
+                        l -> l.getCount(),
+                        (a, b) -> a));
+
         // 合并所有模型 ID
         java.util.Set<String> allModels = new java.util.HashSet<>();
         allModels.addAll(winMap.keySet());
         allModels.addAll(lossMap.keySet());
-        
+
         // 计算胜率并排序
         return allModels.stream()
                 .map(modelId -> {
@@ -435,7 +457,7 @@ public class ArenaAppService {
                     long l = lossMap.getOrDefault(modelId, 0L);
                     long total = w + l;
                     double winRate = total > 0 ? (double) w / total * 100 : 0;
-                    
+
                     Map<String, Object> result = new java.util.HashMap<>();
                     result.put("modelId", modelId);
                     result.put("wins", w);

@@ -164,17 +164,47 @@ public class PromptCoachAppService {
     /**
      * 选择 AI 模型
      */
-    private UserModelConfig selectModel(Long userId, String provider) {
+    private UserModelConfig selectModel(Long userId, String providerOrModelId) {
         List<UserModelConfig> configs = userConfigRepository.findEnabledByUserId(userId);
         if (configs.isEmpty()) {
             throw new BusinessException("请先在设置中配置至少一个 AI 模型");
         }
 
-        if (provider != null && !provider.isBlank()) {
-            return configs.stream()
-                    .filter(c -> c.getProvider().equalsIgnoreCase(provider))
+        if (providerOrModelId != null && !providerOrModelId.isBlank()) {
+            // 检查是否包含具体模型 (format: provider:model)
+            String targetProvider;
+            String targetModel = null;
+
+            if (providerOrModelId.contains(":")) {
+                String[] parts = providerOrModelId.split(":", 2);
+                targetProvider = parts[0];
+                targetModel = parts[1];
+            } else {
+                targetProvider = providerOrModelId;
+            }
+
+            String finalTargetProvider = targetProvider;
+            String finalTargetModel = targetModel;
+
+            UserModelConfig config = configs.stream()
+                    .filter(c -> c.getProvider().equalsIgnoreCase(finalTargetProvider))
                     .findFirst()
-                    .orElseThrow(() -> new BusinessException("未找到指定的模型配置: " + provider));
+                    .orElseThrow(() -> new BusinessException("未找到指定的模型配置: " + finalTargetProvider));
+
+            // 如果指定了具体模型，覆盖配置中的模型名
+            if (finalTargetModel != null && !finalTargetModel.isEmpty()) {
+                return UserModelConfig.builder()
+                        .id(config.getId())
+                        .userId(config.getUserId())
+                        .provider(config.getProvider())
+                        .apiKey(config.getApiKey())
+                        .baseUrl(config.getBaseUrl())
+                        .modelName(finalTargetModel) // 使用指定的具体模型
+                        .enabled(config.getEnabled())
+                        .availableModels(config.getAvailableModels())
+                        .build();
+            }
+            return config;
         }
 
         // 自动选择（优先使用用户偏好）

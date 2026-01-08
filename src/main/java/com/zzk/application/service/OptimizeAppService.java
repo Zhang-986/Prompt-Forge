@@ -24,24 +24,25 @@ public class OptimizeAppService {
 
     private static final String META_PROMPT_TEMPLATE = """
             You are an expert Prompt Engineer. Your task is to rewrite and optimize the user's input prompt to be high-quality, structured, and effective.
-            
+
             Follow these guidelines:
             1. Assign a clear Role (Persona).
             2. Define the Task and Goal clearly.
             3. Add Constraints or Format requirements.
             4. Use placeholders like {{variable}} for dynamic parts if inferred.
-            
+
             User Input:
             %s
-            
+
             Return ONLY the optimized prompt content. Do not include introductory or concluding remarks.
             """;
 
     /**
      * 优化 Prompt
+     * 
      * @param originalContent 原始 Prompt 内容
-     * @param userId 用户 ID
-     * @param modelId 可选的模型 ID（provider 名称），如 "zhipu"、"google" 等
+     * @param userId          用户 ID
+     * @param modelId         可选的模型 ID（provider 名称），如 "zhipu"、"google" 等
      */
     public String optimize(String originalContent, Long userId, String modelId) {
         // 1. 获取用户可用的模型配置
@@ -51,12 +52,42 @@ public class OptimizeAppService {
         }
 
         // 2. 选择模型：如果指定了 modelId 则使用指定的，否则自动选择
+        // 2. 选择模型：如果指定了 modelId 则使用指定的，否则自动选择
         UserModelConfig selectedConfig;
         if (modelId != null && !modelId.isBlank()) {
-            selectedConfig = configs.stream()
-                    .filter(c -> c.getProvider().equalsIgnoreCase(modelId))
+            // 检查是否包含具体模型 (format: provider:model)
+            String targetProvider;
+            String targetModel = null;
+
+            if (modelId.contains(":")) {
+                String[] parts = modelId.split(":", 2);
+                targetProvider = parts[0];
+                targetModel = parts[1];
+            } else {
+                targetProvider = modelId;
+            }
+
+            String finalTargetProvider = targetProvider;
+            UserModelConfig baseConfig = configs.stream()
+                    .filter(c -> c.getProvider().equalsIgnoreCase(finalTargetProvider))
                     .findFirst()
-                    .orElseThrow(() -> new BusinessException("未找到指定的模型配置: " + modelId));
+                    .orElseThrow(() -> new BusinessException("未找到指定的模型配置: " + finalTargetProvider));
+
+            // 如果指定了具体模型，需临时覆盖配置
+            if (targetModel != null && !targetModel.isEmpty()) {
+                selectedConfig = UserModelConfig.builder()
+                        .id(baseConfig.getId())
+                        .userId(baseConfig.getUserId())
+                        .provider(baseConfig.getProvider())
+                        .apiKey(baseConfig.getApiKey())
+                        .baseUrl(baseConfig.getBaseUrl())
+                        .modelName(targetModel)
+                        .enabled(baseConfig.getEnabled())
+                        .availableModels(baseConfig.getAvailableModels())
+                        .build();
+            } else {
+                selectedConfig = baseConfig;
+            }
         } else {
             selectedConfig = selectBestModel(configs);
         }
@@ -71,7 +102,7 @@ public class OptimizeAppService {
             dynamicLlmFactory.generateStream(selectedConfig, metaPrompt)
                     .toIterable()
                     .forEach(result::append);
-            
+
             return result.toString().trim();
         } catch (Exception e) {
             log.error("Prompt 优化失败", e);
@@ -91,7 +122,8 @@ public class OptimizeAppService {
 
     private Optional<UserModelConfig> findProvider(List<UserModelConfig> configs, String keyword) {
         return configs.stream()
-                .filter(c -> c.getModelName().toLowerCase().contains(keyword) || c.getProvider().equalsIgnoreCase(keyword))
+                .filter(c -> c.getModelName().toLowerCase().contains(keyword)
+                        || c.getProvider().equalsIgnoreCase(keyword))
                 .findFirst();
     }
 }

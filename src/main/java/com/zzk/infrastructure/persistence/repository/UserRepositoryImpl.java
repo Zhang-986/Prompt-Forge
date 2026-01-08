@@ -75,10 +75,12 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     private User toDomain(UserPO po) {
-        if (po == null) return null;
+        if (po == null)
+            return null;
         return User.builder()
                 .id(po.getId())
                 .username(po.getUsername())
+                .nickname(po.getNickname())
                 .password(po.getPassword())
                 .email(po.getEmail())
                 .avatar(po.getAvatar())
@@ -90,10 +92,12 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     private UserPO toPO(User domain) {
-        if (domain == null) return null;
+        if (domain == null)
+            return null;
         UserPO po = new UserPO();
         po.setId(domain.getId());
         po.setUsername(domain.getUsername());
+        po.setNickname(domain.getNickname());
         po.setPassword(domain.getPassword());
         po.setEmail(domain.getEmail());
         po.setAvatar(domain.getAvatar());

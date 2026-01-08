@@ -32,8 +32,8 @@ const editForm = ref({
 const saving = ref(false)
 
 // 动态分类列表
-const categories = ref<{ value: string; label: string; icon: string; id?: number }[]>([
-  { value: 'ALL', label: '全部', icon: '🌐' }
+const categories = ref<{ value: string; label: string; id?: number }[]>([
+  { value: 'ALL', label: '全部' }
 ])
 
 // 分类管理弹窗
@@ -43,7 +43,6 @@ const editingCategory = ref<PlazaCategory | null>(null)
 const categoryForm = ref({
   value: '',
   label: '',
-  icon: '📦',
   sortOrder: 0
 })
 const savingCategory = ref(false)
@@ -54,15 +53,15 @@ const loadCategories = async () => {
     const res = await getCategories()
     if (res.code === 200) {
       categories.value = [
-        { value: 'ALL', label: '全部', icon: '🌐' },
-        ...res.data.map(c => ({ value: c.value, label: c.label, icon: c.icon, id: c.id }))
+        { value: 'ALL', label: '全部' },
+        ...res.data.map(c => ({ value: c.value, label: c.label, id: c.id }))
       ]
       categoryList.value = res.data
     }
   } catch (error) {
     console.error('加载分类失败:', error)
     // 使用默认分类作为后备
-    categories.value = DEFAULT_CATEGORIES.map(c => ({ value: c.value, label: c.label, icon: c.icon }))
+    categories.value = DEFAULT_CATEGORIES.map(c => ({ value: c.value, label: c.label }))
   }
 }
 
@@ -241,7 +240,7 @@ onMounted(() => {
 // 打开分类管理弹窗
 const openCategoryDialog = () => {
   editingCategory.value = null
-  categoryForm.value = { value: '', label: '', icon: '📦', sortOrder: 0 }
+  categoryForm.value = { value: '', label: '', sortOrder: 0 }
   showCategoryDialog.value = true
 }
 
@@ -251,7 +250,6 @@ const startEditCategory = (cat: PlazaCategory) => {
   categoryForm.value = {
     value: cat.value,
     label: cat.label,
-    icon: cat.icon,
     sortOrder: cat.sortOrder
   }
 }
@@ -275,7 +273,7 @@ const handleSaveCategory = async () => {
       message.success('创建成功')
     }
     editingCategory.value = null
-    categoryForm.value = { value: '', label: '', icon: '📦', sortOrder: 0 }
+    categoryForm.value = { value: '', label: '', sortOrder: 0 }
     loadCategories()
   } catch (error: any) {
     message.error(error.response?.data?.message || '保存失败')
@@ -322,7 +320,6 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
       <div class="category-tabs">
         <button v-for="cat in categories" :key="cat.value" class="category-tab"
           :class="{ active: selectedCategory === cat.value }" @click="handleCategoryChange(cat.value)">
-          <span class="cat-icon">{{ cat.icon }}</span>
           <span class="cat-label">{{ cat.label }}</span>
         </button>
         <!-- 管理员设置按钮 -->
@@ -338,10 +335,10 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
       <div v-else class="template-grid">
         <div v-for="template in templates" :key="template.id" class="template-card" @click="openPreview(template)">
           <div class="card-header">
-            <span class="template-icon">{{ getCategoryIcon(template.category) }}</span>
+            <!-- Icon Removed -->
             <div class="template-meta">
-              <span class="template-name">{{ template.name }}</span>
               <span class="template-category">{{ getCategoryLabel(template.category) }}</span>
+              <span class="template-name">{{ template.name }}</span>
             </div>
             <span v-if="template.isOfficial" class="official-badge">官方</span>
           </div>
@@ -449,7 +446,7 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
           <label>分类</label>
           <select v-model="editForm.category" class="workspace-select">
             <option v-for="cat in categories.filter(c => c.value !== 'ALL')" :key="cat.value" :value="cat.value">
-              {{ cat.icon }} {{ cat.label }}
+              {{ cat.label }}
             </option>
           </select>
         </div>
@@ -479,7 +476,6 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
         <!-- 分类列表 -->
         <div class="category-list">
           <div v-for="cat in categoryList" :key="cat.id" class="category-item">
-            <span class="cat-icon">{{ cat.icon }}</span>
             <span class="cat-info">
               <strong>{{ cat.label }}</strong>
               <small>{{ cat.value }}</small>
@@ -509,27 +505,22 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
               <input v-model="categoryForm.label" class="form-input" placeholder="如 文案写作" />
             </div>
           </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>图标 (Emoji)</label>
-              <input v-model="categoryForm.icon" class="form-input" placeholder="📦" />
-            </div>
-            <div class="form-group">
-              <label>排序</label>
-              <input v-model.number="categoryForm.sortOrder" type="number" class="form-input" placeholder="0" />
-            </div>
+          <div class="form-group">
+            <label>排序</label>
+            <input v-model.number="categoryForm.sortOrder" type="number" class="form-input" placeholder="0" />
           </div>
-          <div class="dialog-actions">
-            <button v-if="editingCategory" class="cancel-btn"
-              @click="editingCategory = null; categoryForm = { value: '', label: '', icon: '📦', sortOrder: 0 }">取消编辑</button>
-            <button class="submit-btn" @click="handleSaveCategory" :disabled="savingCategory">
-              {{ savingCategory ? '保存中...' : (editingCategory ? '更新' : '添加') }}
-            </button>
-          </div>
+        </div>
+        <div class="dialog-actions">
+          <button v-if="editingCategory" class="cancel-btn"
+            @click="editingCategory = null; categoryForm = { value: '', label: '', sortOrder: 0 }">取消编辑</button>
+          <button class="submit-btn" @click="handleSaveCategory" :disabled="savingCategory">
+            {{ savingCategory ? '保存中...' : (editingCategory ? '更新' : '添加') }}
+          </button>
         </div>
       </div>
     </div>
   </div>
+
 </template>
 
 <style scoped>
@@ -649,24 +640,26 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
+  padding: 6px 16px;
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: var(--radius-full);
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all var(--transition-normal);
+  font-weight: 500;
+  font-size: 14px;
 }
 
 .category-tab:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
 }
 
 .category-tab.active {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: white;
+  background: var(--color-text-primary);
+  color: var(--color-bg-primary);
+  box-shadow: var(--shadow-md);
 }
 
 .cat-icon {
@@ -686,15 +679,22 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 
 .template-card {
   padding: var(--space-5);
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  border: 1px solid transparent;
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all var(--transition-normal);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
 }
 
 .template-card:hover {
-  border-color: var(--color-primary);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-primary-light);
 }
 
 .card-header {
@@ -715,10 +715,9 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 
 .template-name {
   display: block;
-  font-size: var(--text-base);
+  font-size: 16px;
   font-weight: 600;
   color: var(--color-text-primary);
-  margin-bottom: var(--space-1);
 }
 
 .template-category {
@@ -728,7 +727,7 @@ const handleDeleteCategory = (cat: PlazaCategory) => {
 
 .official-badge {
   padding: 2px var(--space-2);
-  background: var(--color-warning);
+  background: var(--color-primary);
   color: white;
   border-radius: var(--radius-sm);
   font-size: 11px;

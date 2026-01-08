@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { login, register, getCaptcha, sendEmailCode, type LoginData, type RegisterData, type CaptchaResult } from '../api/user'
 import { message } from 'ant-design-vue'
 import { ReloadOutlined } from '@ant-design/icons-vue'
+import logo from '@/assets/logo.svg'
 
 const router = useRouter()
 const route = useRoute()
@@ -96,9 +97,9 @@ const handleLogin = async () => {
   } catch (error: any) {
     const errorCode = error.response?.data?.code
     const errorMessage = error.response?.data?.message || '登录失败，请检查后端是否启动'
-    
+
     message.error(errorMessage)
-    
+
     // 如果返回 428，表示需要验证码
     if (errorCode === 428) {
       captchaRequired.value = true
@@ -118,14 +119,14 @@ const handleSendEmailCode = async () => {
     message.warning('请先输入邮箱')
     return
   }
-  
+
   // 简单的邮箱格式验证
   const emailRegex = /^[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}$/
   if (!emailRegex.test(registerForm.value.email)) {
     message.warning('请输入正确的邮箱格式')
     return
   }
-  
+
   emailCodeLoading.value = true
   try {
     const res = await sendEmailCode(registerForm.value.email)
@@ -191,7 +192,7 @@ const handleRegister = async () => {
   <div class="login-container">
     <div class="login-card">
       <div class="logo">
-        <img src="/logo.svg?v=4" alt="Logo" class="logo-icon" />
+        <img :src="logo" alt="Logo" class="logo-icon" />
         <span class="logo-text">Prompt-Forge</span>
       </div>
 
@@ -204,24 +205,15 @@ const handleRegister = async () => {
             <a-form-item label="密码" required>
               <a-input-password v-model:value="loginForm.password" placeholder="请输入密码" size="large" />
             </a-form-item>
-            
+
             <!-- 验证码区域 -->
             <a-form-item v-if="captchaRequired" label="验证码" required>
               <div class="captcha-row">
-                <a-input 
-                  v-model:value="loginForm.captchaCode" 
-                  placeholder="请输入验证码" 
-                  size="large"
-                  class="captcha-input"
-                  @pressEnter="handleLogin"
-                />
+                <a-input v-model:value="loginForm.captchaCode" placeholder="请输入验证码" size="large" class="captcha-input"
+                  @pressEnter="handleLogin" />
                 <div class="captcha-image-wrapper" @click="fetchCaptcha">
-                  <img 
-                    v-if="captchaData?.captchaImage" 
-                    :src="captchaData.captchaImage" 
-                    alt="验证码" 
-                    class="captcha-image"
-                  />
+                  <img v-if="captchaData?.captchaImage" :src="captchaData.captchaImage" alt="验证码"
+                    class="captcha-image" />
                   <div v-else class="captcha-placeholder">
                     <a-spin v-if="captchaLoading" size="small" />
                     <span v-else>点击获取</span>
@@ -232,7 +224,7 @@ const handleRegister = async () => {
                 </div>
               </div>
             </a-form-item>
-            
+
             <a-form-item>
               <a-button type="primary" @click="handleLogin" :loading="loading" block size="large">
                 登录
@@ -251,19 +243,10 @@ const handleRegister = async () => {
             </a-form-item>
             <a-form-item label="邮箱验证码" required>
               <div class="email-code-row">
-                <a-input 
-                  v-model:value="registerForm.emailCode" 
-                  placeholder="请输入验证码" 
-                  size="large"
-                  class="email-code-input"
-                />
-                <a-button 
-                  size="large"
-                  :loading="emailCodeLoading" 
-                  :disabled="emailCodeCooldown > 0"
-                  @click="handleSendEmailCode"
-                  class="send-code-btn"
-                >
+                <a-input v-model:value="registerForm.emailCode" placeholder="请输入验证码" size="large"
+                  class="email-code-input" />
+                <a-button size="large" :loading="emailCodeLoading" :disabled="emailCodeCooldown > 0"
+                  @click="handleSendEmailCode" class="send-code-btn">
                   {{ emailCodeCooldown > 0 ? `${emailCodeCooldown}秒后重发` : '发送验证码' }}
                 </a-button>
               </div>
@@ -407,8 +390,10 @@ const handleRegister = async () => {
   box-shadow: none !important;
   background: transparent !important;
   margin: 0 !important;
-  padding: 4px 11px !important; /* 恢复默认内边距 */
-  height: 38px !important; /* 匹配 large size */
+  padding: 4px 11px !important;
+  /* 恢复默认内边距 */
+  height: 38px !important;
+  /* 匹配 large size */
 }
 
 /* 聚焦时只改变外层 wrapper 的边框 */

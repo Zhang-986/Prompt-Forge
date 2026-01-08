@@ -35,6 +35,14 @@ const openOptimizeModal = async () => {
     return
   }
 
+  // Check for Default Model Preference
+  const defaultModel = localStorage.getItem('PF_DEFAULT_OPTIMIZE_MODEL')
+  if (defaultModel) {
+    selectedOptimizeModel.value = defaultModel
+    await handleOptimize()
+    return
+  }
+
   // 加载可用模型
   loadingModels.value = true
   try {
@@ -43,7 +51,7 @@ const openOptimizeModal = async () => {
       availableModels.value = res.data
       const firstModel = res.data[0]
       if (firstModel) {
-        selectedOptimizeModel.value = firstModel.provider // 默认选第一个
+        selectedOptimizeModel.value = firstModel.modelId // 默认选第一个
       }
       showModelSelectModal.value = true
     } else {
@@ -409,7 +417,11 @@ onMounted(() => {
               </div>
 
               <!-- 版本说明（小字） -->
-              <p class="commit-message-small">{{ version.commitMessage || '无提交说明' }}</p>
+              <!-- 版本说明（小字） -->
+              <div class="commit-message-container">
+                <span class="commit-label">版本说明：</span>
+                <span class="commit-limit">{{ version.commitMessage || '无提交说明' }}</span>
+              </div>
 
               <div class="version-actions" v-if="!compareMode">
                 <button v-if="index < versions.length - 1" class="action-btn diff"
@@ -468,7 +480,7 @@ onMounted(() => {
       <div class="model-select-content">
         <p class="model-hint">请选择用于优化 Prompt 的 AI 模型：</p>
         <a-radio-group v-model:value="selectedOptimizeModel" class="model-radio-group">
-          <a-radio v-for="model in availableModels" :key="model.provider" :value="model.provider"
+          <a-radio v-for="model in availableModels" :key="model.modelId" :value="model.modelId"
             class="model-radio-item">
             {{ model.displayName }}
           </a-radio>
@@ -697,34 +709,30 @@ onMounted(() => {
 }
 
 /* Timeline - Clean Minimalist Style */
+/* Timeline - Refined & Elegant */
 .version-section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-8);
   padding-bottom: var(--space-4);
-  border-bottom: 2px solid var(--color-bg-secondary);
-  /* Distinct divider */
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .timeline {
   position: relative;
-  padding-left: 28px;
-  /* More space for the line */
+  padding-left: 32px;
 }
 
-/* The vertical line - Stronger visual */
 .timeline::before {
   content: '';
   position: absolute;
-  left: 8px;
-  /* Center with marker */
-  top: 16px;
+  left: 10px;
+  top: 12px;
   bottom: 0;
-  width: 2px;
-  /* Thicker line */
+  width: 1px;
   background: var(--color-border);
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .version-item {
@@ -732,21 +740,25 @@ onMounted(() => {
   margin-bottom: var(--space-8);
 }
 
-/* Marker - Standard Dot */
+/* Marker - Ring Style */
 .version-marker {
   position: absolute;
-  left: -24px;
-  /* Align deeply with line */
-  top: 0;
-  width: 10px;
-  height: 10px;
+  left: -22px;
+  top: 6px;
+  /* Aligned with title */
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: #fff;
-  border: 2px solid var(--color-text-secondary);
+  border: 2px solid var(--color-border);
   z-index: 2;
   transition: all 0.2s;
-  box-shadow: 0 0 0 4px #fff;
-  /* White halo to break line */
+}
+
+.version-item.current .version-marker {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px var(--color-primary-light);
 }
 
 /* Feature: Compare Mode Styles (Restored) */
@@ -788,34 +800,27 @@ onMounted(() => {
 }
 
 /* Current Version Marker - Prominent */
-.version-item.current .version-marker {
-  width: 14px;
-  height: 14px;
-  left: -26px;
-  background: #000;
-  border-color: #000;
-  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.1);
-}
 
+
+/* Version Content - Card Style */
 .version-content {
-  /* Minimalist content: no box, no background by default, just clean text */
-  padding: var(--space-2);
-  /* Add small padding for hover effect area */
-  background: transparent;
+  background: #fff;
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
   border: 1px solid transparent;
-  /* Reserve space for border */
-  border-radius: var(--radius-md);
   transition: all 0.2s;
+  margin-bottom: var(--space-4);
 }
 
-.version-item.compare-mode:hover .version-content {
-  background: var(--color-bg-secondary);
-  cursor: pointer;
+.version-item:hover .version-content {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .version-item.selected .version-content {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: var(--color-border);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary-light);
 }
 
 .version-header {
@@ -853,33 +858,45 @@ onMounted(() => {
 }
 
 .version-preview {
-  margin-top: var(--space-2);
+  margin-top: var(--space-3);
   padding: var(--space-4);
   background: var(--color-bg-secondary);
-  /* Very light gray for code block */
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background 0.2s;
+  border: 1px solid rgba(0, 0, 0, 0.03);
 }
 
 .version-preview:hover {
-  background: var(--color-border);
-  /* Slightly darker on hover */
+  background: #f1f3f5;
+  border-color: rgba(0, 0, 0, 0.05);
 }
 
 .version-preview pre {
   margin: 0;
   white-space: pre-wrap;
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
+  font-size: 13px;
+  color: var(--color-text-primary);
+  line-height: 1.6;
 }
 
-.commit-message-small {
+.commit-message-container {
   margin-top: var(--space-3);
   font-size: var(--text-sm);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.commit-label {
+  color: var(--color-text-tertiary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.commit-limit {
   color: var(--color-text-primary);
-  font-style: italic;
 }
 
 .version-actions {

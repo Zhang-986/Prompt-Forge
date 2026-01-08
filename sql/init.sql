@@ -15,6 +15,7 @@ DROP TABLE IF EXISTS users;
 CREATE TABLE users (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '用户ID',
     username VARCHAR(50) NOT NULL COMMENT '用户名',
+    nickname VARCHAR(50) COMMENT '昵称',
     password VARCHAR(255) NOT NULL COMMENT '密码(BCrypt加密)',
     email VARCHAR(100) COMMENT '邮箱',
     avatar VARCHAR(500) COMMENT '头像URL',

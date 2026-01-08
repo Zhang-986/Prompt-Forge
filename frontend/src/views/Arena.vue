@@ -1,11 +1,37 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getPrompts, getVersionHistory, type Prompt, type PromptVersion } from '../api/prompt'
 import { getAvailableModels, submitVote, getLeaderboard, type ArenaEvent, type LeaderboardItem, type AvailableModelInfo } from '../api/arena'
 import { message } from 'ant-design-vue'
-import { ArrowLeftOutlined, ThunderboltOutlined, HistoryOutlined, PlayCircleOutlined, PauseCircleOutlined, WarningOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, BarChartOutlined, TrophyOutlined, UpOutlined, DownOutlined } from '@ant-design/icons-vue'
+import {
+  ArrowLeftOutlined,
+  ThunderboltOutlined,
+  TrophyOutlined,
+  PlayCircleOutlined,
+  PauseCircleOutlined,
+  StopOutlined,
+  WarningOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  FireOutlined,
+  SwapOutlined,
+  DownOutlined,
+  EyeOutlined
+} from '@ant-design/icons-vue'
 import { marked } from 'marked'
+
+// Import Config Assets
+import iconOpenAI from '@/assets/openai.svg'
+import iconGemini from '@/assets/gemini-color.svg'
+import iconClaude from '@/assets/claude-color.svg'
+import iconDeepSeek from '@/assets/deepseek-color.svg'
+import iconQwen from '@/assets/qwen-color.svg'
+import iconZhipu from '@/assets/zhipu-color.svg'
+import iconHunyuan from '@/assets/hunyuan-color.svg'
+import iconCloudflare from '@/assets/cloudflare-color.svg'
+import iconGithub from '@/assets/githubcopilot.svg'
+import iconMoonshot from '@/assets/moonshot.svg'
 
 // 配置 marked
 marked.setOptions({
@@ -16,55 +42,76 @@ marked.setOptions({
 const router = useRouter()
 const route = useRoute()
 
+// Provider Logos Map
+const logoMap: Record<string, string> = {
+  openai: iconOpenAI,
+  google: iconGemini,
+  claude: iconClaude,
+  deepseek: iconDeepSeek,
+  aliyun: iconQwen,
+  zhipu: iconZhipu,
+  hunyuan: iconHunyuan,
+  cloudflare: iconCloudflare,
+  github: iconGithub,
+  moonshot: iconMoonshot
+}
+
 // 状态
-// loading 状态由 isCompeting 管理
 const prompts = ref<Prompt[]>([])
 const versions = ref<PromptVersion[]>([])
 const models = ref<AvailableModelInfo[]>([])
 const modelMap = ref<Map<string, AvailableModelInfo>>(new Map())
-const selectedPromptId = ref<number | null>(null)
-const selectedVersionId = ref<number | null>(null)
-const selectedModels = ref<string[]>([])
+
+// 1v1 Selection
+const selectedPromptId = ref<number | undefined>(undefined)
+const selectedVersionId = ref<number | undefined>(undefined)
+const modelA = ref<string | undefined>(undefined)
+const modelB = ref<string | undefined>(undefined)
 const variables = ref<Record<string, string>>({})
+
 const isCompeting = ref(false)
 const eventSource = ref<EventSource | null>(null)
 
-// 每个模型的输出
-const modelOutputs = ref<Record<string, { content: string; finished: boolean; error?: string }>>({})
+// Output State
+interface ModelOutput {
+  content: string
+  finished: boolean
+  error?: string
+  time?: number
+}
+const outputA = ref<ModelOutput>({ content: '', finished: false })
+const outputB = ref<ModelOutput>({ content: '', finished: false })
 
-// 投票状态
+// Voting State
 const hasVoted = ref(false)
-const votingFor = ref<string | null>(null)
+const votedWinner = ref<string | 'tie' | null>(null)
 
-// 排行榜状态
+// 排行榜
 const leaderboardVisible = ref(false)
 const leaderboardData = ref<LeaderboardItem[]>([])
 const leaderboardLoading = ref(false)
 
-// 卡片展开/折叠状态
-const expandedCards = ref<Set<string>>(new Set())
+// Computed
+const currentVersionContent = computed(() => {
+  if (!selectedVersionId.value) return ''
+  const v = versions.value.find(ver => ver.id === selectedVersionId.value)
+  return v?.content || ''
+})
 
-// 切换卡片展开状态
-const toggleCard = (modelId: string) => {
-  if (expandedCards.value.has(modelId)) {
-    expandedCards.value.delete(modelId)
-  } else {
-    expandedCards.value.add(modelId)
+const compiledPrompt = computed(() => {
+  let content = currentVersionContent.value
+  if (!content) return ''
+
+  // Replace variables
+  for (const [key, val] of Object.entries(variables.value)) {
+    // Simple replacement for {{key}}
+    const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g')
+    const replacement = val ? val : `{{${key}}}`
+    content = content.replace(regex, replacement)
   }
-  // 触发响应式更新
-  expandedCards.value = new Set(expandedCards.value)
-}
+  return content
+})
 
-// 展开所有卡片
-const expandAll = () => {
-  selectedModels.value.forEach(id => expandedCards.value.add(id))
-  expandedCards.value = new Set(expandedCards.value)
-}
-
-// 折叠所有卡片
-const collapseAll = () => {
-  expandedCards.value = new Set()
-}
 
 // 加载 Prompts
 const loadPrompts = async () => {
@@ -106,49 +153,46 @@ const loadModels = async () => {
     const res = await getAvailableModels()
     if (res.code === 200) {
       models.value = res.data
-      // 构建 modelId -> info 的映射
       const map = new Map<string, AvailableModelInfo>()
       res.data.forEach(m => map.set(m.modelId, m))
       modelMap.value = map
-      // 默认选中所有模型
-      selectedModels.value = res.data.map(m => m.modelId)
+
+      // Auto-select first two if available
+      if (models.value.length >= 2) {
+        modelA.value = models.value[0].modelId
+        modelB.value = models.value[1].modelId
+      }
     }
   } catch (error) {
     console.error('加载模型失败:', error)
   }
 }
 
-// 解析 Prompt 中的变量 {{xxx}}
+// 解析变量
 const parseVariables = (content: string) => {
   const regex = /\{\{(\w+)\}\}/g
   const matches = content.matchAll(regex)
   const vars: Record<string, string> = {}
   for (const match of matches) {
     const varName = match[1]
-    if (varName) {
-      vars[varName] = ''
-    }
+    if (varName) vars[varName] = ''
   }
   variables.value = vars
 }
 
-// Prompt 选择变化
 const onPromptChange = (promptId: number) => {
   selectedPromptId.value = promptId
-  selectedVersionId.value = null
+  selectedVersionId.value = undefined
   versions.value = []
   loadVersions(promptId)
 }
 
-// 版本选择变化
 const onVersionChange = (versionId: number) => {
   const version = versions.value.find(v => v.id === versionId)
-  if (version) {
-    parseVariables(version.content)
-  }
+  if (version) parseVariables(version.content)
 }
 
-// 渲染 Markdown
+// Render Markdown
 const renderMarkdown = (content: string) => {
   if (!content) return ''
   try {
@@ -158,27 +202,17 @@ const renderMarkdown = (content: string) => {
   }
 }
 
-// 开始竞技
+// Start Battle
 const startCompete = () => {
-  if (!selectedVersionId.value) {
-    message.warning('请选择一个 Prompt 版本')
-    return
-  }
-  if (selectedModels.value.length === 0) {
-    message.warning('请至少选择一个模型')
-    return
-  }
+  if (!selectedVersionId.value) return message.warning('请选择 Prompt 版本')
+  if (!modelA.value || !modelB.value) return message.warning('请选择两个对比模型')
+  if (modelA.value === modelB.value) return message.warning('请选择两个不同的模型进行对比')
 
-  // 初始化输出
-  modelOutputs.value = {}
-  selectedModels.value.forEach(modelId => {
-    modelOutputs.value[modelId] = { content: '', finished: false }
-  })
-
-  // 重置投票状态
+  // Reset State
+  outputA.value = { content: '', finished: false }
+  outputB.value = { content: '', finished: false }
   hasVoted.value = false
-  votingFor.value = null
-
+  votedWinner.value = null
   isCompeting.value = true
 
   const token = localStorage.getItem('token')
@@ -193,12 +227,12 @@ const startCompete = () => {
     body: JSON.stringify({
       promptVersionId: selectedVersionId.value,
       variables: variables.value,
-      modelIds: selectedModels.value
+      modelIds: [modelA.value, modelB.value]
     })
   }).then(response => {
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
-    let buffer = '' // 用于处理跨 chunk 的数据
+    let buffer = ''
 
     const read = () => {
       reader?.read().then(({ done, value }) => {
@@ -206,13 +240,9 @@ const startCompete = () => {
           isCompeting.value = false
           return
         }
-
-        // 解码并追加到 buffer
         buffer += decoder.decode(value, { stream: true })
-
-        // 按换行符分割，但保留最后一个可能不完整的行
         const lines = buffer.split('\n')
-        buffer = lines.pop() || '' // 最后一行可能不完整，保留到下次处理
+        buffer = lines.pop() || ''
 
         for (const line of lines) {
           const trimmedLine = line.trim()
@@ -224,7 +254,7 @@ const startCompete = () => {
                 handleArenaEvent(data)
               }
             } catch (e) {
-              console.warn('SSE 解析跳过:', trimmedLine)
+              console.warn('SSE Parse Error', e)
             }
           }
         }
@@ -233,319 +263,278 @@ const startCompete = () => {
     }
     read()
   }).catch(error => {
-    console.error('SSE 连接失败:', error)
-    message.error('连接失败，请检查后端是否启动')
+    console.error('SSE Error:', error)
+    message.error('连接失败')
     isCompeting.value = false
   })
 }
 
-// 处理 Arena 事件
 const handleArenaEvent = (event: ArenaEvent) => {
-  const output = modelOutputs.value[event.modelId]
-  if (!output) return
+  let target = null
+  if (event.modelId === modelA.value) target = outputA.value
+  else if (event.modelId === modelB.value) target = outputB.value
+
+  if (!target) return
 
   if (event.type === 'content') {
-    // 直接修改内容，而不是创建新对象，减少 GC 压力
-    output.content += event.content
-    // 强制触发响应式更新
-    modelOutputs.value = { ...modelOutputs.value }
+    target.content += event.content
   } else if (event.type === 'finish') {
-    output.finished = true
-    modelOutputs.value = { ...modelOutputs.value }
+    target.finished = true
   } else if (event.type === 'error') {
-    output.error = event.content
-    output.finished = true
-    modelOutputs.value = { ...modelOutputs.value }
+    target.error = event.content
+    target.finished = true
   }
 }
 
-// 停止竞技
 const stopCompete = () => {
   eventSource.value?.close()
   isCompeting.value = false
 }
 
-// 返回列表
-const goBack = () => {
-  router.push('/prompts')
+// Voting
+const handleVote = async (choice: 'A' | 'B' | 'Tie') => {
+  if (hasVoted.value) return
+
+  let winner = ''
+  let loser = ''
+
+  if (choice === 'A') {
+    winner = modelA.value!
+    loser = modelB.value!
+    votedWinner.value = modelA.value!
+  } else if (choice === 'B') {
+    winner = modelB.value!
+    loser = modelA.value!
+    votedWinner.value = modelB.value!
+  } else {
+    hasVoted.value = true
+    votedWinner.value = 'tie'
+    message.success('感谢投票！(平局)')
+    return
+  }
+
+  try {
+    await submitVote({ winnerModel: winner, loserModel: loser })
+    hasVoted.value = true
+    message.success('投票成功！')
+  } catch (e) {
+    message.error('投票失败')
+  }
 }
 
-// 当前版本内容预览
-const currentVersionContent = computed(() => {
-  if (!selectedVersionId.value) return ''
-  const version = versions.value.find(v => v.id === selectedVersionId.value)
-  return version?.content || ''
-})
-
-// 变量列表
-const variableNames = computed(() => Object.keys(variables.value))
-
-// 获取模型显示名称（使用后端返回的 displayName，回退到 modelId）
+// Helpers
 const getModelDisplayName = (modelId: string) => {
   const info = modelMap.value.get(modelId)
   return info?.displayName || modelId
 }
 
-// 模型图标（根据 provider 返回图标）
-const getModelIcon = (modelId: string) => {
+const getProviderLogo = (modelId: string) => {
   const info = modelMap.value.get(modelId)
   const provider = info?.provider || modelId.split(':')[0] || modelId
-  const icons: Record<string, string> = {
-    'google': '🌐',
-    'zhipu': '🧠',
-    'deepseek': '🔍',
-    'openai': '🤖',
-    'claude': '🎭',
-    'aliyun': '🐱',
-    'moonshot': '🌙',
-    'cloudflare': '☁️',
-    'modelscope': '🔬'
-  }
-  return icons[provider] || '💬'
+  return logoMap[provider.toLowerCase()] || ''
 }
 
-// 处理投票
-const handleVote = async (modelId: string) => {
-  if (hasVoted.value) return
-  if (selectedModels.value.length < 2) return
-
-  try {
-    // 找出另一个模型作为败者（简化逻辑：暂时只支持两两对比的投票，多模型时只记录点击的胜者）
-    // 实际业务中可能需要更复杂的投票 UI
-    const loser = selectedModels.value.find(m => m !== modelId) || 'other'
-
-    await submitVote({
-      winnerModel: modelId,
-      loserModel: loser
-    })
-
-    hasVoted.value = true
-    votingFor.value = modelId
-    message.success('感谢您的投票！')
-  } catch (error) {
-    message.error('投票失败')
-  }
-}
-
-
-
-// 打开排行榜
+// Leaderboard
 const openLeaderboard = async () => {
   leaderboardVisible.value = true
   leaderboardLoading.value = true
   try {
     const res = await getLeaderboard()
-    if (res.code === 200) {
-      leaderboardData.value = res.data
-    }
+    if (res.code === 200) leaderboardData.value = res.data
   } catch (error) {
-    message.error('加载排行榜失败')
+    message.error('加载失败')
   } finally {
     leaderboardLoading.value = false
   }
 }
 
+const swapModels = () => {
+  const temp = modelA.value
+  modelA.value = modelB.value
+  modelB.value = temp
+}
+
 onMounted(() => {
   loadPrompts()
   loadModels()
-
-  const promptId = route.query.promptId
-  if (promptId) {
-    selectedPromptId.value = Number(promptId)
-    loadVersions(Number(promptId))
+  if (route.query.promptId) {
+    selectedPromptId.value = Number(route.query.promptId)
+    loadVersions(Number(route.query.promptId))
   }
 })
-
-onUnmounted(() => {
-  eventSource.value?.close()
-})
+onUnmounted(() => stopCompete())
 </script>
 
 <template>
   <div class="arena-container">
-    <!-- Header Removed -->
-
     <main class="main-content">
-      <!-- 配置区 -->
-      <div class="config-section">
-        <div class="config-row">
-          <!-- Prompt 选择 -->
-          <div class="config-item">
-            <label>选择 Prompt</label>
-            <select v-model="selectedPromptId" @change="onPromptChange(selectedPromptId!)">
-              <option :value="null" disabled>请选择 Prompt</option>
-              <option v-for="p in prompts" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
-          </div>
 
-          <!-- 版本选择 -->
-          <div class="config-item">
-            <label>选择版本</label>
-            <select v-model="selectedVersionId" @change="onVersionChange(selectedVersionId!)"
-              :disabled="!selectedPromptId">
-              <option :value="null" disabled>请选择版本</option>
-              <option v-for="v in versions" :key="v.id" :value="v.id">
-                v{{ v.versionNumber }} - {{ v.commitMessage || '无描述' }}
-              </option>
-            </select>
-          </div>
-        </div>
+      <!-- Top Bar: Config & Controls -->
+      <div class="control-bar-wrapper">
+        <div class="control-bar">
+          <div class="config-section">
+            <div class="prompt-select-group">
+              <a-select v-model:value="selectedPromptId" placeholder="Select Prompt" style="width: 220px"
+                @change="onPromptChange" class="custom-select" :bordered="false" popupClassName="custom-dropdown">
+                <a-select-option v-for="p in prompts" :key="p.id" :value="p.id">{{ p.name }}</a-select-option>
+              </a-select>
 
-        <!-- Prompt 预览 -->
-        <div v-if="currentVersionContent" class="prompt-preview">
-          <label>Prompt 内容预览</label>
-          <pre>{{ currentVersionContent }}</pre>
-        </div>
+              <a-select v-model:value="selectedVersionId" placeholder="Version" style="width: 100px"
+                :disabled="!selectedPromptId" @change="onVersionChange" class="custom-select" :bordered="false"
+                popupClassName="custom-dropdown">
+                <a-select-option v-for="v in versions" :key="v.id" :value="v.id">v{{ v.versionNumber
+                  }}</a-select-option>
+              </a-select>
+            </div>
 
-        <!-- 变量输入 -->
-        <div v-if="variableNames.length > 0" class="variables-section">
-          <label>变量输入</label>
-          <div class="variables-grid">
-            <div v-for="varName in variableNames" :key="varName" class="variable-item">
-              <label class="var-label">{{ varName }}</label>
-              <input v-model="variables[varName]" type="text" placeholder="请输入变量值" />
+            <div class="divider-vertical" v-if="Object.keys(variables).length > 0"></div>
+
+            <div class="vars-group" v-if="Object.keys(variables).length > 0">
+              <div v-for="(val, key) in variables" :key="key" class="var-input-wrapper">
+                <input v-model="variables[key]" :placeholder="key" />
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- 模型选择 -->
-        <div class="models-section">
-          <label>选择模型 (可多选)</label>
-          <div v-if="models.length === 0" class="empty-models">
-            <p>
-              <WarningOutlined /> 您还没有配置任何模型
-            </p>
-            <p>请先前往 <router-link to="/settings/models">模型配置</router-link> 添加您的 API Key</p>
+          <div class="actions-group">
+            <button class="btn-primary" @click="startCompete" :disabled="isCompeting || !selectedVersionId"
+              title="Start Battle">
+              <span v-if="!isCompeting">
+                <PlayCircleOutlined />
+              </span>
+              <span v-else>
+                <StopOutlined />
+              </span>
+            </button>
+            <button class="btn-ghost" @click="openLeaderboard" title="Leaderboard">
+              <TrophyOutlined />
+            </button>
           </div>
-          <div v-else class="models-grid">
-            <label v-for="model in models" :key="model.modelId" class="model-checkbox">
-              <input type="checkbox" v-model="selectedModels" :value="model.modelId" />
-              <span class="model-icon">{{ getModelIcon(model.modelId) }}</span>
-              <span>{{ model.displayName }}</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 开始按钮 -->
-        <div class="action-row">
-          <a-button type="primary" size="large" @click="startCompete" :disabled="isCompeting || !selectedVersionId"
-            :loading="isCompeting">
-            <template #icon>
-              <PlayCircleOutlined />
-            </template>
-            {{ isCompeting ? '对比中...' : '开始对比' }}
-          </a-button>
-          <a-button v-if="isCompeting" danger @click="stopCompete">
-            <template #icon>
-              <PauseCircleOutlined />
-            </template>
-            停止
-          </a-button>
         </div>
       </div>
 
-      <!-- 结果展示区 - 可折叠卡片布局 -->
-      <div v-if="Object.keys(modelOutputs).length > 0" class="results-section">
-        <div class="results-header">
-          <h3>
-            <BarChartOutlined /> 对比结果
-          </h3>
-          <div class="results-actions">
-            <a-button size="small" @click="expandAll">展开全部</a-button>
-            <a-button size="small" @click="collapseAll">折叠全部</a-button>
-          </div>
+      <!-- Prompt Preview Inline -->
+      <div v-if="compiledPrompt" class="prompt-preview-section">
+        <div class="section-label">SYSTEM PROMPT</div>
+        <div class="prompt-content-box">
+          {{ compiledPrompt }}
         </div>
-        <div class="results-list">
-          <div v-for="modelId in selectedModels" :key="modelId" class="result-card"
-            :class="{ 'winner': votingFor === modelId, 'collapsed': !expandedCards.has(modelId) }">
-            <!-- 卡片头部 - 可点击展开/折叠 -->
-            <div class="result-header" @click="toggleCard(modelId)">
-              <div class="model-info">
-                <span class="model-icon-large">{{ getModelIcon(modelId) }}</span>
-                <span class="model-name">{{ getModelDisplayName(modelId) }}</span>
-              </div>
-              <div class="header-right">
-                <div class="status-badge"
-                  :class="{ done: modelOutputs[modelId]?.finished, error: modelOutputs[modelId]?.error, loading: !modelOutputs[modelId]?.finished && !modelOutputs[modelId]?.error }">
-                  <span v-if="modelOutputs[modelId]?.error">
-                    <CloseCircleOutlined /> 失败
-                  </span>
-                  <span v-else-if="modelOutputs[modelId]?.finished">
-                    <CheckCircleOutlined /> 完成
-                  </span>
-                  <span v-else class="loading-dots">生成中<span class="dots"></span></span>
+      </div>
+
+      <!-- Battle Arena -->
+      <div class="battle-ground">
+
+        <!-- MODEL A COLUMN -->
+        <div class="model-column">
+          <div class="model-header">
+            <div class="corner-label">Model A</div>
+            <a-select v-model:value="modelA" style="width: 100%;" class="model-hero-select" :bordered="false"
+              popupClassName="custom-dropdown">
+              <template #suffixIcon>
+                <DownOutlined style="font-size: 12px; color: #9ca3af" />
+              </template>
+              <a-select-option v-for="m in models" :key="m.modelId" :value="m.modelId" :disabled="m.modelId === modelB">
+                <div class="option-content">
+                  <img v-if="getProviderLogo(m.modelId)" :src="getProviderLogo(m.modelId)" class="option-icon" />
+                  {{ m.displayName }}
                 </div>
-                <span class="expand-icon">
-                  <UpOutlined v-if="expandedCards.has(modelId)" />
-                  <DownOutlined v-else />
-                </span>
+              </a-select-option>
+            </a-select>
+          </div>
+
+          <div class="chat-area">
+            <div v-if="!outputA.content && !outputA.error && !isCompeting" class="placeholder-state">
+              <div class="placeholder-icon">
+                <FireOutlined style="color: #9ca3af; opacity: 0.2" />
               </div>
             </div>
-
-            <!-- 卡片内容 - 可折叠 -->
-            <div v-show="expandedCards.has(modelId)" class="result-content">
-              <div v-if="modelOutputs[modelId]?.error" class="error-message">
-                <CloseCircleOutlined /> {{ modelOutputs[modelId].error }}
-              </div>
-              <div v-else-if="modelOutputs[modelId]?.content" class="markdown-body"
-                v-html="renderMarkdown(modelOutputs[modelId]?.content || '')">
-              </div>
-              <div v-else class="waiting-message">
-                <span class="typing-indicator">
-                  <ClockCircleOutlined /> 等待输出...
-                </span>
-              </div>
-            </div>
-
-            <!-- 投票按钮 (仅当竞技结束且至少2个模型时显示) -->
-            <div v-if="expandedCards.has(modelId) && !isCompeting && selectedModels.length >= 2 && modelOutputs[modelId]?.finished && !modelOutputs[modelId]?.error"
-              class="vote-section">
-              <div v-if="!hasVoted" class="vote-btn-wrapper">
-                <a-button type="primary" ghost class="vote-btn" @click.stop="handleVote(modelId)">
-                  <template #icon>
-                    <TrophyOutlined />
-                  </template>
-                  投它一票
-                </a-button>
-              </div>
-              <div v-else-if="votingFor === modelId" class="voted-badge">
-                <TrophyOutlined /> 已投票给此模型
-              </div>
+            <div v-else class="message-bubble model-msg">
+              <div class="msg-content markdown-body" v-html="renderMarkdown(outputA.content)"></div>
+              <div v-if="outputA.error" class="error-text">Result Error: {{ outputA.error }}</div>
+              <div v-if="!outputA.finished && isCompeting" class="typing-cursor"></div>
             </div>
           </div>
         </div>
+
+        <!-- VS Divider -->
+        <div class="vs-divider">
+          <div class="line"></div>
+          <div class="swap-btn" @click="swapModels" title="Switch Sides">
+            <SwapOutlined />
+          </div>
+        </div>
+
+        <!-- MODEL B COLUMN -->
+        <div class="model-column">
+          <div class="model-header">
+            <div class="corner-label">Model B</div>
+            <a-select v-model:value="modelB" style="width: 100%;" class="model-hero-select" :bordered="false"
+              popupClassName="custom-dropdown">
+              <template #suffixIcon>
+                <DownOutlined style="font-size: 12px; color: #9ca3af" />
+              </template>
+              <a-select-option v-for="m in models" :key="m.modelId" :value="m.modelId" :disabled="m.modelId === modelA">
+                <div class="option-content">
+                  <img v-if="getProviderLogo(m.modelId)" :src="getProviderLogo(m.modelId)" class="option-icon" />
+                  {{ m.displayName }}
+                </div>
+              </a-select-option>
+            </a-select>
+          </div>
+
+          <div class="chat-area">
+            <div v-if="!outputB.content && !outputB.error && !isCompeting" class="placeholder-state">
+              <div class="placeholder-icon">
+                <ThunderboltOutlined style="color: #9ca3af; opacity: 0.2" />
+              </div>
+            </div>
+            <div v-else class="message-bubble model-msg">
+              <div class="msg-content markdown-body" v-html="renderMarkdown(outputB.content)"></div>
+              <div v-if="outputB.error" class="error-text">Result Error: {{ outputB.error }}</div>
+              <div v-if="!outputB.finished && isCompeting" class="typing-cursor"></div>
+            </div>
+          </div>
+        </div>
+
       </div>
+
+      <!-- Voting Floating Bar -->
+      <div class="voting-bar" v-if="!isCompeting && outputA.finished && outputB.finished">
+        <div class="vote-inner">
+          <span class="vote-label">Choose winner:</span>
+          <div v-if="!hasVoted" class="vote-actions">
+            <button class="v-btn v-a" @click="handleVote('A')">👈 {{ getModelDisplayName(modelA!) }}</button>
+            <button class="v-btn v-tie" @click="handleVote('Tie')">Tie</button>
+            <button class="v-btn v-b" @click="handleVote('B')">{{ getModelDisplayName(modelB!) }} 👉</button>
+          </div>
+          <div class="vote-result" v-else>
+            <span v-if="votedWinner === 'tie'">🤝 It's a Tie!</span>
+            <span v-else>🎉 You voted for: <strong>{{ getModelDisplayName(votedWinner!) }}</strong></span>
+          </div>
+        </div>
+      </div>
+
     </main>
 
-    <!-- 排行榜 Modal -->
-    <a-modal v-model:visible="leaderboardVisible" title="🤖 模型胜率排行榜" :footer="null" width="600px">
+    <!-- Leaderboard Modal -->
+    <a-modal v-model:visible="leaderboardVisible" title="🏆 Leaderboard" :footer="null" width="600px">
       <a-table :dataSource="leaderboardData" :loading="leaderboardLoading" :pagination="false" rowKey="modelId">
-        <a-table-column title="排名" width="80px">
+        <a-table-column title="Rank" width="80px">
           <template #default="{ index }">
-            <span v-if="index === 0" style="font-size: 1.5em">🥇</span>
-            <span v-else-if="index === 1" style="font-size: 1.5em">🥈</span>
-            <span v-else-if="index === 2" style="font-size: 1.5em">🥉</span>
-            <span v-else class="rank-num">{{ index + 1 }}</span>
+            <span class="rank-badge" :class="'rank-' + (index + 1)">{{ index + 1 }}</span>
           </template>
         </a-table-column>
-        <a-table-column title="模型" dataIndex="modelId">
+        <a-table-column title="Model" dataIndex="modelId">
           <template #default="{ text }">
-            <span style="font-size: 1.2em; margin-right: 8px">{{ getModelIcon(text) }}</span>
-            <span style="font-weight: 500">{{ getModelDisplayName(text) }}</span>
+            <div class="lb-model-cell">
+              <img v-if="getProviderLogo(text)" :src="getProviderLogo(text)" class="lb-icon" />
+              <span>{{ getModelDisplayName(text) }}</span>
+            </div>
           </template>
         </a-table-column>
-        <a-table-column title="胜率" dataIndex="winRate" align="right">
+        <a-table-column title="Win Rate" dataIndex="winRate" align="right">
           <template #default="{ text }">
-            <span class="win-rate" :class="{ 'high-rate': text >= 50, 'low-rate': text < 50 }">
-              {{ text }}%
-            </span>
-          </template>
-        </a-table-column>
-        <a-table-column title="胜/负/总" align="center">
-          <template #default="{ record }">
-            <span style="color: #52c41a">{{ record.wins }}</span> /
-            <span style="color: #ff4d4f">{{ record.losses }}</span> /
-            <span style="color: #888">{{ record.total }}</span>
+            <span class="win-rate">{{ text }}%</span>
           </template>
         </a-table-column>
       </a-table>
@@ -556,582 +545,503 @@ onUnmounted(() => {
 <style scoped>
 .arena-container {
   min-height: 100vh;
-  background: var(--color-bg-primary);
-  color: var(--color-text-primary);
-}
-
-.header {
+  background: #f9fafb;
+  color: #1f2937;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-4) var(--space-8);
-  border-bottom: 1px solid var(--color-border-light);
-  background: var(--color-bg-secondary);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.back-btn {
-  padding: var(--space-2) var(--space-4);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.back-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: var(--color-primary-muted);
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-}
-
-.history-btn {
-  padding: var(--space-2) var(--space-4);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.history-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.logo-icon {
-  font-size: var(--text-2xl);
-  color: var(--color-primary);
-}
-
-.page-title {
-  font-size: var(--text-xl);
-  font-weight: 600;
-  color: var(--color-text-primary);
+  flex-direction: column;
 }
 
 .main-content {
-  max-width: 960px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: var(--space-8);
+  width: 100%;
+  padding: 24px;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+/* Control Bar */
+.control-bar-wrapper {
+  margin-bottom: 20px;
+}
+
+.control-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  padding: 8px 16px;
+  /* Smaller padding for tighter look */
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .config-section {
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  padding: var(--space-6);
-  margin-bottom: var(--space-8);
-}
-
-.config-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-6);
-  margin-bottom: var(--space-5);
-}
-
-.config-item label,
-.variables-section>label,
-.models-section>label,
-.prompt-preview>label {
-  display: block;
-  margin-bottom: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-}
-
-.config-item select,
-.variable-item input {
-  width: 100%;
-  padding: var(--space-3);
-  background: var(--color-bg-tertiary);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  color: var(--color-text-primary);
-  font-size: var(--text-sm);
-  outline: none;
-  transition: all var(--transition-fast);
-}
-
-.config-item select:focus,
-.variable-item input:focus {
-  border-color: var(--color-primary);
-}
-
-.prompt-preview {
-  margin-bottom: var(--space-5);
-}
-
-.prompt-preview pre {
-  padding: var(--space-4);
-  background: var(--color-bg-tertiary);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  max-height: 150px;
-  overflow-y: auto;
-}
-
-.variables-section {
-  margin-bottom: var(--space-5);
-}
-
-.variables-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--space-4);
-}
-
-.variable-item label {
-  display: block;
-  margin-bottom: var(--space-1);
-  font-size: var(--text-xs);
-  color: var(--color-primary);
-}
-
-.models-section {
-  margin-bottom: var(--space-5);
-}
-
-.models-grid {
   display: flex;
-  gap: var(--space-3);
+  align-items: center;
+  gap: 16px;
+  flex: 1;
   flex-wrap: wrap;
 }
 
-.model-checkbox {
+.prompt-select-group {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-bg-tertiary);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  gap: 10px;
 }
 
-.model-checkbox:has(input:checked) {
-  border-color: var(--color-primary);
-  background: var(--color-primary-muted);
+.divider-vertical {
+  width: 1px;
+  height: 24px;
+  background: #e5e7eb;
 }
 
-.model-checkbox input {
-  accent-color: var(--color-primary);
-}
-
-.model-icon {
-  font-size: var(--text-lg);
-}
-
-.action-row {
+.vars-group {
   display: flex;
-  gap: var(--space-3);
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.compete-btn {
-  padding: var(--space-3) var(--space-8);
-  background: var(--color-primary);
-  border: none;
-  border-radius: var(--radius-md);
+.var-input-wrapper input {
+  padding: 6px 12px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.2s;
+  min-width: 120px;
+}
+
+.var-input-wrapper input:focus {
+  border-color: #d1d5db;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.02);
+}
+
+.actions-group {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.btn-primary {
+  background: #18181b;
   color: #fff;
-  font-size: var(--text-base);
+  border: none;
+  width: 36px;
+  /* Smaller buttons */
+  height: 36px;
+  border-radius: 8px;
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-size: 14px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
-.compete-btn:hover:not(:disabled) {
-  background: var(--color-primary-hover);
+.btn-primary:hover:not(:disabled) {
+  background: #27272a;
+  transform: translateY(-1px);
 }
 
-.compete-btn:disabled {
-  opacity: 0.6;
+.btn-primary:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-.stop-btn {
-  padding: var(--space-3) var(--space-6);
-  background: var(--color-danger);
-  border: none;
-  border-radius: var(--radius-md);
-  color: #fff;
+.btn-ghost {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  color: #374151;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.stop-btn:hover {
-  opacity: 0.9;
-}
-
-/* 结果区域 */
-.results-section {
-  margin-top: var(--space-8);
-}
-
-.results-header {
+  transition: all 0.2s;
+  font-size: 14px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-4);
+  justify-content: center;
 }
 
-.results-header h3 {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: 600;
+.btn-ghost:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
 }
 
-.results-actions {
-  display: flex;
-  gap: var(--space-2);
+
+/* Prompt Preview Section */
+.prompt-preview-section {
+  margin-bottom: 20px;
+  background: transparent;
+  border-radius: 12px;
+  overflow: hidden;
+  animation: fadeIn 0.3s ease;
 }
 
-.results-list {
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9ca3af;
+  margin-bottom: 8px;
+  padding-left: 4px;
+  letter-spacing: 0.5px;
+}
+
+.prompt-content-box {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #4b5563;
+  white-space: pre-wrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  /* Max height for long prompts */
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Battle Ground Card */
+.battle-ground {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.model-column {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-}
-
-.result-card {
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
+  background: #fff;
+  position: relative;
   overflow: hidden;
-  transition: all var(--transition-fast);
 }
 
-.result-card:hover {
-  border-color: var(--color-primary);
-}
-
-.result-card.winner {
-  border-color: var(--color-warning);
-  background: var(--color-bg-secondary);
-}
-
-.result-header {
+.model-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid #f3f4f6;
+  height: auto;
+  /* Let it grow */
+  min-height: 72px;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.corner-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+/* --- CUSTOM SELECT STYLES (ALIGNMENT FIX) --- */
+:deep(.custom-select .ant-select-selector),
+:deep(.model-hero-select .ant-select-selector) {
+  background-color: #fff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+  height: 36px !important;
+  /* Force Flex alignment */
+  display: flex !important;
+  align-items: center !important;
+  padding: 0 12px !important;
+  transition: all 0.2s ease;
+}
+
+:deep(.custom-select .ant-select-selector .ant-select-selection-item),
+:deep(.model-hero-select .ant-select-selector .ant-select-selection-item) {
+  display: flex !important;
+  align-items: center !important;
+  /* Reset absolute positioning often found in AntD */
+  position: static !important;
+  line-height: normal !important;
+  transform: none !important;
+  margin: 0 !important;
+  top: auto !important;
+  bottom: auto !important;
+}
+
+
+:deep(.model-hero-select .ant-select-selector) {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
+  padding-left: 0 !important;
+  font-size: 16px;
+  font-weight: 600;
+  height: 40px !important;
+}
+
+:deep(.model-hero-select:hover .ant-select-selector) {
+  background-color: #f9fafb !important;
+}
+
+:deep(.ant-select-selector:hover) {
+  border-color: #d1d5db !important;
+}
+
+:deep(.ant-select-focused .ant-select-selector) {
+  border-color: #000 !important;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Dropdown Menu Styling */
+:global(.custom-dropdown .ant-select-dropdown) {
+  border-radius: 12px !important;
+  padding: 6px !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid #f3f4f6;
+}
+
+.option-content {
+  display: flex;
   align-items: center;
-  padding: var(--space-4) var(--space-5);
-  background: var(--color-bg-tertiary);
-  border-bottom: 1px solid var(--color-border-light);
+  gap: 10px;
+}
+
+.option-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+/* VS Divider */
+.vs-divider {
+  width: 1px;
+  background: #f3f4f6;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.swap-btn {
+  position: absolute;
+  top: 50%;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.result-header:hover {
-  background: var(--color-bg-elevated);
+.swap-btn:hover {
+  color: #000;
+  transform: scale(1.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
-.result-card.collapsed .result-header {
-  border-bottom: none;
-}
-
-.model-info {
+/* Chat Area */
+.chat-area {
+  flex: 1;
+  padding: 32px;
+  overflow-y: auto;
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-direction: column;
 }
 
-.model-icon-large {
-  font-size: var(--text-2xl);
-}
-
-.model-name {
-  font-weight: 600;
-  font-size: var(--text-base);
-  color: var(--color-text-primary);
-}
-
-.expand-icon {
-  color: var(--color-text-tertiary);
-  font-size: var(--text-sm);
-  transition: transform var(--transition-fast);
-}
-
-.status-badge {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
-
-.status-badge.done {
-  background: rgba(16, 163, 127, 0.15);
-  color: var(--color-success);
-}
-
-.status-badge.loading {
-  background: rgba(245, 158, 11, 0.15);
-  color: var(--color-warning);
-}
-
-.status-badge.error {
-  background: rgba(239, 68, 68, 0.15);
-  color: var(--color-danger);
-}
-
-.loading-dots .dots::after {
-  content: '';
-  animation: dots 1.5s infinite;
-}
-
-@keyframes dots {
-
-  0%,
-  20% {
-    content: '';
-  }
-
-  40% {
-    content: '.';
-  }
-
-  60% {
-    content: '..';
-  }
-
-  80%,
-  100% {
-    content: '...';
-  }
-}
-
-.result-content {
-  padding: var(--space-5);
-  min-height: 200px;
-}
-
-.error-message {
-  color: var(--color-danger);
-  padding: var(--space-4);
-  background: rgba(239, 68, 68, 0.1);
-  border-radius: var(--radius-md);
-}
-
-.waiting-message {
-  color: var(--color-text-tertiary);
-  font-style: italic;
-}
-
-.typing-indicator {
+.placeholder-state {
+  flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
+  justify-content: center;
+  opacity: 0.1;
 }
 
-/* Markdown 样式 */
-.markdown-body {
-  color: var(--color-text-primary);
+.placeholder-icon {
+  font-size: 48px;
+}
+
+.message-bubble {
+  background: #fff;
+  font-size: 16px;
   line-height: 1.7;
-  font-size: var(--text-base);
+  color: #374151;
 }
 
-.markdown-body :deep(h1),
-.markdown-body :deep(h2),
-.markdown-body :deep(h3),
-.markdown-body :deep(h4) {
-  color: var(--color-text-primary);
-  margin-top: 1.5em;
-  margin-bottom: 0.5em;
-  font-weight: 600;
+.typing-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 18px;
+  background: #000;
+  margin-left: 4px;
+  border-radius: 1px;
+  animation: blink 1s infinite;
 }
 
-.markdown-body :deep(h1) {
-  font-size: 1.5em;
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
 }
 
-.markdown-body :deep(h2) {
-  font-size: 1.3em;
+/* Voting Floating Bar */
+.voting-bar {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  padding: 8px 16px;
+  border-radius: 100px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  animation: floatUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 50;
 }
 
-.markdown-body :deep(h3) {
-  font-size: 1.15em;
+@keyframes floatUp {
+  from {
+    transform: translate(-50%, 20px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
 }
 
-.markdown-body :deep(h4) {
-  font-size: 1em;
-}
-
-.markdown-body :deep(p) {
-  margin-bottom: 1em;
-}
-
-.markdown-body :deep(ul),
-.markdown-body :deep(ol) {
-  margin-left: 1.5em;
-  margin-bottom: 1em;
-}
-
-.markdown-body :deep(li) {
-  margin-bottom: 0.5em;
-}
-
-.markdown-body :deep(code) {
-  background: var(--color-bg-tertiary);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  color: var(--color-primary);
-}
-
-.markdown-body :deep(pre) {
-  background: var(--color-bg-tertiary);
-  padding: var(--space-4);
-  border-radius: var(--radius-md);
-  overflow-x: auto;
-  margin-bottom: 1em;
-}
-
-.markdown-body :deep(pre code) {
-  background: transparent;
-  padding: 0;
-}
-
-.markdown-body :deep(blockquote) {
-  border-left: 3px solid var(--color-primary);
-  padding-left: var(--space-4);
-  margin-left: 0;
-  color: var(--color-text-secondary);
-  font-style: italic;
-}
-
-.markdown-body :deep(strong) {
-  color: var(--color-text-primary);
-  font-weight: 600;
-}
-
-.markdown-body :deep(em) {
-  color: var(--color-text-secondary);
-}
-
-.markdown-body :deep(a) {
-  color: var(--color-primary);
-  text-decoration: none;
-}
-
-.markdown-body :deep(a:hover) {
-  text-decoration: underline;
-}
-
-.markdown-body :deep(h2) {
-  font-size: 1.3em;
-  border-bottom: 1px solid var(--color-border-light);
-  padding-bottom: 0.3em;
-}
-
-.vote-section {
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--color-border-light);
-  display: flex;
-  justify-content: center;
-}
-
-.vote-btn {
-  width: 100%;
-}
-
-.voted-badge {
-  color: var(--color-warning);
-  font-weight: 600;
+.vote-inner {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  background: rgba(245, 158, 11, 0.1);
-  border-radius: var(--radius-md);
-  width: 100%;
-  justify-content: center;
+  gap: 16px;
 }
 
-.rank-num {
-  font-weight: bold;
-  color: var(--color-text-tertiary);
+.vote-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.vote-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.v-btn {
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid transparent;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.v-a {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.v-a:hover {
+  background: #fecaca;
+}
+
+.v-b {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.v-b:hover {
+  background: #bfdbfe;
+}
+
+.v-tie {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.v-tie:hover {
+  background: #e5e7eb;
+}
+
+/* Leaderboard */
+.rank-badge {
   display: inline-block;
   width: 24px;
+  height: 24px;
+  background: #f3f4f6;
+  border-radius: 6px;
   text-align: center;
-}
-
-.win-rate {
-  font-family: var(--font-mono);
-  font-weight: bold;
-}
-
-.high-rate {
-  color: var(--color-danger);
-}
-
-.low-rate {
-  color: var(--color-success);
-}
-
-.markdown-body :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 1em;
-}
-
-.markdown-body :deep(th),
-.markdown-body :deep(td) {
-  border: 1px solid var(--color-border-light);
-  padding: var(--space-3);
-  text-align: left;
-}
-
-.markdown-body :deep(th) {
-  background: var(--color-bg-tertiary);
+  line-height: 24px;
   font-weight: 600;
+  font-size: 12px;
+  color: #666;
 }
 
-/* 空模型提示 */
-.empty-models {
-  padding: var(--space-5);
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px dashed var(--color-warning);
-  border-radius: var(--radius-md);
-  text-align: center;
+.rank-1 {
+  background: #fffbeb;
+  color: #b45309;
 }
 
-.empty-models p {
-  margin: var(--space-2) 0;
-  color: var(--color-warning);
+.rank-2 {
+  background: #f8fafc;
+  color: #475569;
 }
 
-.empty-models a {
-  color: var(--color-primary);
-  text-decoration: underline;
+.rank-3 {
+  background: #fff7ed;
+  color: #c2410c;
 }
 
-/* 响应式 */
-@media (max-width: 900px) {
-  .config-row {
-    grid-template-columns: 1fr;
+.lb-model-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lb-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
   }
 
-  .results-grid {
-    grid-template-columns: 1fr;
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 </style>

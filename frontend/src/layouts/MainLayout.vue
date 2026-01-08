@@ -4,7 +4,7 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <img src="/logo.svg?v=4" alt="Logo" class="logo-icon" />
+          <img :src="logo" alt="Logo" class="logo-icon" />
           <span class="logo-text">Prompt-Forge</span>
         </div>
       </div>
@@ -48,15 +48,23 @@
         <div class="user-profile">
           <a-dropdown placement="topLeft">
             <div class="user-info">
-              <a-avatar :size="32" class="user-avatar">{{ userInitials }}</a-avatar>
+              <a-avatar :size="32" :src="user?.avatar" class="user-avatar">
+                <template #icon v-if="!user?.avatar">
+                  <UserOutlined />
+                </template>
+              </a-avatar>
               <div class="user-details">
-                <span class="username">{{ user?.username || '用户' }}</span>
+                <span class="username">{{ user?.nickname || user?.username || '用户' }}</span>
                 <span class="user-role">{{ userRoleText }}</span>
               </div>
               <MoreOutlined class="more-icon" />
             </div>
             <template #overlay>
               <a-menu>
+                <a-menu-item key="profile" @click="router.push('/settings/profile')">
+                  <UserOutlined /> 个人资料
+                </a-menu-item>
+                <a-menu-divider />
                 <a-menu-item key="logout" danger @click="handleLogout">
                   <LogoutOutlined /> 退出登录
                 </a-menu-item>
@@ -88,20 +96,27 @@ import {
   ShopOutlined,
   SettingOutlined,
   LogoutOutlined,
+  UserOutlined,
   MoreOutlined
 } from '@ant-design/icons-vue'
 import WorkspaceSelector from '../components/WorkspaceSelector.vue'
 import { message } from 'ant-design-vue'
+import logo from '@/assets/logo.svg'
 
 const router = useRouter()
 const user = ref<any>(null)
 const currentWorkspaceId = ref<number>()
 
-onMounted(() => {
+const updateUser = () => {
   const userStr = localStorage.getItem('user')
   if (userStr) {
     user.value = JSON.parse(userStr)
   }
+}
+
+onMounted(() => {
+  updateUser() // Initial load
+  window.addEventListener('user-updated', updateUser) // Listen for updates
 
   const wsId = localStorage.getItem('currentWorkspaceId')
   if (wsId) {
@@ -109,8 +124,17 @@ onMounted(() => {
   }
 })
 
+// Clean up listener (optional but good practice)
+import { onUnmounted } from 'vue'
+onUnmounted(() => {
+  window.removeEventListener('user-updated', updateUser)
+})
+
 const isAdmin = computed(() => user.value?.role === 'ADMIN')
-const userInitials = computed(() => user.value?.username?.substring(0, 1).toUpperCase() || 'U')
+const userInitials = computed(() => {
+  const name = user.value?.nickname || user.value?.username || 'U'
+  return name.substring(0, 1).toUpperCase()
+})
 const userRoleText = computed(() => isAdmin.value ? '管理员' : '普通用户')
 
 const handleWorkspaceChange = (id: number) => {
@@ -234,8 +258,8 @@ const handleLogout = () => {
 }
 
 .user-avatar {
-  background: var(--color-primary);
-  color: white;
+  background: #f2f2f2;
+  color: #a1a1a1;
 }
 
 .user-details {

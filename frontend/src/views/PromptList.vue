@@ -57,6 +57,14 @@ const openOptimizeModal = async () => {
     return
   }
 
+  // Check for Default Model Preference
+  const defaultModel = localStorage.getItem('PF_DEFAULT_OPTIMIZE_MODEL')
+  if (defaultModel) {
+    selectedOptimizeModel.value = defaultModel
+    await handleOptimize()
+    return
+  }
+
   // 加载可用模型
   loadingModels.value = true
   try {
@@ -853,17 +861,39 @@ onMounted(() => {
 }
 
 .prompt-card {
-  background: var(--color-bg-secondary);
+  background: var(--color-bg-elevated);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-normal);
+  border: 1px solid transparent;
+}
+
+.prompt-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-primary-light);
 }
 
 .prompt-card :deep(.ant-card-head) {
-  border-bottom: 1px solid var(--color-border-light);
+  border-bottom: none;
+  padding: 0 24px;
+  min-height: auto;
+  padding-top: 20px;
+}
+
+.prompt-card :deep(.ant-card-body) {
+  padding: 12px 24px;
 }
 
 .prompt-card :deep(.ant-card-actions) {
   background: transparent;
-  border-top: 1px solid var(--color-border-light);
+  border-top: none;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.prompt-card:hover :deep(.ant-card-actions) {
+  opacity: 1;
 }
 
 .prompt-card :deep(.ant-card-actions > li) {
