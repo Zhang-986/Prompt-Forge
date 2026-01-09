@@ -17,8 +17,10 @@ import {
   FireOutlined,
   SwapOutlined,
   DownOutlined,
-  EyeOutlined
+  EyeOutlined,
+  HistoryOutlined
 } from '@ant-design/icons-vue'
+import ArenaHistory from './components/ArenaHistory.vue'
 import { marked } from 'marked'
 
 // Import Config Assets
@@ -90,6 +92,115 @@ const votedWinner = ref<string | 'tie' | null>(null)
 const leaderboardVisible = ref(false)
 const leaderboardData = ref<LeaderboardItem[]>([])
 const leaderboardLoading = ref(false)
+const historyRef = ref()
+const isViewingHistory = ref(false)
+
+const openHistory = () => {
+  historyRef.value?.show()
+}
+
+// Restore Session
+// Fix: Accept full history item to know who won
+const restoreSession = async (historyItem: any) => {
+  const sessionId = historyItem.sessionId
+  // console.log('Restoring session:', sessionId)
+  try {
+    const { getSessionDetail } = await import('../api/arena')
+    const res = await getSessionDetail(sessionId)
+    if (res.code === 200) {
+      const detail = res.data
+      currentSessionId.value = detail.id
+      
+      // Stop current competition if any
+      if (isCompeting.value) stopCompete()
+      
+      // Set Mode
+      isViewingHistory.value = true
+      isCompeting.value = false
+      hasVoted.value = true
+      
+      // Restore Vote Winner (from History Item)
+      // Note: historyItem.winnerModel is the displayName(modified by backend) or modelId?
+      // Backend getUserVotes returns DISPLAY NAME if mapped, or short name.
+      // But submitVote expects modelId.
+      // Here we just want to DISPLAY it.
+      // Wait, getLeaderboard/getUserVotes DTO might return transformed names.
+      // But locally we use modelId for `votedWinner` to match `getModelDisplayName`.
+      // The history item from `getUserVotes` might have overwritten names. 
+      // Let's rely on model matching if possible, OR just display what we have.
+      // Since `getUserVotes` already formatted names, we can force display.
+      // But `votedWinner` is used as key in `getModelDisplayName`.
+      // Let's try to map back or just set it if it matches modelA/B.
+      
+      // Populate Data
+      // Fix 1: Load Prompts and Versions to show correct Selector State
+      if (detail.promptId) {
+          selectedPromptId.value = detail.promptId
+          await loadVersions(detail.promptId)
+      }
+      selectedVersionId.value = detail.promptVersionId
+      variables.value = detail.variables 
+      
+      // Models
+      if (detail.models && detail.models.length >= 2) {
+         modelA.value = detail.models[0]
+         modelB.value = detail.models[1]
+      }
+
+      // Restore winner selection for display
+      // historyItem.winnerModel might be "GPT-4o", but modelA might be "openai:gpt-4o"
+      // If names don't match exactly, we might fail to show "You voted for X" correctly using computed.
+      // But `getModelDisplayName` tries to match ID.
+      // For now, let's treat historyItem.winnerModel as the truth to show.
+      // We will override votedWinner logic slightly or just set it.
+      // Since frontend `getUserVotes` maps IDs to display names (in Backend Service Lines 499-500), 
+      // historyItem.winnerModel IS the display name.
+      // So we can't use it as ID.
+      // We need to determine which model ID won.
+      // We know modelA and modelB IDs. We can check which one's display name matches historyItem.winnerModel?
+      // Or simply: checking latency? No.
+      // The backend `getUserVotes` returns display names, losing IDs. That was a design flaw in Phase 1.
+      // However, we can deduce it if we assume the user clicked the item where winner was X.
+      // For now, to quick fix UI: 
+      // We will introduce `votedWinnerDisplayName` to explicitly show string.
+      votedWinner.value = 'HISTORY_RESTORED' // Special flag?
+      // Or just use a new ref for display.
+      
+      // Let's hack: find which model ID in (modelA, modelB) roughly matches the winner string?
+      // Or simply add `votedWinnerDisplayName` ref.
+      
+      // Outputs
+      const resA = detail.results.find((r: any) => r.modelId === modelA.value)
+      const resB = detail.results.find((r: any) => r.modelId === modelB.value)
+      
+      outputA.value = {
+        content: resA?.content || '',
+        finished: true,
+        error: resA?.error,
+        time: resA?.latencyMs
+      }
+      
+      outputB.value = {
+        content: resB?.content || '',
+        finished: true,
+        error: resB?.error,
+        time: resB?.latencyMs
+      }
+
+      // Restore winner display
+      // Since historyItem.winnerModel is the name, let's use it directly if possible.
+      // We need to modify the template to use a separate ref for history winner name.
+      restoreWinnerName.value = historyItem.winnerModel
+
+      // Close history
+      historyRef.value?.hide()
+    }
+  } catch (e) {
+    console.error(e)
+    message.error('Failed to load session details')
+  }
+}
+const restoreWinnerName = ref<string | null>(null)
 
 // Computed
 const currentVersionContent = computed(() => {
@@ -203,6 +314,9 @@ const renderMarkdown = (content: string) => {
 }
 
 // Start Battle
+const currentSessionId = ref<number | null>(null)
+
+// Start Battle
 const startCompete = () => {
   if (!selectedVersionId.value) return message.warning('请选择 Prompt 版本')
   if (!modelA.value || !modelB.value) return message.warning('请选择两个对比模型')
@@ -214,6 +328,9 @@ const startCompete = () => {
   hasVoted.value = false
   votedWinner.value = null
   isCompeting.value = true
+  isViewingHistory.value = false
+  currentSessionId.value = null
+  restoreWinnerName.value = null
 
   const token = localStorage.getItem('token')
   const baseUrl = import.meta.env.VITE_API_URL || '/api'
@@ -250,6 +367,13 @@ const startCompete = () => {
             try {
               const jsonStr = trimmedLine.substring(5).trim()
               if (jsonStr) {
+                // Handle different event types including 'message' wrapper from SSE
+                // Note: Standard SSE sends "data: { ... }". Our backend sends "data: {...}"
+                // If backend wrapper sends .name("message"), the browser EventSource usually handles it.
+                // But here we are using fetch + reader, so we parse raw lines.
+                // The backend sends: data: {"type":"session", ...}
+                // or data: {"modelId":..., "type":"content", ...}
+                
                 const data = JSON.parse(jsonStr) as ArenaEvent
                 handleArenaEvent(data)
               }
@@ -270,6 +394,14 @@ const startCompete = () => {
 }
 
 const handleArenaEvent = (event: ArenaEvent) => {
+  if (event.type === 'session') {
+    if (event.sessionId) {
+      currentSessionId.value = event.sessionId
+      console.log('Captured Session ID:', event.sessionId)
+    }
+    return
+  }
+
   let target = null
   if (event.modelId === modelA.value) target = outputA.value
   else if (event.modelId === modelB.value) target = outputB.value
@@ -277,7 +409,7 @@ const handleArenaEvent = (event: ArenaEvent) => {
   if (!target) return
 
   if (event.type === 'content') {
-    target.content += event.content
+    target.content += event.content || ''
   } else if (event.type === 'finish') {
     target.finished = true
   } else if (event.type === 'error') {
@@ -314,7 +446,12 @@ const handleVote = async (choice: 'A' | 'B' | 'Tie') => {
   }
 
   try {
-    await submitVote({ winnerModel: winner, loserModel: loser })
+    // Send sessionId if available
+    await submitVote({ 
+      sessionId: currentSessionId.value || undefined,
+      winnerModel: winner, 
+      loserModel: loser 
+    })
     hasVoted.value = true
     message.success('投票成功！')
   } catch (e) {
@@ -405,6 +542,9 @@ onUnmounted(() => stopCompete())
               <span v-else>
                 <StopOutlined />
               </span>
+            </button>
+            <button class="btn-ghost" @click="openHistory" title="Vote History" style="margin-right: 8px">
+              <HistoryOutlined />
             </button>
             <button class="btn-ghost" @click="openLeaderboard" title="Leaderboard">
               <TrophyOutlined />
@@ -509,7 +649,7 @@ onUnmounted(() => stopCompete())
           </div>
           <div class="vote-result" v-else>
             <span v-if="votedWinner === 'tie'">🤝 It's a Tie!</span>
-            <span v-else>🎉 You voted for: <strong>{{ getModelDisplayName(votedWinner!) }}</strong></span>
+            <span v-else>🎉 You voted for: <strong>{{ restoreWinnerName || getModelDisplayName(votedWinner!) }}</strong></span>
           </div>
         </div>
       </div>
@@ -517,7 +657,7 @@ onUnmounted(() => stopCompete())
     </main>
 
     <!-- Leaderboard Modal -->
-    <a-modal v-model:visible="leaderboardVisible" title="🏆 Leaderboard" :footer="null" width="600px">
+    <a-modal v-model:open="leaderboardVisible" title="🏆 Leaderboard" :footer="null" width="600px">
       <a-table :dataSource="leaderboardData" :loading="leaderboardLoading" :pagination="false" rowKey="modelId">
         <a-table-column title="Rank" width="80px">
           <template #default="{ index }">
@@ -539,6 +679,9 @@ onUnmounted(() => stopCompete())
         </a-table-column>
       </a-table>
     </a-modal>
+
+    <!-- History Drawer -->
+    <ArenaHistory ref="historyRef" @restore="restoreSession" />
   </div>
 </template>
 

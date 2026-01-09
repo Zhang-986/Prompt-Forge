@@ -28,11 +28,12 @@ export const buildCompeteUrl = (params: {
 }
 
 export interface ArenaEvent {
-    modelId: string
-    type: 'start' | 'content' | 'finish' | 'error'
-    content: string
-    sequence: number
-    finished: boolean
+    modelId?: string
+    type: 'start' | 'content' | 'finish' | 'error' | 'session'
+    content?: string
+    sequence?: number
+    finished?: boolean
+    sessionId?: number
 }
 
 // 提交投票
@@ -55,4 +56,52 @@ export interface LeaderboardItem {
 
 export const getLeaderboard = () => {
     return request.get<any, { code: number; data: LeaderboardItem[]; message: string }>('/arena/leaderboard')
+}
+
+// 投票历史项
+export interface ArenaVoteHistoryItem {
+    id: number
+    sessionId: number
+    prompt: string
+    winnerModel: string
+    loserModel: string
+    createdAt: string
+}
+
+// 获取用户投票历史
+export const getUserHistory = (params: { page: number; size: number }) => {
+    return request.get<any, {
+        code: number
+        data: {
+            records: ArenaVoteHistoryItem[]
+            total: number
+            current: number
+            size: number
+        }
+        message: string
+    }>('/arena/history', { params })
+}
+
+// 竞技详情 DTO
+export interface ArenaSessionDetail {
+    id: number
+    promptVersionId: number
+    finalPrompt: string
+    variables: Record<string, any>
+    models: string[]
+    status: string
+    createdAt: string
+    completedAt: string
+    results: {
+        modelId: string
+        content: string
+        error?: string
+        latencyMs: number
+        tokensUsed: number
+    }[]
+}
+
+// 获取详情
+export const getSessionDetail = (sessionId: number) => {
+    return request.get<any, { code: number; data: ArenaSessionDetail; message: string }>(`/arena/session/${sessionId}`)
 }

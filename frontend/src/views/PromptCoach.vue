@@ -15,8 +15,8 @@ import {
 } from '@ant-design/icons-vue'
 import ProviderLogo from '../components/ProviderLogo.vue'
 import {
-    startCoachSession,
-    sendCoachMessage,
+    startAgentSession,
+    sendAgentMessage,
     getCoachSession,
     type CoachSession
 } from '../api/promptCoach'
@@ -122,71 +122,13 @@ const startChat = async () => {
         // 1. 创建会话 (如果还没有)
         let sessionId = session.value.sessionId
         if (!sessionId) {
-            const res = await startCoachSession({
+            const res = await startAgentSession({
                 initialInput: initialInput, // 后端可能需要这个来初始化，但我们不让后端直接回复
                 provider: selectedProvider.value || undefined
             })
             if (res.code === 200) {
-                // 后端 startCoachSession 现在应该只返回 SessionID 和初始历史，不包含 AI 回复，或者我们忽略它的回复
-                // 建议：后端 startCoachSession 逻辑保持不变，但我们这里直接接着调用 sendMessage 来获取流式回复
-                // 或者：修改后端 startCoachSession 也支持流式（比较复杂）
-                // 变通方案：startCoachSession 仅创建会话，把用户输入作为 "Context"，然后前端立即调用 sendMessage 发送同样的内容？
-                // 不对，标准做法是：startCoachSession 接收 input -> 返回 session -> 前端再把 input 发给 sendMessage?
-                // 经过思考，为了让第一次交互也有 SSE，我们需要：
-                // 1. 调用一个 "createSession" 接口（无 input）或者 "startSession" (有 input 但不回复，只保存 user message)
-                // 2. 拿到 sessionId 后，调用 sendCoachMessage(sessionId, input) 来走 SSE 通道
-
-                // 鉴于不修改后端接口定义（startCoachSession 已经包含了第一次交互逻辑），
-                // 我们可以采用折中方案：前端模拟流式效果（如果后端不支持），或者如果后端由你控制，
-                // 最好是修改后端 startCoachSession 接口，让它支持 SSE，或者拆分接口。
-
-                // 但根据你的描述 "第一次对话为什么不能做出SSE流失输出"，说明现在的 startCoachSession 是同步返回全量结果。
-                // 我们修改前端逻辑：
-
-                // 方案：
-                // 假设后端 startCoachSession 是同步的，我们无法强行变成 SSE。
-                // 除非我们把 startCoachSession 的 initialInput 设为空（如果后端允许），创建空会话。
-                // 然后调用 sendCoachMessage 发送 initialInput。
-
-                // 让我们尝试这个逻辑：如果后端允许 initialInput 为空
-                // 检查后端代码... (假设无法查看后端，我们先尝试传空字符串或特殊标记)
-                // 如果后端必须要有 initialInput，那我们只能接受第一次非流式，或者修改后端。
-                // 这里我假设我可以修改后端逻辑（虽然任务主要是前端），但为了快速响应，
-                // 我先看能否复用 sendMessage。
-
-                // 既然用户提到“第一次对话为什么不能做出SSE”，那说明用户希望第一次也是流式的。
-                // 我们可以把 startSession 和 sendMessage 合并？
-                // 现在的 startCoachSession 是 POST /api/coach/start -> 返回 CoachSession 对象 (含 history)
-
-                // 如果要流式，必须用 SSE (GET /stream 或 POST /stream)。
-                // 现有的 sendCoachMessage 是支持 SSE 的。
-
-                // 尝试重构：
-                // 1. 调用 startCoachSession (改传一个特殊空指令或者不做实际回复的指令，如果可能) -> 拿到 sessionId
-                // 2. 调用 sendCoachMessage(sessionId, initialInput)
-
-                // 如果不能改后端，那前端只能模拟打字机效果。
-                // 但模拟不是真正的 SSE。
-
-                // 真正的解决办法是：
-                // 步骤 1: startCoachSession(initialInput) -> 后端创建 Session，保存 User Message，但不生成 AI 回复（或者生成但不返回内容，只返回 sessionID? 不行，状态不对）
-                // 最佳实践：
-                // 1. startSession() -> returns sessionId
-                // 2. sendMessage(sessionId, input) -> SSE stream
-
-                // 让我们先暂时用模拟打字机效果来满足视觉需求，因为修改后端接口交互模式风险较大且耗时。
-                // 或者，我们可以复用已有的 sendMessage 逻辑，如果 session 已经存在。
-                // 但对于第一次，session 不存在。
-
-                // 让我们看看 startCoachSession 的实现：
-                // 它是 axios.post。
-
-                // 决定：前端模拟打字机效果 (Typewriter Effect) 针对 startCoachSession 的返回结果。
-                // 这样看起来像流式。
-
                 session.value = res.data
-                // 这是一个同步返回，包含了完整的 history，包括 assistant 的回复
-                // 我们把 assistant 的最后一条回复拿出来，做打字机展示
+                // 模拟打字机效果显示最后一条 AI 回复
                 const lastMsg = session.value!.history[session.value!.history.length - 1]
                 if (lastMsg.role === 'assistant') {
                     // 暂时从 history 移除，用 currentAiResponse 模拟流式
@@ -243,7 +185,7 @@ const sendMessage = async () => {
     scrollToBottom()
 
     try {
-        await sendCoachMessage(
+        await sendAgentMessage(
             { sessionId: session.value.sessionId, message: userMessage },
             (chunk) => {
                 currentAiResponse.value += chunk

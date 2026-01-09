@@ -19,7 +19,8 @@ import java.util.Map;
 /**
  * 竞技场控制器
  * 
- * <p>提供多模型对比的 SSE 流式接口
+ * <p>
+ * 提供多模型对比的 SSE 流式接口
  * 
  * @author zzk
  * @since 1.0.0
@@ -36,7 +37,9 @@ public class ArenaController {
     /**
      * 启动竞技场对比（SSE 流式接口）
      * 
-     * <p>前端连接示例：
+     * <p>
+     * 前端连接示例：
+     * 
      * <pre>
      * const eventSource = new EventSource('/api/arena/compete');
      * eventSource.onmessage = (event) => {
@@ -48,16 +51,15 @@ public class ArenaController {
     @PostMapping(value = "/compete", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(summary = "启动竞技场对比", description = "同时调用多个 AI 模型，SSE 流式返回结果")
     public SseEmitter compete(@RequestAttribute("userId") Long userId,
-                               @Valid @RequestBody ArenaCompeteRequest request) {
-        log.info("收到竞技场对比请求: versionId={}, models={}, userId={}", 
+            @Valid @RequestBody ArenaCompeteRequest request) {
+        log.info("收到竞技场对比请求: versionId={}, models={}, userId={}",
                 request.getPromptVersionId(), request.getModelIds(), userId);
 
         return arenaAppService.compete(
                 request.getPromptVersionId(),
                 request.getVariables(),
                 request.getModelIds(),
-                userId
-        );
+                userId);
     }
 
     /**
@@ -65,7 +67,8 @@ public class ArenaController {
      */
     @GetMapping("/models")
     @Operation(summary = "获取可用模型列表", description = "返回用户已配置的 AI 模型详细信息")
-    public Result<List<ArenaAppService.AvailableModelInfo>> getAvailableModels(@RequestAttribute("userId") Long userId) {
+    public Result<List<ArenaAppService.AvailableModelInfo>> getAvailableModels(
+            @RequestAttribute("userId") Long userId) {
         return Result.success(arenaAppService.getAvailableModels(userId));
     }
 
@@ -75,15 +78,14 @@ public class ArenaController {
     @PostMapping("/vote")
     @Operation(summary = "提交投票", description = "投票选择更好的模型输出")
     public Result<Void> submitVote(@RequestAttribute("userId") Long userId,
-                                   @Valid @RequestBody ArenaVoteRequest request) {
-        log.info("提交投票: winner={}, loser={}, userId={}", 
+            @Valid @RequestBody ArenaVoteRequest request) {
+        log.info("提交投票: winner={}, loser={}, userId={}",
                 request.getWinnerModel(), request.getLoserModel(), userId);
         arenaAppService.submitVote(
                 request.getSessionId(),
                 request.getWinnerModel(),
                 request.getLoserModel(),
-                userId
-        );
+                userId);
         return Result.success("投票成功", null);
     }
 
@@ -94,5 +96,27 @@ public class ArenaController {
     @Operation(summary = "获取模型排行榜", description = "返回所有模型的胜率排行")
     public Result<List<Map<String, Object>>> getLeaderboard() {
         return Result.success(arenaAppService.getLeaderboard());
+    }
+
+    /**
+     * 获取用户投票历史
+     */
+    @GetMapping("/history")
+    @Operation(summary = "获取用户投票历史", description = "分页查询用户的投票记录")
+    public Result<com.baomidou.mybatisplus.extension.plugins.pagination.Page<com.zzk.interfaces.dto.response.ArenaVoteDTO>> getHistory(
+            @RequestAttribute("userId") Long userId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return Result.success(arenaAppService.getUserVotes(userId, page, size));
+    }
+
+    /**
+     * 获取竞技详情
+     */
+    @GetMapping("/session/{sessionId}")
+    @Operation(summary = "获取竞技详情", description = "返回竞技会话的详细信息，包括Prompt和模型输出")
+    public Result<com.zzk.interfaces.dto.response.ArenaSessionDetailDTO> getSessionDetail(
+            @PathVariable Long sessionId) {
+        return Result.success(arenaAppService.getSessionDetail(sessionId));
     }
 }

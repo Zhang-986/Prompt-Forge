@@ -110,6 +110,15 @@ public class ArenaAppService {
         // 4. 创建 SSE 发射器（超时时间 5 分钟）
         SseEmitter emitter = new SseEmitter(5 * 60 * 1000L);
 
+        // 发送会话 ID
+        try {
+            emitter.send(SseEmitter.event()
+                    .name("message")
+                    .data("{\"type\":\"session\",\"sessionId\":" + sessionId + "}"));
+        } catch (IOException e) {
+            log.error("发送 Session ID 失败", e);
+        }
+
         // 5. 跟踪完成状态
         AtomicInteger completedCount = new AtomicInteger(0);
         int totalModels = modelIds.size();
@@ -468,5 +477,89 @@ public class ArenaAppService {
                 })
                 .sorted((a, b) -> Double.compare((Double) b.get("winRate"), (Double) a.get("winRate")))
                 .toList();
+
+    }
+
+    /**
+     * 获取用户投票历史
+     */
+    public com.baomidou.mybatisplus.extension.plugins.pagination.Page<com.zzk.interfaces.dto.response.ArenaVoteDTO> getUserVotes(
+            Long userId, int page, int size) {
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<com.zzk.interfaces.dto.response.ArenaVoteDTO> pageParam = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(
+                page, size);
+        List<com.zzk.interfaces.dto.response.ArenaVoteDTO> records = arenaVoteMapper.selectVotesByUserId(pageParam,
+                userId);
+
+        // 尝试解析模型显示名称
+        List<AvailableModelInfo> availableModels = getAvailableModels(userId);
+        Map<String, String> modelNameMap = availableModels.stream()
+                .collect(Collectors.toMap(AvailableModelInfo::modelId, AvailableModelInfo::displayName, (a, b) -> a));
+
+        records.forEach(record -> {
+            record.setWinnerModel(
+                    modelNameMap.getOrDefault(record.getWinnerModel(), getModelShortName(record.getWinnerModel())));
+            record.setLoserModel(
+                    modelNameMap.getOrDefault(record.getLoserModel(), getModelShortName(record.getLoserModel())));
+            // 截断过长的 Prompt
+            if (record.getPrompt() != null && record.getPrompt().length() > 50) {
+                record.setPrompt(record.getPrompt().substring(0, 50) + "...");
+            }
+        });
+
+        return pageParam.setRecords(records);
+    }
+
+    /**
+     * 获取竞技详情
+     */
+    public com.zzk.interfaces.dto.response.ArenaSessionDetailDTO getSessionDetail(Long sessionId) {
+        com.zzk.domain.model.entity.ArenaSession session = arenaSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new BusinessException("Session not found"));
+
+        List<com.zzk.domain.model.entity.ArenaResult> results = arenaResultRepository.findBySessionId(sessionId);
+
+        // Convert JSON strings to Map/List
+        Map<String, Object> variables = new java.util.HashMap<>();
+        List<String> models = new java.util.ArrayList<>();
+        try {
+            if (session.getVariables() != null) {
+                variables = objectMapper.readValue(session.getVariables(),
+                        new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+                        });
+            }
+            if (session.getModels() != null) {
+                models = objectMapper.readValue(session.getModels(),
+                        new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
+                        });
+            }
+        } catch (Exception e) {
+            log.error("Failed to parse session data", e);
+        }
+
+        // Fetch promptId from version
+        PromptVersion version = versionRepository.findById(session.getPromptVersionId())
+                .orElse(null);
+        Long promptId = version != null ? version.getPromptId() : null;
+
+        return com.zzk.interfaces.dto.response.ArenaSessionDetailDTO.builder()
+                .id(session.getId())
+                .promptId(promptId)
+                .promptVersionId(session.getPromptVersionId())
+                .finalPrompt(session.getFinalPrompt())
+                .variables(variables)
+                .models(models)
+                .status(session.getStatus())
+                .createdAt(session.getCreatedAt())
+                .completedAt(session.getCompletedAt())
+                .results(results.stream()
+                        .map(r -> com.zzk.interfaces.dto.response.ArenaSessionDetailDTO.ResultDTO.builder()
+                                .modelId(r.getModelId())
+                                .content(r.getContent())
+                                .error(r.getErrorMessage())
+                                .latencyMs(r.getLatencyMs())
+                                .tokensUsed(r.getTokensUsed())
+                                .build())
+                        .toList())
+                .build();
     }
 }

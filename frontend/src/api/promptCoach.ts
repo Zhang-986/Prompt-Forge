@@ -123,6 +123,91 @@ export const sendCoachMessage = async (
 }
 
 /**
+ * 开始 Agent Coach 会话
+ */
+export const startAgentSession = (data: StartCoachRequest) => {
+    return request.post<any, { code: number; data: CoachSession; message: string }>(
+        '/prompt-coach/agent/start',
+        data
+    )
+}
+
+/**
+ * 发送 Agent 消息（SSE 流式）
+ */
+export const sendAgentMessage = async (
+    data: CoachChatRequest,
+    onChunk: (chunk: string) => void,
+    onComplete: () => void,
+    onError: (error: Error) => void
+) => {
+    const token = localStorage.getItem('token')
+    const baseUrl = import.meta.env.VITE_API_URL || '/api'
+
+    try {
+        const response = await fetch(`${baseUrl}/prompt-coach/agent/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': token ? `Bearer ${token}` : ''
+            },
+            body: JSON.stringify(data)
+        })
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`)
+        }
+
+        const reader = response.body?.getReader()
+        if (!reader) {
+            throw new Error('无法读取响应流')
+        }
+
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+
+            buffer = lines.pop() || ''
+
+            for (const line of lines) {
+                if (line.trim() === '') continue
+
+                if (line.startsWith('data:')) {
+                    let data = line.slice(5)
+                    if (data.startsWith(' ')) {
+                        data = data.slice(1)
+                    }
+
+                    if (data === '[DONE]') {
+                        onComplete()
+                        return
+                    }
+                    onChunk(data.replace(/\\n/g, '\n'))
+                }
+            }
+        }
+
+        if (buffer.startsWith('data:') && !buffer.includes('[DONE]')) {
+            let data = buffer.slice(5)
+            if (data.startsWith(' ')) {
+                data = data.slice(1)
+            }
+            onChunk(data.replace(/\\n/g, '\n'))
+        }
+
+        onComplete()
+    } catch (error) {
+        onError(error as Error)
+    }
+}
+
+/**
  * 获取会话状态
  */
 export const getCoachSession = (sessionId: string) => {
