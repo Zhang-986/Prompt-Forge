@@ -34,11 +34,50 @@ const currentAiResponse = ref('')
 const chatContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<any>(null)  // Ant Design Vue textarea ref
 
-// 模型选择
+// 模型选择 - Sidebar Logic
 const selectedProvider = ref('')
 const availableProviders = ref<AvailableModelInfo[]>([])
 const loadingProviders = ref(false)
 const showModelModal = ref(false)
+const activeModalProvider = ref<string>('') // For sidebar selection
+
+// Computed: Unique Providers for Sidebar
+const uniqueProviders = computed(() => {
+    const providerIds = new Set(availableProviders.value.map(p => p.provider))
+    return Array.from(providerIds).map(id => {
+        // Find first model with this provider to get provider name (or just use id)
+        // In AvailableModelInfo, we don't have separate provider name field, usually it's same as provider id
+        // But let's check if we can get a better name if available, otherwise capitalize
+        return {
+            id,
+            name: id // distinct provider ID
+        }
+    }).sort((a, b) => {
+        // Optional: Sort logic
+        const weights: Record<string, number> = { openai: 100, anthropic: 90, google: 80 }
+        const wa = weights[a.id] || 0
+        const wb = weights[b.id] || 0
+        return wb - wa
+    })
+})
+
+// Computed: Models for Active Provider
+const filteredModels = computed(() => {
+    // If "Auto Select" is technically a model with empty ID, handle it separately?
+    // Here we just filter by provider.
+    if (!activeModalProvider.value && uniqueProviders.value.length > 0) {
+        return availableProviders.value.filter(p => p.provider === uniqueProviders.value[0].id)
+    }
+    return availableProviders.value.filter(p => p.provider === activeModalProvider.value)
+})
+
+// Watch modal open to reset/init active provider
+import { watch } from 'vue'
+watch(showModelModal, (val) => {
+    if (val && uniqueProviders.value.length > 0 && !activeModalProvider.value) {
+        activeModalProvider.value = uniqueProviders.value[0].id
+    }
+})
 
 const selectedModelInfo = computed(() => {
     if (!selectedProvider.value) return null
@@ -371,33 +410,60 @@ const handleKeydown = async (e: KeyboardEvent) => {
                 </div>
             </div>
 
-            <!-- Model Selection Modal (Custom) -->
+            <!-- Model Selection Modal (Categorized) -->
             <div v-if="showModelModal" class="modal-overlay" @click.self="showModelModal = false">
-                <div class="modal-content">
+                <div class="modal-content model-selector-dialog">
                     <div class="modal-header">
                         <h3>选择 AI 模型</h3>
                         <button class="close-btn" @click="showModelModal = false">
                             <CloseOutlined />
                         </button>
                     </div>
-                    <div class="modal-body">
-                        <div class="provider-grid">
-                            <!-- Auto Select Option -->
-                            <div class="provider-option" :class="{ selected: selectedProvider === '' }"
-                                @click="selectModel('')">
-                                <div class="icon-wrapper auto-icon">
-                                    <RobotOutlined />
+                    <div class="modal-body-layout">
+                        <!-- Left Sidebar -->
+                        <div class="category-sidebar">
+                            <!-- Auto Option in Sidebar -->
+                            <div class="category-item" :class="{ active: !activeModalProvider }"
+                                @click="activeModalProvider = ''">
+                                <RobotOutlined />
+                                <span class="category-name">自动推荐</span>
+                            </div>
+                            
+                            <!-- Providers -->
+                            <div v-for="p in uniqueProviders" :key="p.id" class="category-item"
+                                :class="{ active: activeModalProvider === p.id }"
+                                @click="activeModalProvider = p.id">
+                                <ProviderLogo :providerId="p.id" :size="20" />
+                                <span class="category-name">{{ p.name }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Right Content -->
+                        <div class="model-content-area">
+                            <!-- Auto Select Content -->
+                            <div v-if="!activeModalProvider" class="provider-grid">
+                                <div class="provider-option" :class="{ selected: selectedProvider === '' }"
+                                    @click="selectModel('')">
+                                    <div class="icon-wrapper auto-icon">
+                                        <RobotOutlined />
+                                    </div>
+                                    <span class="opt-name">自动选择</span>
+                                    <span class="opt-desc">系统自动推荐最佳模型</span>
                                 </div>
-                                <span class="opt-name">自动选择</span>
-                                <span class="opt-desc">系统自动推荐</span>
                             </div>
 
-                            <div v-for="info in availableProviders" :key="info.modelId" class="provider-option"
-                                :class="{ selected: selectedProvider === info.modelId }"
-                                @click="selectModel(info.modelId)">
-                                <ProviderLogo :providerId="info.provider" :size="32" />
-                                <span class="opt-name">{{ info.displayName }}</span>
-                                <span class="opt-desc">{{ info.provider }}</span>
+                            <!-- Provider Models -->
+                            <div v-else-if="filteredModels.length > 0" class="provider-grid">
+                                <div v-for="info in filteredModels" :key="info.modelId" class="provider-option"
+                                    :class="{ selected: selectedProvider === info.modelId }"
+                                    @click="selectModel(info.modelId)">
+                                    <ProviderLogo :providerId="info.provider" :size="32" />
+                                    <span class="opt-name">{{ info.displayName }}</span>
+                                    <span class="opt-desc">{{ info.provider }}</span>
+                                </div>
+                            </div>
+                             <div v-else class="empty-state" style="padding: 20px; color: #999;">
+                                该厂商暂无可用模型
                             </div>
                         </div>
                     </div>
@@ -725,7 +791,7 @@ const handleKeydown = async (e: KeyboardEvent) => {
     padding: var(--space-2) var(--space-4);
 }
 
-/* Custom Modal */
+/* Custom Modal & Sidebar Layout */
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -741,15 +807,31 @@ const handleKeydown = async (e: KeyboardEvent) => {
     backdrop-filter: blur(4px);
 }
 
+.model-selector-dialog {
+    width: 800px;
+    max-width: 90vw;
+    height: 600px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+
 .modal-content {
     background: white;
     border-radius: var(--radius-xl);
     width: 100%;
+    /* Default width overridden by model-selector-dialog if applied */
     max-width: 600px;
-    max-height: 80vh;
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-xl);
+}
+
+/* Ensure model-selector-dialog class overrides max-width/height */
+.model-selector-dialog.modal-content {
+    max-width: 90vw;
+    width: 800px;
+    max-height: 85vh;
 }
 
 .modal-header {
@@ -758,6 +840,7 @@ const handleKeydown = async (e: KeyboardEvent) => {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
 }
 
 .modal-header h3 {
@@ -782,9 +865,58 @@ const handleKeydown = async (e: KeyboardEvent) => {
     color: #333;
 }
 
-.modal-body {
-    padding: 24px;
+.modal-body-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.category-sidebar {
+    width: 200px;
+    background: #f9fafb;
+    border-right: 1px solid var(--color-border);
     overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.category-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--color-text-secondary);
+}
+
+.category-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--color-text-primary);
+}
+
+.category-item.active {
+    background: #fff;
+    color: var(--color-primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    font-weight: 500;
+}
+
+.category-name {
+    font-size: 14px;
+}
+
+/* Content Area */
+.model-content-area {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    background: #fff;
 }
 
 .provider-grid {
@@ -806,6 +938,7 @@ const handleKeydown = async (e: KeyboardEvent) => {
     background: #fff;
     gap: 8px;
     text-align: center;
+    min-height: 120px;
 }
 
 .provider-option:hover {
@@ -816,19 +949,22 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
 .provider-option.selected {
     border-color: var(--color-primary);
-    background: var(--color-bg-secondary);
+    background: var(--color-primary-muted);
     box-shadow: 0 0 0 2px var(--color-primary-muted);
 }
 
 .opt-name {
-    font-weight: 500;
+    margin-top: 8px;
+    font-weight: 600;
     font-size: 14px;
+    color: var(--color-text-primary);
     line-height: 1.2;
 }
 
 .opt-desc {
-    font-size: 11px;
-    color: #999;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--color-text-tertiary);
 }
 
 .icon-wrapper.auto-icon {
@@ -837,9 +973,12 @@ const handleKeydown = async (e: KeyboardEvent) => {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--color-primary);
-    font-size: 20px;
+    font-size: 24px;
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
 }
+
 
 /* Styled Trigger */
 .provider-select .label {

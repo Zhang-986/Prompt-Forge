@@ -171,6 +171,48 @@ CREATE TABLE async_tasks (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='异步任务表';
 
 -- =====================================================
+-- 9. 模型厂商表
+-- =====================================================
+DROP TABLE IF EXISTS available_models;
+DROP TABLE IF EXISTS model_providers;
+CREATE TABLE model_providers (
+    id VARCHAR(50) PRIMARY KEY COMMENT 'Provider ID (如 openai, deepseek)',
+    name VARCHAR(100) NOT NULL COMMENT '显示名称',
+    default_base_url VARCHAR(500) COMMENT '默认 API 地址',
+    description TEXT COMMENT '描述',
+    models_url VARCHAR(500) COMMENT '官方文档链接',
+    sdk_type VARCHAR(20) DEFAULT 'openai' COMMENT 'SDK类型: openai/anthropic/google',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用: 0-禁用, 1-启用',
+    sort_order INT DEFAULT 0 COMMENT '排序 (越小越靠前)',
+    synced_at DATETIME COMMENT '最后同步时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='模型厂商表';
+
+-- =====================================================
+-- 10. 可用模型表
+-- =====================================================
+CREATE TABLE available_models (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '模型ID',
+    provider_id VARCHAR(50) NOT NULL COMMENT '厂商ID',
+    model_id VARCHAR(200) NOT NULL COMMENT '模型ID (调用API时使用)',
+    display_name VARCHAR(200) NOT NULL COMMENT '显示名称',
+    description TEXT COMMENT '描述',
+    context_window INT COMMENT '上下文长度 (tokens)',
+    supports_vision TINYINT DEFAULT 0 COMMENT '支持视觉: 0-否, 1-是',
+    supports_function_call TINYINT DEFAULT 0 COMMENT '支持函数调用: 0-否, 1-是',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用: 0-禁用, 1-启用',
+    sort_order INT DEFAULT 0 COMMENT '排序 (越小越靠前)',
+    source VARCHAR(20) DEFAULT 'sync' COMMENT '来源: sync-同步, manual-手动添加',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_provider_model (provider_id, model_id),
+    INDEX idx_provider_id (provider_id),
+    INDEX idx_enabled (enabled),
+    FOREIGN KEY (provider_id) REFERENCES model_providers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='可用模型表';
+
+-- =====================================================
 -- 初始数据
 -- =====================================================
 

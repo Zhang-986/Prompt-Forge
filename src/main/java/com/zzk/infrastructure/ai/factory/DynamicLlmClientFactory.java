@@ -16,7 +16,8 @@ import java.util.Map;
 /**
  * 动态 LLM 客户端工厂
  * 
- * <p>根据用户配置动态创建 LLM 调用客户端
+ * <p>
+ * 根据用户配置动态创建 LLM 调用客户端
  * 
  * @author zzk
  * @since 1.0.0
@@ -37,9 +38,17 @@ public class DynamicLlmClientFactory {
     public Flux<String> generateStream(UserModelConfig config, String prompt) {
         return switch (config.getProvider()) {
             case "google" -> generateGoogleStream(config, prompt);
-            case "zhipu", "deepseek", "openai", "aliyun", "moonshot", "cloudflare", "github", "hunyuan" -> generateOpenAICompatibleStream(config, prompt);
-            case "claude" -> generateClaudeStream(config, prompt);
-            default -> Flux.error(new RuntimeException("不支持的提供商: " + config.getProvider()));
+            case "anthropic", "claude" -> generateClaudeStream(config, prompt);
+            // OpenAI 兼容厂商 (绝大多数)
+            case "openai", "zhipu", "deepseek", "aliyun", "qwen", "moonshot", "cloudflare", "github", "hunyuan",
+                    "azure", "bedrock", "baichuan", "minimax", "stepfun", "spark", "yi", "sensenova",
+                    "mistral", "perplexity", "groq", "cohere", "novita", "togetherai",
+                    "ollama", "openrouter" ->
+                generateOpenAICompatibleStream(config, prompt);
+            default -> {
+                log.warn("未知提供商 '{}', 尝试使用 OpenAI 兼容模式", config.getProvider());
+                yield generateOpenAICompatibleStream(config, prompt); // 默认尝试 OpenAI 兼容
+            }
         };
     }
 
@@ -49,7 +58,7 @@ public class DynamicLlmClientFactory {
     private Flux<String> generateGoogleStream(UserModelConfig config, String prompt) {
         String baseUrl = config.getEffectiveBaseUrl();
         String model = config.getEffectiveModelName();
-        String url = String.format("%s/v1beta/models/%s:streamGenerateContent?key=%s&alt=sse", 
+        String url = String.format("%s/v1beta/models/%s:streamGenerateContent?key=%s&alt=sse",
                 baseUrl, model, config.getApiKey());
 
         log.info("[Google] 调用 API: model={}", model);
@@ -100,28 +109,30 @@ public class DynamicLlmClientFactory {
         requestBody.put("model", model);
         requestBody.put("messages", List.of(Map.of("role", "user", "content", prompt)));
         requestBody.put("stream", true);
-        
+
         // Cloudflare 默认 max_tokens 较小，需要显式设置
         if (config.getProvider().equals("cloudflare")) {
             requestBody.put("max_tokens", 4096);
         }
 
-        // 智谱、阿里云、Moonshot、Cloudflare 的 Base URL 已包含版本路径，其他用 /v1/chat/completions
+        // 根据 Provider 和 Base URL 确定正确的聊天端点
         String chatEndpoint;
-        if (config.getProvider().equals("zhipu")) {
+        String provider = config.getProvider();
+
+        // 这些厂商的 Base URL 已包含版本路径，直接追加 /chat/completions
+        if (List.of("zhipu", "aliyun", "qwen", "moonshot", "cloudflare", "hunyuan",
+                "baichuan", "minimax", "stepfun", "spark", "yi", "sensenova",
+                "mistral", "perplexity", "groq", "cohere", "novita", "togetherai",
+                "ollama", "openrouter").contains(provider)) {
             chatEndpoint = "/chat/completions";
-        } else if (config.getProvider().equals("aliyun")) {
-            chatEndpoint = "/chat/completions"; // Base URL 已包含 /compatible-mode/v1
-        } else if (config.getProvider().equals("moonshot")) {
-            chatEndpoint = "/chat/completions"; // Base URL 已包含 /v1
-        } else if (config.getProvider().equals("cloudflare")) {
-            chatEndpoint = "/chat/completions"; // Base URL 已包含 /ai/v1
-        } else if (config.getProvider().equals("github")) {
-            chatEndpoint = "/chat/completions?api-version=2024-12-01-preview"; // Azure-style, 需要 api-version
-        } else if (config.getProvider().equals("hunyuan")) {
-            chatEndpoint = "/chat/completions"; // Base URL 已包含 /v1
+        } else if (provider.equals("github")) {
+            chatEndpoint = "/chat/completions?api-version=2024-12-01-preview"; // Azure 风格
+        } else if (provider.equals("azure")) {
+            chatEndpoint = "/openai/deployments/" + model + "/chat/completions?api-version=2024-02-01";
+        } else if (provider.equals("bedrock")) {
+            chatEndpoint = "/model/" + model + "/invoke"; // AWS Bedrock 特殊路径
         } else {
-            chatEndpoint = "/v1/chat/completions";
+            chatEndpoint = "/v1/chat/completions"; // 标准 OpenAI 格式
         }
 
         return webClientBuilder.build()
@@ -140,7 +151,8 @@ public class DynamicLlmClientFactory {
                 .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(), response -> {
                     return response.bodyToMono(String.class)
                             .flatMap(body -> {
-                                log.error("[{}] API 错误: status={}, body={}", config.getProvider(), response.statusCode(), body);
+                                log.error("[{}] API 错误: status={}, body={}", config.getProvider(),
+                                        response.statusCode(), body);
                                 return reactor.core.publisher.Mono.error(
                                         new RuntimeException("API 调用失败: " + response.statusCode()));
                             });
@@ -166,8 +178,7 @@ public class DynamicLlmClientFactory {
                 "model", model,
                 "messages", List.of(Map.of("role", "user", "content", prompt)),
                 "max_tokens", 4096,
-                "stream", true
-        );
+                "stream", true);
 
         return webClientBuilder.build()
                 .post()
@@ -299,6 +310,7 @@ public class DynamicLlmClientFactory {
         }
         return "";
     }
+
     /**
      * 获取可用模型列表 (仅限 OpenAI 兼容接口)
      */

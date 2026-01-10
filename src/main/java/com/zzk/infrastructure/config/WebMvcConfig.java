@@ -28,26 +28,25 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/**")
                 // 排除的路径（不需要登录）
                 .excludePathPatterns(
-                    // 用户登录注册
-                    "/api/users/login",
-                    "/api/users/register",
-                    "/api/users/send-email-code",
-                    // 验证码相关（登录防护）
-                    "/api/users/captcha",
-                    "/api/users/login-check",
-                    // Swagger 文档
-                    "/swagger-ui/**",
-                    "/v3/api-docs/**",
-                    // 静态资源
-                    "/",
-                    "/index.html",
-                    "/login.html",
-                    "/*.html",
-                    "/css/**",
-                    "/js/**",
-                    "/favicon.ico",
-                    "/error"
-                );
+                        // 用户登录注册
+                        "/api/users/login",
+                        "/api/users/register",
+                        "/api/users/send-email-code",
+                        // 验证码相关（登录防护）
+                        "/api/users/captcha",
+                        "/api/users/login-check",
+                        // Swagger 文档
+                        "/swagger-ui/**",
+                        "/v3/api-docs/**",
+                        // 静态资源
+                        "/",
+                        "/index.html",
+                        "/login.html",
+                        "/*.html",
+                        "/css/**",
+                        "/js/**",
+                        "/favicon.ico",
+                        "/error");
 
         // 管理员拦截器 - 拦截管理员专属接口
         registry.addInterceptor(adminInterceptor)
@@ -58,7 +57,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
     public void addCorsMappings(org.springframework.web.servlet.config.annotation.CorsRegistry registry) {
         registry.addMapping("/**")
                 .allowedOriginPatterns("*")
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                 .allowedHeaders("*")
                 .allowCredentials(true)
                 .maxAge(3600);

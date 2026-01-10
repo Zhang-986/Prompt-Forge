@@ -1,9 +1,2 @@
-
-#	任务	优先级	难度
-1	buildChatModel 支持多协议：参考 DynamicLlmClientFactory的 switch-case，适配 Google、Claude 等	🔴 High	⭐⭐⭐
-2	startAgentSession改为流式：第一轮也走 SSE	🟡 Medium	⭐⭐
-3	Tools 真正调用外部 API：目前 WebSearchTool等是 Mock 数据	🔴 High	⭐⭐⭐
-4	前端显示工具调用过程：在对话中展示 "正在调用 WebSearchTool..."	🟡 Medium	⭐⭐
-5	端到端测试：编译、启动、测试 Agent 模式流程	🔴 High	⭐
-6	按需加载 Skills（可选优化）：实现两阶段加载节省 Context	🟢 Low	⭐⭐⭐⭐
-7	Agent 模式的会话持久化：确保会话状态正确保存和恢复	🟡 Medium	⭐⭐
+1.  管理员AI模型管理情况
+2.  PromptCoach Agent再优化

@@ -15,8 +15,10 @@ import {
     CloseOutlined,
     StarOutlined,
     StarFilled,
-    HomeOutlined
+    HomeOutlined,
+    CloudSyncOutlined
 } from '@ant-design/icons-vue'
+import AdminModels from './admin/AdminModels.vue'
 import {
     getDashboardStats,
     getUsers,
@@ -437,6 +439,9 @@ onMounted(() => {
                 <div class="nav-item" :class="{ active: activeTab === 'arena' }" @click="handleTabChange('arena')">
                     <ThunderboltOutlined /> 竞技场会话
                 </div>
+                <div class="nav-item" :class="{ active: activeTab === 'models' }" @click="handleTabChange('models')">
+                    <CloudSyncOutlined /> 模型管理
+                </div>
                 <div class="nav-item" :class="{ active: activeTab === 'logs' }" @click="handleTabChange('logs')">
                     <SettingOutlined /> 登录日志
                 </div>
@@ -444,6 +449,12 @@ onMounted(() => {
 
             <!-- Content -->
             <main class="content">
+                <!-- 模型管理 -->
+                <div v-if="activeTab === 'models'" class="tab-content">
+                     <h2 class="tab-title">模型管理</h2>
+                     <AdminModels />
+                </div>
+
                 <!-- 仪表盘 -->
                 <div v-if="activeTab === 'dashboard'" class="tab-content">
                     <h2 class="tab-title">系统概览</h2>

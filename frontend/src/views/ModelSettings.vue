@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, h } from 'vue'
+import { ref, onMounted, computed, h, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   getProviders,
@@ -17,7 +17,7 @@ import { ArrowLeftOutlined, SettingOutlined, BulbOutlined, PlusOutlined, DeleteO
 
 // Import Config Assets
 import iconOpenAI from '@/assets/openai.svg'
-import iconGemini from '@/assets/gemini-color.svg'
+import iconGoogle from '@/assets/google-color.svg'
 import iconClaude from '@/assets/claude-color.svg'
 import iconDeepSeek from '@/assets/deepseek-color.svg'
 import iconQwen from '@/assets/qwen-color.svg'
@@ -26,6 +26,21 @@ import iconHunyuan from '@/assets/hunyuan-color.svg'
 import iconCloudflare from '@/assets/cloudflare-color.svg'
 import iconGithub from '@/assets/githubcopilot.svg'
 import iconMoonshot from '@/assets/moonshot.svg'
+import iconAzure from '@/assets/azureai-color.svg'
+import iconBedrock from '@/assets/bedrock-color.svg'
+import iconBaichuan from '@/assets/baichuan-color.svg'
+import iconMinimax from '@/assets/minimax-color.svg'
+import iconStepfun from '@/assets/stepfun-color.svg'
+import iconSpark from '@/assets/spark-color.svg'
+import iconSensenova from '@/assets/sensenova-color.svg'
+import iconMistral from '@/assets/mistral-color.svg'
+import iconPerplexity from '@/assets/perplexity-color.svg'
+import iconGroq from '@/assets/groq.svg'
+import iconCohere from '@/assets/cohere-color.svg'
+import iconNovita from '@/assets/novita-color.svg'
+import iconTogether from '@/assets/together-color.svg'
+import iconOllama from '@/assets/ollama.svg'
+import iconOpenRouter from '@/assets/openrouter.svg'
 
 const router = useRouter()
 
@@ -55,15 +70,31 @@ const editForm = ref({
 // Provider Logos Map
 const logoMap: Record<string, string> = {
   openai: iconOpenAI,
-  google: iconGemini,
-  claude: iconClaude,
+  google: iconGoogle,
+  anthropic: iconClaude,
   deepseek: iconDeepSeek,
-  aliyun: iconQwen,
+  aliyun: iconQwen, // 兼容旧数据
+  qwen: iconQwen,   // 新数据
   zhipu: iconZhipu,
   hunyuan: iconHunyuan,
   cloudflare: iconCloudflare,
   github: iconGithub,
-  moonshot: iconMoonshot
+  moonshot: iconMoonshot,
+  azure: iconAzure,
+  bedrock: iconBedrock,
+  baichuan: iconBaichuan,
+  minimax: iconMinimax,
+  stepfun: iconStepfun,
+  spark: iconSpark,
+  sensenova: iconSensenova,
+  mistral: iconMistral,
+  perplexity: iconPerplexity,
+  groq: iconGroq,
+  cohere: iconCohere,
+  novita: iconNovita,
+  togetherai: iconTogether,
+  ollama: iconOllama,
+  openrouter: iconOpenRouter
 }
 
 // Provider Logos Component
@@ -162,6 +193,42 @@ const availableModelsForPref = computed(() => {
     }
   })
   return options
+})
+
+// Categories Logic
+const activePrefProvider = ref<string>('')
+
+const uniqueProvidersForPref = computed(() => {
+  const providerIds = new Set(availableModelsForPref.value.map(m => m.provider))
+  // Convert set to array and get names
+  return Array.from(providerIds).map(id => {
+    const p = providers.value.find(pr => pr.id === id)
+    return {
+      id,
+      name: p ? p.name : id
+    }
+  }).sort((a, b) => {
+    // Optional: Sort logic, e.g. openai first
+    const weights: Record<string, number> = { openai: 100, anthropic: 90, google: 80 }
+    const wa = weights[a.id] || 0
+    const wb = weights[b.id] || 0
+    return wb - wa
+  })
+})
+
+const activePrefModels = computed(() => {
+  if (!activePrefProvider.value && uniqueProvidersForPref.value.length > 0) {
+    // If no provider selected, select first one
+    return availableModelsForPref.value.filter(m => m.provider === uniqueProvidersForPref.value[0].id)
+  }
+  return availableModelsForPref.value.filter(m => m.provider === activePrefProvider.value)
+})
+
+// Auto-select first provider when dialog opens
+watch(showPrefDialog, (val) => {
+  if (val && uniqueProvidersForPref.value.length > 0 && !activePrefProvider.value) {
+    activePrefProvider.value = uniqueProvidersForPref.value[0].id
+  }
 })
 
 const selectedModelInfoForPref = computed(() => {
@@ -542,24 +609,41 @@ onMounted(() => {
 
 
 
-    <!-- Preference Selection Modal -->
+    <!-- Preference Selection Modal (Sidebar Layout) -->
     <div v-if="showPrefDialog" class="dialog-overlay" @click.self="showPrefDialog = false">
-      <div class="dialog">
+      <div class="dialog model-selector-dialog">
         <div class="dialog-header">
           <h3>选择默认 AI 优化模型</h3>
           <button class="close-btn" @click="showPrefDialog = false">×</button>
         </div>
-        <div class="dialog-body">
-          <div class="provider-grid">
-            <div v-for="m in availableModelsForPref" :key="m.value" class="provider-option"
-              :class="{ selected: defaultOptimizeModel === m.value }" @click="selectPreference(m.value)">
-              <ProviderLogo :providerId="m.provider" :size="32" />
-              <span style="font-weight: 500;">{{ m.modelName }}</span>
-              <span style="font-size: 11px; color: #999;">{{ m.providerName }}</span>
+        <div class="dialog-body-layout">
+          <!-- Left Sidebar: Provider Categories -->
+          <div class="category-sidebar">
+            <div 
+              v-for="provider in uniqueProvidersForPref" 
+              :key="provider.id"
+              class="category-item"
+              :class="{ active: activePrefProvider === provider.id }"
+              @click="activePrefProvider = provider.id"
+            >
+               <ProviderLogo :providerId="provider.id" :size="20" />
+               <span class="category-name">{{ provider.name }}</span>
             </div>
           </div>
-          <div v-if="availableModelsForPref.length === 0" class="empty-state" style="padding: 20px;">
-            <p>暂无可用模型，请先添加模型配置</p>
+
+          <!-- Right Content: Model Grid -->
+          <div class="model-content-area">
+             <div v-if="activePrefModels.length > 0" class="provider-grid">
+              <div v-for="m in activePrefModels" :key="m.value" class="provider-option"
+                :class="{ selected: defaultOptimizeModel === m.value }" @click="selectPreference(m.value)">
+                <ProviderLogo :providerId="m.provider" :size="32" />
+                <span style="font-weight: 500;">{{ m.modelName }}</span>
+                <span style="font-size: 11px; color: #999;">{{ m.providerName }}</span>
+              </div>
+            </div>
+            <div v-else class="empty-state" style="padding: 20px;">
+               <p>该厂商暂无可用模型</p>
+            </div>
           </div>
         </div>
       </div>
@@ -569,6 +653,70 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* Dialog & Layout */
+.model-selector-dialog {
+  width: 800px; /* Wider for sidebar layout */
+  max-width: 90vw;
+  height: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog-body-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden; /* Contain scroll internally */
+}
+
+/* Sidebar */
+.category-sidebar {
+  width: 200px;
+  background: #f9fafb;
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--color-text-secondary);
+}
+
+.category-item:hover {
+  background: rgba(0,0,0,0.05);
+  color: var(--color-text-primary);
+}
+
+.category-item.active {
+  background: #fff;
+  color: var(--color-primary);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  font-weight: 500;
+}
+
+.category-name {
+  font-size: 14px;
+}
+
+/* Content Area */
+.model-content-area {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  background: #fff;
+}
+
+/* Existing Styles */
 .settings-container {
   min-height: 100vh;
   background: var(--color-bg-primary);

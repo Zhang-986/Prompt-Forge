@@ -222,3 +222,100 @@ export const getLoginLogs = (page: number = 0, size: number = 10) => {
     })
 }
 
+// ==================== 模型管理 ====================
+
+export interface AdminModelProvider {
+    id: string
+    name: string
+    defaultBaseUrl: string
+    description: string
+    modelsUrl: string
+    sdkType: string
+    enabled: number
+    sortOrder: number
+    syncedAt: string
+    createdAt: string
+    updatedAt: string
+}
+
+export interface AdminAvailableModel {
+    id: number
+    providerId: string
+    modelId: string
+    displayName: string
+    description: string
+    contextWindow: number
+    supportsVision: number
+    supportsFunctionCall: number
+    enabled: number
+    sortOrder: number
+    source: string
+    createdAt: string
+    updatedAt: string
+}
+
+export interface SyncStats {
+    totalProviders: number
+    enabledProviders: number
+    totalModels: number
+    enabledModels: number
+    syncedModels: number
+    manualModels: number
+}
+
+// Provider APIs
+
+export const getModelProviders = () => {
+    return request.get<any, { code: number; data: AdminModelProvider[] }>('/admin/models/providers')
+}
+
+export const createModelProvider = (data: Partial<AdminModelProvider>) => {
+    return request.post<any, { code: number; data: AdminModelProvider }>('/admin/models/providers', data)
+}
+
+export const updateModelProvider = (id: string, data: Partial<AdminModelProvider>) => {
+    return request.put<any, { code: number; data: AdminModelProvider }>(`/admin/models/providers/${id}`, data)
+}
+
+export const deleteModelProvider = (id: string) => {
+    return request.delete(`/admin/models/providers/${id}`)
+}
+
+export const toggleModelProvider = (id: string) => {
+    return request.patch<any, { code: number; data: AdminModelProvider }>(`/admin/models/providers/${id}/toggle`)
+}
+
+// Model APIs
+
+export const getAvailableModels = (providerId?: string) => {
+    return request.get<any, { code: number; data: AdminAvailableModel[] }>('/admin/models', {
+        params: { providerId }
+    })
+}
+
+export const createAvailableModel = (data: Partial<AdminAvailableModel>) => {
+    return request.post<any, { code: number; data: AdminAvailableModel }>('/admin/models', data)
+}
+
+export const updateAvailableModel = (id: number, data: Partial<AdminAvailableModel>) => {
+    return request.put<any, { code: number; data: AdminAvailableModel }>(`/admin/models/${id}`, data)
+}
+
+export const deleteAvailableModel = (id: number) => {
+    return request.delete(`/admin/models/${id}`)
+}
+
+export const toggleAvailableModel = (id: number) => {
+    return request.patch<any, { code: number; data: AdminAvailableModel }>(`/admin/models/${id}/toggle`)
+}
+
+// Sync APIs
+
+export const syncFromLobeChat = () => {
+    return request.post<any, { code: number; data: any }>('/admin/models/sync')
+}
+
+export const getSyncStats = () => {
+    return request.get<any, { code: number; data: SyncStats }>('/admin/models/sync/stats')
+}
+

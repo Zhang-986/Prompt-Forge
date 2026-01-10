@@ -4,19 +4,17 @@ import com.zzk.domain.model.entity.UserModelConfig;
 import com.zzk.domain.repository.UserModelConfigRepository;
 import com.zzk.infrastructure.exception.BusinessException;
 import com.zzk.infrastructure.ai.factory.DynamicLlmClientFactory;
+import com.zzk.infrastructure.persistence.mapper.AvailableModelMapper;
+import com.zzk.infrastructure.persistence.mapper.ModelProviderMapper;
+import com.zzk.infrastructure.persistence.po.AvailableModelPO;
+import com.zzk.infrastructure.persistence.po.ModelProviderPO;
 import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.PostConstruct;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,62 +31,71 @@ public class UserModelConfigAppService {
 
     private final UserModelConfigRepository configRepository;
     private final DynamicLlmClientFactory llmClientFactory;
+    private final ModelProviderMapper providerMapper;
+    private final AvailableModelMapper modelMapper;
 
     /**
-     * 支持的提供商列表（从 JSON 文件加载）
+     * 支持的提供商列表
      */
     public static List<String> SUPPORTED_PROVIDERS = new ArrayList<>();
-    
+
     /**
      * 缓存的提供商信息
      */
     private List<ProviderInfo> cachedProviders = new ArrayList<>();
 
     /**
-     * 启动时从 JSON 文件加载模型配置
+     * 启动时加载模型配置（从数据库）
      */
     @PostConstruct
-    public void loadProvidersFromJson() {
+    public void loadProviders() {
+        loadProvidersFromDatabase();
+    }
+
+    /**
+     * 从数据库加载提供商配置
+     */
+    private void loadProvidersFromDatabase() {
         try {
-            ClassPathResource resource = new ClassPathResource("model-providers.json");
-            InputStream is = resource.getInputStream();
-            String json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-            
-            JSONObject root = JSON.parseObject(json);
-            JSONArray providersArray = root.getJSONArray("providers");
-            
+            List<ModelProviderPO> dbProviders = providerMapper.findAllEnabled();
+            if (dbProviders == null || dbProviders.isEmpty()) {
+                log.warn("数据库中没有模型配置！请通过 Admin 后台同步模型数据。");
+                return;
+            }
+
             List<ProviderInfo> providers = new ArrayList<>();
             List<String> providerIds = new ArrayList<>();
-            
-            for (int i = 0; i < providersArray.size(); i++) {
-                JSONObject p = providersArray.getJSONObject(i);
-                String id = p.getString("id");
-                String name = p.getString("name");
-                String defaultBaseUrl = p.getString("defaultBaseUrl");
-                String defaultModel = p.getString("defaultModel");
-                
-                JSONArray modelsArray = p.getJSONArray("models");
+
+            for (ModelProviderPO p : dbProviders) {
+                List<AvailableModelPO> dbModels = modelMapper.findEnabledByProviderId(p.getId());
                 List<ModelInfo> models = new ArrayList<>();
-                for (int j = 0; j < modelsArray.size(); j++) {
-                    JSONObject m = modelsArray.getJSONObject(j);
-                    models.add(new ModelInfo(
-                            m.getString("id"),
-                            m.getString("name"),
-                            m.getString("description")
-                    ));
+                String defaultModel = null;
+
+                for (AvailableModelPO m : dbModels) {
+                    models.add(new ModelInfo(m.getModelId(), m.getDisplayName(), m.getDescription()));
+                    if (defaultModel == null) {
+                        defaultModel = m.getModelId();
+                    }
                 }
-                
-                providers.add(new ProviderInfo(id, name, defaultBaseUrl, defaultModel, models));
-                providerIds.add(id);
+
+                providers.add(new ProviderInfo(p.getId(), p.getName(), p.getDefaultBaseUrl(), defaultModel, models));
+                providerIds.add(p.getId());
             }
-            
+
             this.cachedProviders = providers;
             SUPPORTED_PROVIDERS = providerIds;
-            log.info("成功加载 {} 个模型提供商配置", providers.size());
-            
-        } catch (IOException e) {
-            log.error("加载 model-providers.json 失败，使用空配置", e);
+            log.info("从数据库成功加载 {} 个模型提供商配置", providers.size());
+
+        } catch (Exception e) {
+            log.error("从数据库加载模型配置失败", e);
         }
+    }
+
+    /**
+     * 刷新缓存（从数据库重新加载）
+     */
+    public void refreshCache() {
+        loadProvidersFromDatabase();
     }
 
     /**
@@ -121,8 +128,8 @@ public class UserModelConfigAppService {
      * 创建配置
      */
     @Transactional
-    public UserModelConfig createConfig(Long userId, String provider, String apiKey, 
-                                         String baseUrl, String modelName) {
+    public UserModelConfig createConfig(Long userId, String provider, String apiKey,
+            String baseUrl, String modelName) {
         // 验证提供商
         if (!SUPPORTED_PROVIDERS.contains(provider)) {
             throw new BusinessException("不支持的提供商: " + provider);
@@ -151,8 +158,8 @@ public class UserModelConfigAppService {
      * 更新配置
      */
     @Transactional
-    public UserModelConfig updateConfig(Long id, Long userId, String apiKey, 
-                                         String baseUrl, String modelName, Boolean enabled) {
+    public UserModelConfig updateConfig(Long id, Long userId, String apiKey,
+            String baseUrl, String modelName, Boolean enabled) {
         UserModelConfig config = getConfigById(id, userId);
 
         if (apiKey != null && !apiKey.isBlank()) {
@@ -197,13 +204,13 @@ public class UserModelConfigAppService {
     @Transactional
     public List<String> refreshAvailableModels(Long id, Long userId) {
         UserModelConfig config = getConfigById(id, userId);
-        
+
         List<String> models = llmClientFactory.fetchAvailableModels(config);
-        
+
         config.setAvailableModels(JSON.toJSONString(models));
         configRepository.update(config);
         log.info("用户 {} 刷新了 {} 配置的模型列表: {}", userId, config.getProvider(), models);
-        
+
         return models;
     }
 
@@ -218,12 +225,12 @@ public class UserModelConfigAppService {
      * 提供商信息
      */
     public record ProviderInfo(
-            String id, 
-            String name, 
-            String defaultBaseUrl, 
+            String id,
+            String name,
+            String defaultBaseUrl,
             String defaultModel,
-            List<ModelInfo> models
-    ) {}
+            List<ModelInfo> models) {
+    }
 
     /**
      * 模型信息
@@ -231,6 +238,6 @@ public class UserModelConfigAppService {
     public record ModelInfo(
             String id,
             String name,
-            String description
-    ) {}
+            String description) {
+    }
 }
