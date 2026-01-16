@@ -10,31 +10,31 @@
       </div>
 
       <nav class="sidebar-nav">
-        <router-link to="/prompts" class="nav-item" active-class="active">
+        <router-link to="/app/prompts" class="nav-item" active-class="active">
           <AppstoreOutlined />
           <span>Prompt 库</span>
         </router-link>
-        <router-link to="/coach" class="nav-item" active-class="active">
+        <router-link to="/app/coach" class="nav-item" active-class="active">
           <RobotOutlined />
           <span>Prompt 教练</span>
         </router-link>
-        <router-link to="/arena" class="nav-item" active-class="active">
+        <router-link to="/app/arena" class="nav-item" active-class="active">
           <ThunderboltOutlined />
           <span>竞技场</span>
         </router-link>
-        <router-link to="/plaza" class="nav-item" active-class="active">
+        <router-link to="/app/plaza" class="nav-item" active-class="active">
           <ShopOutlined /> <!-- 使用 ShopOutlined 或类似的 -->
           <span>广场</span>
         </router-link>
 
-        <router-link to="/settings/models" class="nav-item" active-class="active">
+        <router-link to="/app/settings/models" class="nav-item" active-class="active">
           <SettingOutlined />
           <span>模型配置</span>
         </router-link>
 
         <div class="nav-divider"></div>
 
-        <router-link v-if="isAdmin" to="/admin" class="nav-item" active-class="active">
+        <router-link v-if="isAdmin" to="/app/admin" class="nav-item" active-class="active">
           <SettingOutlined />
           <span>管理后台</span>
         </router-link>
@@ -61,7 +61,7 @@
             </div>
             <template #overlay>
               <a-menu>
-                <a-menu-item key="profile" @click="router.push('/settings/profile')">
+                <a-menu-item key="profile" @click="router.push('/app/settings/profile')">
                   <UserOutlined /> 个人资料
                 </a-menu-item>
                 <a-menu-divider />

@@ -45,7 +45,6 @@ public class AdminAppService {
     private final WorkspaceRepository workspaceRepository;
     private final PromptTemplateRepository promptTemplateRepository;
     private final PlazaCategoryRepository plazaCategoryRepository;
-    
     private final UserMapper userMapper;
     private final WorkspaceMapper workspaceMapper;
     private final PromptMapper promptMapper;

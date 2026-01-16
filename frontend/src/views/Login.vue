@@ -5,12 +5,15 @@ import { login, register, getCaptcha, sendEmailCode, type LoginData, type Regist
 import { message } from 'ant-design-vue'
 import { ReloadOutlined } from '@ant-design/icons-vue'
 import logo from '@/assets/logo.svg'
+import LoginMascot from '@/components/LoginMascot.vue'
 
 const router = useRouter()
 const route = useRoute()
 
 const activeTab = ref('login')
 const loading = ref(false)
+// Mascot mode state
+const mascotMode = ref<'normal' | 'password'>('normal')
 
 // 验证码相关
 const captchaRequired = ref(false)
@@ -84,7 +87,7 @@ const handleLogin = async () => {
       message.success('登录成功')
 
       // 跳转到之前的页面或首页
-      const redirect = route.query.redirect as string || '/prompts'
+      const redirect = route.query.redirect as string || '/app/prompts'
       router.push(redirect)
     } else {
       message.error(res.message || '登录失败')
@@ -186,11 +189,23 @@ const handleRegister = async () => {
     loading.value = false
   }
 }
+
+// Input focus handlers for Mascot
+const handleInputFocus = (type: 'normal' | 'password') => {
+  mascotMode.value = type
+}
+
+const handleInputBlur = () => {
+  // Optional: Delay return to normal or keep looking?
+  // Usually returns to normal when clicking away
+  mascotMode.value = 'normal'
+}
 </script>
 
 <template>
   <div class="login-container">
     <div class="login-card">
+      <LoginMascot :mode="mascotMode" />
       <div class="logo">
         <img :src="logo" alt="Logo" class="logo-icon" />
         <span class="logo-text">Prompt-Forge</span>
@@ -200,10 +215,12 @@ const handleRegister = async () => {
         <a-tab-pane key="login" tab="登录">
           <a-form layout="vertical">
             <a-form-item label="用户名" required>
-              <a-input v-model:value="loginForm.username" placeholder="请输入用户名" size="large" />
+              <a-input v-model:value="loginForm.username" placeholder="请输入用户名" size="large"
+                @focus="handleInputFocus('normal')" @blur="handleInputBlur" />
             </a-form-item>
             <a-form-item label="密码" required>
-              <a-input-password v-model:value="loginForm.password" placeholder="请输入密码" size="large" />
+              <a-input-password v-model:value="loginForm.password" placeholder="请输入密码" size="large"
+                @focus="handleInputFocus('password')" @blur="handleInputBlur" />
             </a-form-item>
 
             <!-- 验证码区域 -->
@@ -236,10 +253,12 @@ const handleRegister = async () => {
         <a-tab-pane key="register" tab="注册">
           <a-form layout="vertical">
             <a-form-item label="用户名" required>
-              <a-input v-model:value="registerForm.username" placeholder="请输入用户名" size="large" />
+              <a-input v-model:value="registerForm.username" placeholder="请输入用户名" size="large"
+                @focus="handleInputFocus('normal')" @blur="handleInputBlur" />
             </a-form-item>
             <a-form-item label="邮箱" required>
-              <a-input v-model:value="registerForm.email" type="email" placeholder="请输入邮箱" size="large" />
+              <a-input v-model:value="registerForm.email" type="email" placeholder="请输入邮箱" size="large"
+                @focus="handleInputFocus('normal')" @blur="handleInputBlur" />
             </a-form-item>
             <a-form-item label="邮箱验证码" required>
               <div class="email-code-row">
@@ -252,10 +271,12 @@ const handleRegister = async () => {
               </div>
             </a-form-item>
             <a-form-item label="密码" required>
-              <a-input-password v-model:value="registerForm.password" placeholder="请输入密码" size="large" />
+              <a-input-password v-model:value="registerForm.password" placeholder="请输入密码" size="large"
+                @focus="handleInputFocus('password')" @blur="handleInputBlur" />
             </a-form-item>
             <a-form-item label="确认密码" required>
-              <a-input-password v-model:value="confirmPassword" placeholder="请再次输入密码" size="large" />
+              <a-input-password v-model:value="confirmPassword" placeholder="请再次输入密码" size="large"
+                @focus="handleInputFocus('password')" @blur="handleInputBlur" />
             </a-form-item>
             <a-form-item>
               <a-button type="primary" @click="handleRegister" :loading="loading" block size="large">
@@ -284,6 +305,8 @@ const handleRegister = async () => {
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-lg);
+  position: relative;
+  /* Context for mascot absolute positioning */
 }
 
 .logo {

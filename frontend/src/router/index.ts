@@ -4,15 +4,21 @@ const router = createRouter({
     history: createWebHistory(),
     routes: [
         {
+            path: '/',
+            name: 'LandingPage',
+            component: () => import('../views/LandingPage.vue'),
+            meta: { public: true }
+        },
+        {
             path: '/login',
             name: 'Login',
             component: () => import('../views/Login.vue'),
             meta: { public: true }
         },
         {
-            path: '/',
+            path: '/app',
             component: () => import('../layouts/MainLayout.vue'),
-            redirect: '/prompts',
+            redirect: '/app/prompts',
             children: [
                 {
                     path: 'prompts',
@@ -77,6 +83,11 @@ router.beforeEach((to, _from, next) => {
 
     // 公开页面直接放行
     if (to.meta.public) {
+        // 如果已登录用户访问 Landing Page 或 Login，重定向到 App
+        if (token && (to.path === '/' || to.path === '/login')) {
+            next('/app/prompts')
+            return
+        }
         next()
         return
     }
