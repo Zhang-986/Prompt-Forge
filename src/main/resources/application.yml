@@ -79,7 +79,7 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: false
-    # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 # ==================== Redisson 分布式锁配置 ====================
 redisson:
@@ -233,3 +233,20 @@ logging:
     io.github.resilience4j: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+# ==============================================
+# AI Tools Configuration
+# ==============================================
+
+# Tavily Search API (用于 WebSearchTool)
+tavily:
+  api-key: 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  # 👈 填这里
+
+# Default AI Provider (用于 PythonCodeGeneratorTool)
+ai:
+  default:
+    provider: zhipu   # 或 deepseek, google
+    base-url: https://open.bigmodel.cn/api/paas/v4
+    api-key: 177dd7965db94799a1e146e210d012b7.BYR001iotB1iZUNR  # 👈 填这里
+    model: GLM-4-Air
+github:
+  token: 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

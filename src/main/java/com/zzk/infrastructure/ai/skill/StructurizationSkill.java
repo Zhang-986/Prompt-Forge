@@ -4,6 +4,8 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Map;
+
 /**
  * Prompt 结构化技能
  * 
@@ -14,8 +16,25 @@ import lombok.extern.slf4j.Slf4j;
  * @since 1.0.0
  */
 @Slf4j
-@Component
-public class StructurizationSkill {
+@Component("structurizationExecutor")
+public class StructurizationSkill implements SkillExecutor {
+
+    // ========== SkillExecutor 接口实现 ==========
+
+    @Override
+    public String getName() {
+        return "structurization";
+    }
+
+    @Override
+    public SkillResult execute(Map<String, Object> params, Map<String, Object> context) {
+        String rawContent = (String) params.get("rawContent");
+        if (rawContent == null || rawContent.isBlank()) {
+            return SkillResult.error("原始内容不能为空");
+        }
+        String result = structurize(rawContent);
+        return SkillResult.success(result);
+    }
 
     /**
      * 将原始内容格式化为标准 Prompt 结构

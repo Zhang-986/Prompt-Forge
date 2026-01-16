@@ -6,24 +6,26 @@ import com.zzk.domain.model.valueobject.CoachPhase;
 import com.zzk.domain.repository.PromptCoachSessionRepository;
 import com.zzk.domain.repository.UserModelConfigRepository;
 import com.zzk.domain.repository.UserPreferenceRepository;
+import com.zzk.infrastructure.ai.client.FunctionCallingClient;
 import com.zzk.infrastructure.ai.factory.DynamicLlmClientFactory;
 import com.zzk.domain.model.entity.UserPreference;
+import com.zzk.infrastructure.ai.skill.SkillMetadata;
+import com.zzk.infrastructure.ai.skill.SkillRegistry;
 import com.zzk.infrastructure.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Agent 增强版 Coach 服务
  * 
  * <p>
- * 复用 DynamicLlmClientFactory 实现流式输出，
- * 支持所有已适配的 Provider（Google, Claude, OpenAI 兼容等）。
- * Tool Calling 通过 System Prompt 嵌入工具描述实现。
+ * 基于 Claude Agent Skills 架构重构：
+ * - 三层渐进式加载（Metadata → Instructions → Execute）
+ * - 手搓 Function Calling 支持所有 AI 厂商
+ * - 按需加载 Skill 节省 Token
  * 
  * @author zzk
  * @since 1.0.0
@@ -36,76 +38,34 @@ public class AgentCoachService {
     private final UserPreferenceRepository preferenceRepository;
     private final UserModelConfigRepository userConfigRepository;
     private final DynamicLlmClientFactory llmFactory;
-    private final List<ToolCallback> agentTools;
+    private final SkillRegistry skillRegistry;
+    private final FunctionCallingClient functionCallingClient;
 
     public AgentCoachService(
             PromptCoachSessionRepository sessionRepository,
             UserPreferenceRepository preferenceRepository,
             UserModelConfigRepository userConfigRepository,
             DynamicLlmClientFactory llmFactory,
-            List<ToolCallback> agentTools) {
+            SkillRegistry skillRegistry,
+            FunctionCallingClient functionCallingClient) {
         this.sessionRepository = sessionRepository;
         this.preferenceRepository = preferenceRepository;
         this.userConfigRepository = userConfigRepository;
         this.llmFactory = llmFactory;
-        this.agentTools = agentTools;
+        this.skillRegistry = skillRegistry;
+        this.functionCallingClient = functionCallingClient;
 
-        log.info("AgentCoachService 初始化完成，已加载 {} 个工具", agentTools.size());
-        agentTools.forEach(tool -> log.info("  - 工具: {}", tool.getToolDefinition().name()));
+        log.info("[AgentCoachService] 初始化完成，SkillRegistry 已加载 {} 个技能",
+                skillRegistry.getAllSkillNames().size());
     }
 
     /**
-     * 开始新的 Agent Coach 会话（流式输出）
-     */
-    public Flux<String> startAgentSessionStream(Long userId, String initialInput, String provider) {
-        // 1. 获取用户模型配置
-        UserModelConfig modelConfig = selectModel(userId, provider);
-
-        // 2. 创建会话
-        String sessionId = UUID.randomUUID().toString().replace("-", "");
-        PromptCoachSession session = PromptCoachSession.builder()
-                .sessionId(sessionId)
-                .userId(userId)
-                .provider(modelConfig.getProvider())
-                .currentPhase(CoachPhase.GOAL_CLARIFICATION)
-                .build();
-
-        // 3. 添加用户初始输入
-        session.addUserMessage(initialInput);
-
-        // 4. 保存会话（先保存，获取 sessionId）
-        sessionRepository.save(session);
-
-        // 5. 构建完整 Prompt（包含工具描述）
-        String fullPrompt = buildAgentPrompt(session);
-
-        StringBuilder fullResponse = new StringBuilder();
-
-        log.info("创建 Agent Coach 会话: sessionId={}, userId={}, provider={}",
-                sessionId, userId, modelConfig.getProvider());
-
-        // 6. 使用 DynamicLlmClientFactory 流式生成
-        return llmFactory.generateStream(modelConfig, fullPrompt)
-                .doOnNext(chunk -> fullResponse.append(chunk))
-                .doOnComplete(() -> {
-                    String response = fullResponse.toString();
-                    session.addAssistantMessage(response);
-
-                    try {
-                        // 解析并更新状态
-                        parseAndUpdateSession(session, response);
-                    } catch (Exception e) {
-                        log.warn("解析状态失败", e);
-                    }
-
-                    sessionRepository.save(session);
-                    log.info("Agent 首轮回复完成，长度: {}", response.length());
-                })
-                .doOnError(e -> log.error("Agent 首轮回复失败: {}", e.getMessage(), e));
-    }
-
-    /**
-     * 开始新的 Agent Coach 会话（同步版本，返回 PromptCoachSession）
+     * 开始新的 Agent Coach 会话
+     * 
+     * 使用手搓 Function Calling + 三层 Skill 加载架构：
+     * 1. Level 1: 按意图匹配加载 Skill 元数据
+     * 2. Level 2: 按需注入详细指令（暂未启用）
+     * 3. Level 3: 执行 Skill 时调用 SkillExecutor
      */
     public PromptCoachSession startAgentSession(Long userId, String initialInput, String provider) {
         // 1. 获取用户模型配置
@@ -123,28 +83,56 @@ public class AgentCoachService {
         // 3. 添加用户初始输入
         session.addUserMessage(initialInput);
 
-        // 4. 构建完整 Prompt
-        String fullPrompt = buildAgentPrompt(session);
+        // 4. 根据用户意图选择 Skill（三层加载 - Level 1）
+        List<SkillMetadata> selectedSkills = skillRegistry.selectByIntent(initialInput);
+        log.info("[startAgentSession] 匹配到 {} 个 Skill: {}",
+                selectedSkills.size(),
+                selectedSkills.stream().map(SkillMetadata::getName).toList());
 
-        // 5. 同步调用（阻塞等待流完成）
-        StringBuilder result = new StringBuilder();
-        llmFactory.generateStream(modelConfig, fullPrompt)
-                .toIterable()
-                .forEach(result::append);
+        // 5. 构建消息列表
+        String systemPrompt = buildAgentSystemPrompt(session);
+        List<Map<String, Object>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "system", "content", systemPrompt));
+        messages.add(Map.of("role", "user", "content", initialInput));
 
-        String aiResponse = result.toString().trim();
+        // 6. 构建执行上下文
+        Map<String, Object> context = Map.of(
+                "userId", userId,
+                "sessionId", sessionId,
+                "phase", session.getCurrentPhase().name());
+
+        // 7. 调用 AI（使用手搓 Function Calling）
+        String aiResponse;
+        if (skillRegistry.hasSkills() && !selectedSkills.isEmpty()) {
+            // 全功能模式：使用 FunctionCallingClient
+            aiResponse = functionCallingClient.chat(modelConfig, messages, selectedSkills, context);
+        } else {
+            // 降级模式：纯文本生成
+            log.info("[startAgentSession] 无可用 Skill，使用降级模式");
+            StringBuilder result = new StringBuilder();
+            llmFactory.generateStream(modelConfig, buildAgentPrompt(session))
+                    .toIterable()
+                    .forEach(result::append);
+            aiResponse = result.toString();
+        }
+
+        // 8. 更新会话状态
         session.addAssistantMessage(aiResponse);
+        try {
+            parseAndUpdateSession(session, aiResponse);
+        } catch (Exception e) {
+            log.warn("[startAgentSession] 解析状态失败", e);
+        }
 
-        // 6. 保存会话
+        // 9. 保存会话
         sessionRepository.save(session);
-
-        log.info("创建 Agent Coach 会话（同步）: sessionId={}, userId={}, tools={}",
-                sessionId, userId, agentTools.size());
         return session;
     }
 
     /**
-     * Agent 对话（流式输出）
+     * Agent 对话（带工具调用）
+     * 
+     * 使用手搓 Function Calling + 按需 Skill 加载
      */
     public Flux<String> agentChat(String sessionId, String userMessage) {
         PromptCoachSession session = sessionRepository.findById(sessionId)
@@ -157,28 +145,58 @@ public class AgentCoachService {
         session.addUserMessage(userMessage);
 
         UserModelConfig modelConfig = selectModel(session.getUserId(), session.getProvider());
-        String fullPrompt = buildAgentPrompt(session);
 
-        StringBuilder fullResponse = new StringBuilder();
+        // 根据用户意图选择 Skill
+        List<SkillMetadata> selectedSkills = skillRegistry.selectByIntent(userMessage);
+        log.info("[agentChat] 匹配到 {} 个 Skill: {}",
+                selectedSkills.size(),
+                selectedSkills.stream().map(SkillMetadata::getName).toList());
 
-        // 使用 DynamicLlmClientFactory 流式生成
-        return llmFactory.generateStream(modelConfig, fullPrompt)
-                .doOnNext(chunk -> fullResponse.append(chunk))
-                .doOnComplete(() -> {
-                    String response = fullResponse.toString();
-                    session.addAssistantMessage(response);
+        // 构建消息列表
+        String systemPrompt = buildAgentSystemPrompt(session);
+        List<Map<String, Object>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "system", "content", systemPrompt));
+        messages.add(Map.of("role", "user", "content", buildUserMessageWithHistory(session)));
 
-                    try {
-                        // 解析并更新状态
-                        parseAndUpdateSession(session, response);
-                    } catch (Exception e) {
-                        log.warn("解析状态失败", e);
-                    }
+        // 构建执行上下文
+        Map<String, Object> context = Map.of(
+                "userId", session.getUserId(),
+                "sessionId", sessionId,
+                "phase", session.getCurrentPhase().name());
 
-                    sessionRepository.save(session);
-                    log.info("Agent 流式回复完成，长度: {}", response.length());
-                })
-                .doOnError(e -> log.error("Agent 流式回复失败: {}", e.getMessage(), e));
+        return Flux.defer(() -> {
+            try {
+                String response;
+                if (skillRegistry.hasSkills() && !selectedSkills.isEmpty()) {
+                    // 全功能模式：使用 FunctionCallingClient
+                    response = functionCallingClient.chat(modelConfig, messages, selectedSkills, context);
+                } else {
+                    // 降级模式：纯文本生成
+                    log.info("[agentChat] 无可用 Skill，使用降级模式");
+                    StringBuilder result = new StringBuilder();
+                    llmFactory.generateStream(modelConfig, buildAgentPrompt(session))
+                            .toIterable()
+                            .forEach(result::append);
+                    response = result.toString();
+                }
+
+                session.addAssistantMessage(response);
+
+                try {
+                    parseAndUpdateSession(session, response);
+                } catch (Exception e) {
+                    log.warn("[agentChat] 解析状态失败", e);
+                }
+
+                sessionRepository.save(session);
+                log.info("[agentChat] 对话完成，长度: {}", response.length());
+
+                return Flux.just(response);
+            } catch (Exception e) {
+                log.error("[agentChat] 对话失败: {}", e.getMessage(), e);
+                return Flux.error(e);
+            }
+        });
     }
 
     /**
@@ -200,21 +218,12 @@ public class AgentCoachService {
     }
 
     /**
-     * 构建 Agent 系统提示词（包含工具说明）
+     * 构建 Agent 系统提示词
+     * 工具信息由 Spring AI ChatClient 自动注入，不再手动拼接
      */
     private String buildAgentSystemPrompt(PromptCoachSession session) {
-        StringBuilder toolsDescription = new StringBuilder();
-        toolsDescription.append("你可以使用以下工具来帮助用户：\n");
-        for (ToolCallback tool : agentTools) {
-            toolsDescription.append(String.format("- %s: %s\n",
-                    tool.getToolDefinition().name(),
-                    tool.getToolDefinition().description()));
-        }
-
         return """
                 你是一位具备超能力的精英产品专家（Product Expert），拥有多种工具来帮助用户。
-
-                %s
 
                 当你需要获取最新信息、分析代码仓库或评估 Prompt 质量时，请主动调用相应工具。
 
@@ -230,10 +239,20 @@ public class AgentCoachService {
 
                 注意：使用中文回复。
                 """.formatted(
-                toolsDescription.toString(),
                 session.getCurrentPhase().name(),
                 session.getCurrentPhase().getDescription(),
                 session.getFormattedExtractedInfo());
+    }
+
+    /**
+     * 构建包含对话历史的用户消息
+     */
+    private String buildUserMessageWithHistory(PromptCoachSession session) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("对话历史:\n");
+        sb.append(session.getFormattedHistory());
+        sb.append("\n请根据用户最新的回复，继续引导或生成最终 Prompt。");
+        return sb.toString();
     }
 
     /**

@@ -274,8 +274,25 @@ public class DynamicLlmClientFactory {
             JSONArray choices = json.getJSONArray("choices");
             if (choices != null && !choices.isEmpty()) {
                 JSONObject delta = choices.getJSONObject(0).getJSONObject("delta");
-                if (delta != null && delta.containsKey("content")) {
-                    return delta.getString("content");
+                if (delta != null) {
+                    StringBuilder sb = new StringBuilder();
+
+                    // 支持 DeepSeek R1 的推理内容
+                    if (delta.containsKey("reasoning_content")) {
+                        String reasoning = delta.getString("reasoning_content");
+                        if (reasoning != null) {
+                            sb.append(reasoning);
+                        }
+                    }
+
+                    // 标准内容
+                    if (delta.containsKey("content")) {
+                        String content = delta.getString("content");
+                        if (content != null) {
+                            sb.append(content);
+                        }
+                    }
+                    return sb.toString();
                 }
             }
         } catch (Exception e) {

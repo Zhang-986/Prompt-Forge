@@ -71,7 +71,7 @@ defineExpose({ show, hide })
 <template>
   <a-drawer
     v-model:open="open"
-    title="Competition History"
+    title="比赛记录"
     placement="right"
     width="480"
     :headerStyle="{ borderBottom: '1px solid #f3f4f6' }"
@@ -79,7 +79,7 @@ defineExpose({ show, hide })
   >
     <div class="history-list">
       <div v-if="history.length === 0 && !loading" class="empty-state">
-        No voting history yet.
+        暂无比赛记录
       </div>
       
       <div v-for="item in history" :key="item.id" class="history-card" @click="onHistoryItemClick(item)">
@@ -97,19 +97,19 @@ defineExpose({ show, hide })
           <div class="model-row winner">
             <div class="status-icon"><TrophyOutlined /></div>
             <div class="model-name">{{ item.winnerModel }}</div>
-            <div class="result-tag win">WIN</div>
+            <div class="result-tag win">胜</div>
           </div>
           <div class="model-row loser">
             <div class="status-icon"></div>
             <div class="model-name">{{ item.loserModel }}</div>
-            <div class="result-tag loss">LOSS</div>
+            <div class="result-tag loss">败</div>
           </div>
         </div>
       </div>
 
       <div v-if="hasMore" class="load-more">
         <a-button @click="loadHistory" :loading="loading" type="text" block>
-          Load More
+          加载更多
         </a-button>
       </div>
     </div>

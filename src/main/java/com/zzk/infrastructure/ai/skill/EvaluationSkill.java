@@ -4,18 +4,38 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Map;
+
 /**
  * Prompt 评估技能
  * 
  * <p>
  * 评估 Prompt 质量并给出改进建议
+ * 同时实现 SkillExecutor 接口，支持 Agent Skills 架构
  * 
  * @author zzk
  * @since 1.0.0
  */
 @Slf4j
-@Component
-public class EvaluationSkill {
+@Component("evaluationExecutor")
+public class EvaluationSkill implements SkillExecutor {
+
+    // ========== SkillExecutor 接口实现 ==========
+
+    @Override
+    public String getName() {
+        return "evaluation";
+    }
+
+    @Override
+    public SkillResult execute(Map<String, Object> params, Map<String, Object> context) {
+        String prompt = (String) params.get("prompt");
+        if (prompt == null || prompt.isBlank()) {
+            return SkillResult.error("待评估的 Prompt 不能为空");
+        }
+        String result = evaluate(prompt);
+        return SkillResult.success(result);
+    }
 
     /**
      * 评估 Prompt 质量

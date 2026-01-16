@@ -59,6 +59,12 @@ const router = createRouter({
                     name: 'Admin',
                     component: () => import('../views/AdminDashboard.vue'),
                     meta: { requiresAdmin: true }
+                },
+                {
+                    path: 'admin/monitor',
+                    name: 'AgentMonitor',
+                    component: () => import('../views/AgentMonitor.vue'),
+                    meta: { requiresAdmin: true }
                 }
             ]
         }

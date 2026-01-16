@@ -168,6 +168,12 @@ public class LobeChatSyncService {
         // 4. 保存或更新模型
         int sortOrder = 0;
         for (ParsedModel model : models) {
+            // 过滤：如果 modelId 与 providerId 相同（大小写不敏感），则跳过（避免占位模型）
+            if (model.id.equalsIgnoreCase(providerId)) {
+                log.info("跳过占位模型: provider={}, model={}", providerId, model.id);
+                continue;
+            }
+
             AvailableModelPO existingModel = modelMapper.findByProviderIdAndModelId(providerId, model.id);
 
             if (existingModel == null) {

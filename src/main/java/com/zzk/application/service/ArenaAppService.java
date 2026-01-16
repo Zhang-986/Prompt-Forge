@@ -12,6 +12,9 @@ import com.zzk.domain.service.ArenaDomainService;
 import com.zzk.infrastructure.ai.factory.DynamicLlmClientFactory;
 import com.zzk.infrastructure.exception.BusinessException;
 import com.zzk.infrastructure.persistence.mapper.ArenaVoteMapper;
+import com.zzk.infrastructure.persistence.mapper.AvailableModelMapper;
+import com.zzk.infrastructure.persistence.po.AvailableModelPO;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,8 +25,10 @@ import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -58,7 +63,7 @@ public class ArenaAppService {
     private final DynamicLlmClientFactory dynamicLlmFactory;
     private final ObjectMapper objectMapper;
     private final ArenaVoteMapper arenaVoteMapper;
-    private final com.zzk.application.service.UserModelConfigAppService userModelConfigAppService;
+    private final AvailableModelMapper availableModelMapper;
 
     @Qualifier("arenaExecutor")
     private final ThreadPoolExecutor arenaExecutor;
@@ -346,35 +351,37 @@ public class ArenaAppService {
     /**
      * 获取用户可用的模型列表（返回详细模型信息）
      */
-    /**
-     * 获取用户可用的模型列表（返回详细模型信息）
-     */
     public List<AvailableModelInfo> getAvailableModels(Long userId) {
+        // 1. 获取用户已启用配置中的 Provider ID 列表
         List<UserModelConfig> enabledConfigs = userConfigRepository.findEnabledByUserId(userId);
-        List<com.zzk.application.service.UserModelConfigAppService.ProviderInfo> supportedProviders = userModelConfigAppService
-                .getSupportedProviders();
+        if (enabledConfigs.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        return enabledConfigs.stream()
-                .flatMap(config -> {
-                    String providerId = config.getProvider();
-                    // 查找该提供商的所有支持模型
-                    return supportedProviders.stream()
-                            .filter(p -> p.id().equals(providerId))
-                            .findFirst()
-                            .map(providerInfo -> providerInfo.models().stream()
-                                    .map(modelInfo -> {
-                                        String modelId = providerId + ":" + modelInfo.id();
-                                        // 显示名称格式：Provider - ModelName (e.g., OpenAI - GPT-4o)
-                                        String displayName = providerInfo.name() + " - " + modelInfo.name();
-                                        return new AvailableModelInfo(providerId, modelId, modelInfo.id(), displayName);
-                                    }))
-                            .orElse(java.util.stream.Stream.of(
-                                    // 如果没找到支持列表（可能是自定义或旧数据），至少返回当前配置的默认模型
-                                    new AvailableModelInfo(providerId,
-                                            providerId + ":" + config.getEffectiveModelName(),
-                                            config.getEffectiveModelName(),
-                                            getProviderDisplayName(providerId) + " - "
-                                                    + getModelShortName(config.getEffectiveModelName()))));
+        Set<String> enabledProviderIds = enabledConfigs.stream()
+                .map(UserModelConfig::getProvider)
+                .collect(Collectors.toSet());
+
+        // 2. 从数据库查询这些 Provider 下的所有启用模型
+        List<AvailableModelPO> availableModels = availableModelMapper.selectList(
+                new LambdaQueryWrapper<AvailableModelPO>()
+                        .in(AvailableModelPO::getProviderId, enabledProviderIds)
+                        .eq(AvailableModelPO::getEnabled, 1)
+                        .orderByAsc(AvailableModelPO::getSortOrder));
+
+        // 3. 转换为 DTO
+        return availableModels.stream()
+                .map(po -> {
+                    String providerId = po.getProviderId();
+                    String modelCode = po.getModelId(); // 实际 API 调用的 ID
+                    // 组合 ID: provider + ":" + modelCode
+                    String fullId = providerId + ":" + modelCode;
+
+                    return new AvailableModelInfo(
+                            providerId,
+                            fullId,
+                            modelCode,
+                            po.getDisplayName());
                 })
                 .toList();
     }
@@ -475,7 +482,15 @@ public class ArenaAppService {
                     result.put("winRate", Math.round(winRate * 10) / 10.0);
                     return result;
                 })
-                .sorted((a, b) -> Double.compare((Double) b.get("winRate"), (Double) a.get("winRate")))
+                .sorted((a, b) -> {
+                    // Sort by Win Rate DESC, then Total Battles DESC
+                    int rateCompare = Double.compare((Double) b.get("winRate"), (Double) a.get("winRate"));
+                    if (rateCompare != 0)
+                        return rateCompare;
+
+                    // If win rates are equal, prefer more battles
+                    return Long.compare((Long) b.get("total"), (Long) a.get("total"));
+                })
                 .toList();
 
     }
@@ -532,7 +547,9 @@ public class ArenaAppService {
                         new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
                         });
             }
-        } catch (Exception e) {
+        } catch (
+
+        Exception e) {
             log.error("Failed to parse session data", e);
         }
 
@@ -541,24 +558,14 @@ public class ArenaAppService {
                 .orElse(null);
         Long promptId = version != null ? version.getPromptId() : null;
 
-        return com.zzk.interfaces.dto.response.ArenaSessionDetailDTO.builder()
-                .id(session.getId())
-                .promptId(promptId)
-                .promptVersionId(session.getPromptVersionId())
-                .finalPrompt(session.getFinalPrompt())
-                .variables(variables)
-                .models(models)
-                .status(session.getStatus())
-                .createdAt(session.getCreatedAt())
+        return com.zzk.interfaces.dto.response.ArenaSessionDetailDTO.builder().id(session.getId()).promptId(promptId)
+                .promptVersionId(session.getPromptVersionId()).finalPrompt(session.getFinalPrompt())
+                .variables(variables).models(models).status(session.getStatus()).createdAt(session.getCreatedAt())
                 .completedAt(session.getCompletedAt())
                 .results(results.stream()
                         .map(r -> com.zzk.interfaces.dto.response.ArenaSessionDetailDTO.ResultDTO.builder()
-                                .modelId(r.getModelId())
-                                .content(r.getContent())
-                                .error(r.getErrorMessage())
-                                .latencyMs(r.getLatencyMs())
-                                .tokensUsed(r.getTokensUsed())
-                                .build())
+                                .modelId(r.getModelId()).content(r.getContent()).error(r.getErrorMessage())
+                                .latencyMs(r.getLatencyMs()).tokensUsed(r.getTokensUsed()).build())
                         .toList())
                 .build();
     }

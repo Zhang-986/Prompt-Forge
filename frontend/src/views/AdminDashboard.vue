@@ -19,6 +19,7 @@ import {
     CloudSyncOutlined
 } from '@ant-design/icons-vue'
 import AdminModels from './admin/AdminModels.vue'
+import AgentMonitor from './AgentMonitor.vue'
 import {
     getDashboardStats,
     getUsers,
@@ -442,6 +443,9 @@ onMounted(() => {
                 <div class="nav-item" :class="{ active: activeTab === 'models' }" @click="handleTabChange('models')">
                     <CloudSyncOutlined /> 模型管理
                 </div>
+                <div class="nav-item" :class="{ active: activeTab === 'monitor' }" @click="handleTabChange('monitor')">
+                    <DashboardOutlined /> Agent 监控
+                </div>
                 <div class="nav-item" :class="{ active: activeTab === 'logs' }" @click="handleTabChange('logs')">
                     <SettingOutlined /> 登录日志
                 </div>
@@ -449,6 +453,11 @@ onMounted(() => {
 
             <!-- Content -->
             <main class="content">
+                <!-- Agent 监控 -->
+                <div v-if="activeTab === 'monitor'" class="tab-content">
+                     <AgentMonitor />
+                </div>
+
                 <!-- 模型管理 -->
                 <div v-if="activeTab === 'models'" class="tab-content">
                      <h2 class="tab-title">模型管理</h2>

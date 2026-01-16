@@ -11,9 +11,11 @@ import {
     ArrowLeftOutlined,
     SettingOutlined,
     CloseOutlined,
-    DownOutlined
+    DownOutlined,
+    InfoCircleOutlined
 } from '@ant-design/icons-vue'
 import ProviderLogo from '../components/ProviderLogo.vue'
+import ModelSelectorModal from '../components/ModelSelectorModal.vue'
 import {
     startAgentSession,
     sendAgentMessage,
@@ -39,49 +41,17 @@ const selectedProvider = ref('')
 const availableProviders = ref<AvailableModelInfo[]>([])
 const loadingProviders = ref(false)
 const showModelModal = ref(false)
-const activeModalProvider = ref<string>('') // For sidebar selection
 
-// Computed: Unique Providers for Sidebar
-const uniqueProviders = computed(() => {
-    const providerIds = new Set(availableProviders.value.map(p => p.provider))
-    return Array.from(providerIds).map(id => {
-        // Find first model with this provider to get provider name (or just use id)
-        // In AvailableModelInfo, we don't have separate provider name field, usually it's same as provider id
-        // But let's check if we can get a better name if available, otherwise capitalize
-        return {
-            id,
-            name: id // distinct provider ID
-        }
-    }).sort((a, b) => {
-        // Optional: Sort logic
-        const weights: Record<string, number> = { openai: 100, anthropic: 90, google: 80 }
-        const wa = weights[a.id] || 0
-        const wb = weights[b.id] || 0
-        return wb - wa
-    })
-})
-
-// Computed: Models for Active Provider
-const filteredModels = computed(() => {
-    // If "Auto Select" is technically a model with empty ID, handle it separately?
-    // Here we just filter by provider.
-    if (!activeModalProvider.value && uniqueProviders.value.length > 0) {
-        return availableProviders.value.filter(p => p.provider === uniqueProviders.value[0].id)
-    }
-    return availableProviders.value.filter(p => p.provider === activeModalProvider.value)
-})
-
-// Watch modal open to reset/init active provider
-import { watch } from 'vue'
-watch(showModelModal, (val) => {
-    if (val && uniqueProviders.value.length > 0 && !activeModalProvider.value) {
-        activeModalProvider.value = uniqueProviders.value[0].id
-    }
-})
 
 const selectedModelInfo = computed(() => {
     if (!selectedProvider.value) return null
     return availableProviders.value.find(p => p.modelId === selectedProvider.value)
+})
+
+const isSelectedModelUnsupported = computed(() => {
+    if (!selectedModelInfo.value) return false
+    const unsupported = ['google', 'anthropic', 'claude', 'cloudflare']
+    return unsupported.includes(selectedModelInfo.value.provider.toLowerCase())
 })
 
 const selectModel = (modelId: string) => {
@@ -95,7 +65,14 @@ const loadProviders = async () => {
     try {
         const res = await getAvailableModels()
         if (res.code === 200 && res.data.length > 0) {
+            // Graceful Degradation: Allow all models
             availableProviders.value = res.data
+
+            // Auto Select first available model
+            if (availableProviders.value.length > 0) {
+                const first = availableProviders.value[0]
+                selectedProvider.value = first.modelId
+            }
         }
     } catch (error) {
         console.error('加载模型列表失败', error)
@@ -398,8 +375,7 @@ const handleKeydown = async (e: KeyboardEvent) => {
                             <span class="model-name">{{ selectedModelInfo.displayName }}</span>
                         </template>
                         <template v-else>
-                            <RobotOutlined style="font-size: 18px; color: var(--color-primary);" />
-                            <span class="model-name">自动选择 (推荐)</span>
+                            <span class="model-name" style="color: var(--color-text-tertiary);">请选择模型</span>
                         </template>
                         <DownOutlined class="arrow-icon" />
                     </div>
@@ -408,67 +384,22 @@ const handleKeydown = async (e: KeyboardEvent) => {
                         暂无可用模型，请先配置
                     </span>
                 </div>
+
+                <p v-if="isSelectedModelUnsupported" class="coach-model-hint">
+                    <InfoCircleOutlined /> 此模型不支持联网工具，仅提供对话建议
+                </p>
+                <p v-else-if="selectedModelInfo" class="coach-model-hint success">
+                    <CheckOutlined /> 全功能模式 (支持搜索/代码分析)
+                </p>
             </div>
 
             <!-- Model Selection Modal (Categorized) -->
-            <div v-if="showModelModal" class="modal-overlay" @click.self="showModelModal = false">
-                <div class="modal-content model-selector-dialog">
-                    <div class="modal-header">
-                        <h3>选择 AI 模型</h3>
-                        <button class="close-btn" @click="showModelModal = false">
-                            <CloseOutlined />
-                        </button>
-                    </div>
-                    <div class="modal-body-layout">
-                        <!-- Left Sidebar -->
-                        <div class="category-sidebar">
-                            <!-- Auto Option in Sidebar -->
-                            <div class="category-item" :class="{ active: !activeModalProvider }"
-                                @click="activeModalProvider = ''">
-                                <RobotOutlined />
-                                <span class="category-name">自动推荐</span>
-                            </div>
-                            
-                            <!-- Providers -->
-                            <div v-for="p in uniqueProviders" :key="p.id" class="category-item"
-                                :class="{ active: activeModalProvider === p.id }"
-                                @click="activeModalProvider = p.id">
-                                <ProviderLogo :providerId="p.id" :size="20" />
-                                <span class="category-name">{{ p.name }}</span>
-                            </div>
-                        </div>
-
-                        <!-- Right Content -->
-                        <div class="model-content-area">
-                            <!-- Auto Select Content -->
-                            <div v-if="!activeModalProvider" class="provider-grid">
-                                <div class="provider-option" :class="{ selected: selectedProvider === '' }"
-                                    @click="selectModel('')">
-                                    <div class="icon-wrapper auto-icon">
-                                        <RobotOutlined />
-                                    </div>
-                                    <span class="opt-name">自动选择</span>
-                                    <span class="opt-desc">系统自动推荐最佳模型</span>
-                                </div>
-                            </div>
-
-                            <!-- Provider Models -->
-                            <div v-else-if="filteredModels.length > 0" class="provider-grid">
-                                <div v-for="info in filteredModels" :key="info.modelId" class="provider-option"
-                                    :class="{ selected: selectedProvider === info.modelId }"
-                                    @click="selectModel(info.modelId)">
-                                    <ProviderLogo :providerId="info.provider" :size="32" />
-                                    <span class="opt-name">{{ info.displayName }}</span>
-                                    <span class="opt-desc">{{ info.provider }}</span>
-                                </div>
-                            </div>
-                             <div v-else class="empty-state" style="padding: 20px; color: #999;">
-                                该厂商暂无可用模型
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <ModelSelectorModal 
+                v-model:open="showModelModal"
+                :models="availableProviders"
+                :selectedModelId="selectedProvider"
+                @select="selectModel"
+            />
 
 
             <!-- 对话消息 -->
@@ -617,6 +548,19 @@ const handleKeydown = async (e: KeyboardEvent) => {
     display: flex;
     align-items: center;
     gap: var(--space-3);
+}
+
+.coach-model-hint {
+    margin-top: var(--space-3);
+    font-size: var(--text-xs);
+    color: var(--color-warning);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.coach-model-hint.success {
+    color: var(--color-success);
 }
 
 /* 消息样式 */

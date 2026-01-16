@@ -57,19 +57,6 @@ public class UserModelConfig {
     
     private LocalDateTime updatedAt;
 
-    /**
-     * 获取提供商显示名称
-     */
-    public String getProviderDisplayName() {
-        return switch (provider) {
-            case "google" -> "Google Gemini";
-            case "zhipu" -> "智谱 GLM";
-            case "deepseek" -> "DeepSeek";
-            case "openai" -> "OpenAI GPT";
-            case "claude" -> "Anthropic Claude";
-            default -> provider;
-        };
-    }
 
     /**
      * 获取默认 Base URL

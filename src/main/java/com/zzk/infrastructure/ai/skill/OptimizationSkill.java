@@ -4,6 +4,8 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Map;
+
 /**
  * Prompt 优化技能
  * 
@@ -14,8 +16,29 @@ import lombok.extern.slf4j.Slf4j;
  * @since 1.0.0
  */
 @Slf4j
-@Component
-public class OptimizationSkill {
+@Component("optimizationExecutor")
+public class OptimizationSkill implements SkillExecutor {
+
+    // ========== SkillExecutor 接口实现 ==========
+
+    @Override
+    public String getName() {
+        return "optimization";
+    }
+
+    @Override
+    public SkillResult execute(Map<String, Object> params, Map<String, Object> context) {
+        String originalPrompt = (String) params.get("originalPrompt");
+        String technique = (String) params.get("technique");
+        if (originalPrompt == null || originalPrompt.isBlank()) {
+            return SkillResult.error("原始 Prompt 不能为空");
+        }
+        if (technique == null || technique.isBlank()) {
+            technique = "clarity"; // 默认优化技巧
+        }
+        String result = optimize(originalPrompt, technique);
+        return SkillResult.success(result);
+    }
 
     /**
      * 优化 Prompt

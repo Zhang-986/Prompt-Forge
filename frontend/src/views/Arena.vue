@@ -21,6 +21,8 @@ import {
   HistoryOutlined
 } from '@ant-design/icons-vue'
 import ArenaHistory from './components/ArenaHistory.vue'
+import ModelSelectorModal from '../components/ModelSelectorModal.vue'
+import ProviderLogo from '../components/ProviderLogo.vue'
 import { marked } from 'marked'
 
 // Import Config Assets
@@ -73,6 +75,36 @@ const variables = ref<Record<string, string>>({})
 
 const isCompeting = ref(false)
 const eventSource = ref<EventSource | null>(null)
+
+// Model Modal State
+const showModelModal = ref(false)
+const modelSelectorTarget = ref<'A' | 'B' | null>(null)
+
+const openModelSelector = (target: 'A' | 'B') => {
+  modelSelectorTarget.value = target
+  showModelModal.value = true
+}
+
+const handleModelSelect = (modelId: string) => {
+  if (modelSelectorTarget.value === 'A') {
+    modelA.value = modelId
+    // Prevent same model
+    if (modelA.value === modelB.value) {
+      modelB.value = undefined
+    }
+  } else if (modelSelectorTarget.value === 'B') {
+    modelB.value = modelId
+    if (modelB.value === modelA.value) {
+      modelA.value = undefined
+    }
+  }
+}
+
+const currentSelectionId = computed(() => {
+  if (modelSelectorTarget.value === 'A') return modelA.value
+  if (modelSelectorTarget.value === 'B') return modelB.value
+  return undefined
+})
 
 // Output State
 interface ModelOutput {
@@ -281,11 +313,12 @@ const loadModels = async () => {
 
 // 解析变量
 const parseVariables = (content: string) => {
-  const regex = /\{\{(\w+)\}\}/g
+  // Use non-greedy match for content inside {{ }} to support UTF-8 chars (e.g. Chinese)
+  const regex = /\{\{(.*?)\}\}/g
   const matches = content.matchAll(regex)
   const vars: Record<string, string> = {}
   for (const match of matches) {
-    const varName = match[1]
+    const varName = match[1].trim()
     if (varName) vars[varName] = ''
   }
   variables.value = vars
@@ -568,18 +601,14 @@ onUnmounted(() => stopCompete())
         <div class="model-column">
           <div class="model-header">
             <div class="corner-label">Model A</div>
-            <a-select v-model:value="modelA" style="width: 100%;" class="model-hero-select" :bordered="false"
-              popupClassName="custom-dropdown">
-              <template #suffixIcon>
-                <DownOutlined style="font-size: 12px; color: #9ca3af" />
-              </template>
-              <a-select-option v-for="m in models" :key="m.modelId" :value="m.modelId" :disabled="m.modelId === modelB">
-                <div class="option-content">
-                  <img v-if="getProviderLogo(m.modelId)" :src="getProviderLogo(m.modelId)" class="option-icon" />
-                  {{ m.displayName }}
-                </div>
-              </a-select-option>
-            </a-select>
+            <div class="model-trigger-btn" @click="openModelSelector('A')">
+               <template v-if="modelA">
+                   <ProviderLogo :providerId="modelMap.get(modelA)?.provider || modelA.split(':')[0]" :size="20" />
+                   <span class="trigger-text">{{ getModelDisplayName(modelA) }}</span>
+               </template>
+               <span v-else class="trigger-placeholder">Select Model</span>
+               <DownOutlined class="trigger-arrow" />
+            </div>
           </div>
 
           <div class="chat-area">
@@ -608,18 +637,14 @@ onUnmounted(() => stopCompete())
         <div class="model-column">
           <div class="model-header">
             <div class="corner-label">Model B</div>
-            <a-select v-model:value="modelB" style="width: 100%;" class="model-hero-select" :bordered="false"
-              popupClassName="custom-dropdown">
-              <template #suffixIcon>
-                <DownOutlined style="font-size: 12px; color: #9ca3af" />
-              </template>
-              <a-select-option v-for="m in models" :key="m.modelId" :value="m.modelId" :disabled="m.modelId === modelA">
-                <div class="option-content">
-                  <img v-if="getProviderLogo(m.modelId)" :src="getProviderLogo(m.modelId)" class="option-icon" />
-                  {{ m.displayName }}
-                </div>
-              </a-select-option>
-            </a-select>
+            <div class="model-trigger-btn" @click="openModelSelector('B')">
+               <template v-if="modelB">
+                   <ProviderLogo :providerId="modelMap.get(modelB)?.provider || modelB.split(':')[0]" :size="20" />
+                   <span class="trigger-text">{{ getModelDisplayName(modelB) }}</span>
+               </template>
+               <span v-else class="trigger-placeholder">Select Model</span>
+               <DownOutlined class="trigger-arrow" />
+            </div>
           </div>
 
           <div class="chat-area">
@@ -672,6 +697,11 @@ onUnmounted(() => stopCompete())
             </div>
           </template>
         </a-table-column>
+        <a-table-column title="Battles" dataIndex="total" align="center" :width="100">
+          <template #default="{ text }">
+            <span style="color: #6b7280; font-size: 13px;">{{ text }}</span>
+          </template>
+        </a-table-column>
         <a-table-column title="Win Rate" dataIndex="winRate" align="right">
           <template #default="{ text }">
             <span class="win-rate">{{ text }}%</span>
@@ -682,6 +712,13 @@ onUnmounted(() => stopCompete())
 
     <!-- History Drawer -->
     <ArenaHistory ref="historyRef" @restore="restoreSession" />
+
+    <ModelSelectorModal
+      v-model:open="showModelModal"
+      :models="models"
+      :selectedModelId="currentSelectionId"
+      @select="handleModelSelect"
+    />
   </div>
 </template>
 
@@ -1186,5 +1223,38 @@ onUnmounted(() => stopCompete())
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.model-trigger-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    height: 40px;
+}
+.model-trigger-btn:hover {
+    border-color: #000;
+}
+.trigger-text {
+    flex: 1;
+    font-weight: 500;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.trigger-placeholder {
+    flex: 1;
+    color: #9ca3af;
+    font-size: 14px;
+}
+.trigger-arrow {
+    font-size: 10px;
+    color: #9ca3af;
 }
 </style>
