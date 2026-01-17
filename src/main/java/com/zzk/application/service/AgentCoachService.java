@@ -2,21 +2,25 @@ package com.zzk.application.service;
 
 import com.zzk.domain.model.entity.PromptCoachSession;
 import com.zzk.domain.model.entity.UserModelConfig;
+import com.zzk.domain.model.entity.UserPreference;
 import com.zzk.domain.model.valueobject.CoachPhase;
 import com.zzk.domain.repository.PromptCoachSessionRepository;
 import com.zzk.domain.repository.UserModelConfigRepository;
 import com.zzk.domain.repository.UserPreferenceRepository;
 import com.zzk.infrastructure.ai.client.FunctionCallingClient;
 import com.zzk.infrastructure.ai.factory.DynamicLlmClientFactory;
-import com.zzk.domain.model.entity.UserPreference;
-import com.zzk.infrastructure.ai.skill.SkillMetadata;
-import com.zzk.infrastructure.ai.skill.SkillRegistry;
+import com.zzk.infrastructure.ai.skill.core.SkillMetadata;
+import com.zzk.infrastructure.ai.skill.registry.SkillRegistry;
 import com.zzk.infrastructure.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Agent 增强版 Coach 服务
@@ -60,14 +64,17 @@ public class AgentCoachService {
     }
 
     /**
-     * 开始新的 Agent Coach 会话
+     * 开始 Agent 会话
      * 
-     * 使用手搓 Function Calling + 三层 Skill 加载架构：
-     * 1. Level 1: 按意图匹配加载 Skill 元数据
-     * 2. Level 2: 按需注入详细指令（暂未启用）
-     * 3. Level 3: 执行 Skill 时调用 SkillExecutor
+     * 使用用户选择的 Skills 进行 Function Calling
+     * 
+     * @param userId             用户ID
+     * @param initialInput       初始输入
+     * @param provider           AI 模型提供商
+     * @param selectedSkillNames 用户选择的 Skill 名称列表（为空则使用纯文本模式）
      */
-    public PromptCoachSession startAgentSession(Long userId, String initialInput, String provider) {
+    public PromptCoachSession startAgentSession(Long userId, String initialInput, String provider,
+            List<String> selectedSkillNames) {
         // 1. 获取用户模型配置
         UserModelConfig modelConfig = selectModel(userId, provider);
 
@@ -83,9 +90,9 @@ public class AgentCoachService {
         // 3. 添加用户初始输入
         session.addUserMessage(initialInput);
 
-        // 4. 根据用户意图选择 Skill（三层加载 - Level 1）
-        List<SkillMetadata> selectedSkills = skillRegistry.selectByIntent(initialInput);
-        log.info("[startAgentSession] 匹配到 {} 个 Skill: {}",
+        // 4. 使用用户选择的 Skills（而非自动匹配）
+        List<SkillMetadata> selectedSkills = skillRegistry.getSkillsByNames(selectedSkillNames);
+        log.info("[startAgentSession] 用户选择了 {} 个 Skill: {}",
                 selectedSkills.size(),
                 selectedSkills.stream().map(SkillMetadata::getName).toList());
 
@@ -132,9 +139,13 @@ public class AgentCoachService {
     /**
      * Agent 对话（带工具调用）
      * 
-     * 使用手搓 Function Calling + 按需 Skill 加载
+     * 使用用户选择的 Skills 进行 Function Calling
+     * 
+     * @param sessionId          会话ID
+     * @param userMessage        用户消息
+     * @param selectedSkillNames 用户选择的 Skill 名称列表（为空则使用纯文本模式）
      */
-    public Flux<String> agentChat(String sessionId, String userMessage) {
+    public Flux<String> agentChat(String sessionId, String userMessage, List<String> selectedSkillNames) {
         PromptCoachSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new BusinessException("会话不存在或已过期"));
 
@@ -146,9 +157,9 @@ public class AgentCoachService {
 
         UserModelConfig modelConfig = selectModel(session.getUserId(), session.getProvider());
 
-        // 根据用户意图选择 Skill
-        List<SkillMetadata> selectedSkills = skillRegistry.selectByIntent(userMessage);
-        log.info("[agentChat] 匹配到 {} 个 Skill: {}",
+        // 使用用户选择的 Skills（而非自动匹配）
+        List<SkillMetadata> selectedSkills = skillRegistry.getSkillsByNames(selectedSkillNames);
+        log.info("[agentChat] 用户选择了 {} 个 Skill: {}",
                 selectedSkills.size(),
                 selectedSkills.stream().map(SkillMetadata::getName).toList());
 
@@ -164,38 +175,60 @@ public class AgentCoachService {
                 "sessionId", sessionId,
                 "phase", session.getCurrentPhase().name());
 
-        return Flux.defer(() -> {
-            try {
-                String response;
-                if (skillRegistry.hasSkills() && !selectedSkills.isEmpty()) {
-                    // 全功能模式：使用 FunctionCallingClient
-                    response = functionCallingClient.chat(modelConfig, messages, selectedSkills, context);
-                } else {
-                    // 降级模式：纯文本生成
-                    log.info("[agentChat] 无可用 Skill，使用降级模式");
-                    StringBuilder result = new StringBuilder();
-                    llmFactory.generateStream(modelConfig, buildAgentPrompt(session))
-                            .toIterable()
-                            .forEach(result::append);
-                    response = result.toString();
-                }
-
-                session.addAssistantMessage(response);
-
+        return Flux.create(sink -> {
+            CompletableFuture.runAsync(() -> {
                 try {
-                    parseAndUpdateSession(session, response);
+                    String response;
+                    if (skillRegistry.hasSkills() && !selectedSkills.isEmpty()) {
+                        // 全功能模式：使用 FunctionCallingClient，并传递事件回调
+                        response = functionCallingClient.chat(modelConfig, messages, selectedSkills, context,
+                                (event) -> {
+                                    // event 格式: "event: TYPE\ndata: CONTENT\n\n"
+                                    // 我们把它作为特殊消息推送给前端
+                                    // 前端收到后会是: data: event: TYPE\ndata: CONTENT\n\n\n\n
+                                    sink.next(event);
+                                });
+                    } else {
+                        // 降级模式：纯文本生成
+                        log.info("[agentChat] 无可用 Skill，使用降级模式");
+                        StringBuilder result = new StringBuilder();
+                        llmFactory.generateStream(modelConfig, buildAgentPrompt(session))
+                                .toIterable()
+                                .forEach(chunk -> {
+                                    result.append(chunk);
+                                    // 流式返回文本内容
+                                    sink.next(chunk);
+                                });
+                        response = result.toString();
+                    }
+
+                    // 最终保存
+                    session.addAssistantMessage(response);
+                    try {
+                        parseAndUpdateSession(session, response);
+                    } catch (Exception e) {
+                        log.warn("[agentChat] 解析状态失败", e);
+                    }
+                    sessionRepository.save(session);
+                    log.info("[agentChat] 对话完成，长度: {}", response.length());
+
+                    // 发送结束信号 (Agent模式下 FunctionCallingClient 返回的是完整文本，所以这里发最后一次)
+                    // 如果是降级模式，前面已经流式发过chunk了。
+                    // 为了统一，如果 response 不为空且是 Agent 模式（sink还没发过文本内容，只发过事件），
+                    // 我们应该把 response 发出去。
+                    // 但 FunctionCallingClient 返回的是最终完整回复。
+                    // 我们约定：事件以 event: 开头，普通回复直接发文本。
+
+                    if (skillRegistry.hasSkills() && !selectedSkills.isEmpty()) {
+                        sink.next(response);
+                    }
+
+                    sink.complete();
                 } catch (Exception e) {
-                    log.warn("[agentChat] 解析状态失败", e);
+                    log.error("[agentChat] 对话失败: {}", e.getMessage(), e);
+                    sink.error(e);
                 }
-
-                sessionRepository.save(session);
-                log.info("[agentChat] 对话完成，长度: {}", response.length());
-
-                return Flux.just(response);
-            } catch (Exception e) {
-                log.error("[agentChat] 对话失败: {}", e.getMessage(), e);
-                return Flux.error(e);
-            }
+            });
         });
     }
 

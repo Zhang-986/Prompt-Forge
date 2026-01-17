@@ -1,6 +1,4 @@
-package com.zzk.infrastructure.ai.skill;
-
-import java.util.Map;
+package com.zzk.infrastructure.ai.skill.core;
 
 /**
  * Skill 执行结果

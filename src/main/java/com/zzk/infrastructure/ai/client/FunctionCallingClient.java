@@ -5,10 +5,10 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.zzk.application.service.AgentMonitorService;
 import com.zzk.domain.model.entity.UserModelConfig;
-import com.zzk.infrastructure.ai.skill.SkillExecutor;
-import com.zzk.infrastructure.ai.skill.SkillMetadata;
-import com.zzk.infrastructure.ai.skill.SkillRegistry;
-import com.zzk.infrastructure.ai.skill.SkillResult;
+import com.zzk.infrastructure.ai.skill.core.SkillExecutor;
+import com.zzk.infrastructure.ai.skill.core.SkillMetadata;
+import com.zzk.infrastructure.ai.skill.registry.SkillRegistry;
+import com.zzk.infrastructure.ai.skill.core.SkillResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -57,7 +57,25 @@ public class FunctionCallingClient {
             List<Map<String, Object>> messages,
             List<SkillMetadata> skills,
             Map<String, Object> context) {
-        return chatWithRounds(config, messages, skills, context, 0);
+        return chat(config, messages, skills, context, null);
+    }
+
+    /**
+     * 带 Function Calling 的对话 (支持过程回调)
+     * 
+     * @param config        用户模型配置
+     * @param messages      消息列表
+     * @param skills        选中的 Skill 列表
+     * @param context       执行上下文
+     * @param eventCallback 过程事件回调 (nullable)
+     * @return AI 最终回复
+     */
+    public String chat(UserModelConfig config,
+            List<Map<String, Object>> messages,
+            List<SkillMetadata> skills,
+            Map<String, Object> context,
+            java.util.function.Consumer<String> eventCallback) {
+        return chatWithRounds(config, messages, skills, context, 0, eventCallback);
     }
 
     /**
@@ -67,7 +85,8 @@ public class FunctionCallingClient {
             List<Map<String, Object>> messages,
             List<SkillMetadata> skills,
             Map<String, Object> context,
-            int round) {
+            int round,
+            java.util.function.Consumer<String> eventCallback) {
         if (round >= MAX_TOOL_CALL_ROUNDS) {
             log.warn("[FunctionCallingClient] 达到最大工具调用轮次 {}", MAX_TOOL_CALL_ROUNDS);
             return "抱歉，工具调用次数过多，请尝试简化请求。";
@@ -80,6 +99,13 @@ public class FunctionCallingClient {
 
         log.info("[FunctionCallingClient] round={}, provider={}, model={}, skills={}",
                 round, config.getProvider(), model, skills.stream().map(SkillMetadata::getName).toList());
+
+        // 发送思考中事件
+        if (eventCallback != null && round == 0) {
+            eventCallback.accept("event: THOUGHT\ndata: 正在思考任务规划...\n\n");
+        } else if (eventCallback != null) {
+            eventCallback.accept("event: THOUGHT\ndata: 正在分析工具执行结果...\n\n");
+        }
 
         // 构建请求体
         Map<String, Object> requestBody = new LinkedHashMap<>();
@@ -158,6 +184,13 @@ public class FunctionCallingClient {
 
                 log.info("[FunctionCallingClient] 执行工具: {} ({})", toolName, toolId);
 
+                // 发送工具调用事件（带中文显示名）
+                if (eventCallback != null) {
+                    String displayName = getToolDisplayName(toolName);
+                    eventCallback.accept("event: TOOL_START\ndata: {\"name\":\"" + toolName + "\",\"display\":\""
+                            + displayName + "\"}\n\n");
+                }
+
                 // 解析参数
                 Map<String, Object> args = new LinkedHashMap<>();
                 if (argsJson != null && !argsJson.isBlank()) {
@@ -203,6 +236,14 @@ public class FunctionCallingClient {
                         getUserId(context), getSessionId(context), toolName,
                         skillStart, status, error, argsJson, toolResult);
 
+                // 发送工具完成事件（带结果长度）
+                if (eventCallback != null) {
+                    String displayName = getToolDisplayName(toolName);
+                    int resultLen = toolResult != null ? toolResult.length() : 0;
+                    eventCallback.accept("event: TOOL_END\ndata: {\"name\":\"" + toolName + "\",\"display\":\""
+                            + displayName + "\",\"length\":" + resultLen + "}\n\n");
+                }
+
                 // 添加 tool 结果消息
                 Map<String, Object> toolMessage = new LinkedHashMap<>();
                 toolMessage.put("role", "tool");
@@ -212,7 +253,7 @@ public class FunctionCallingClient {
             }
 
             // 递归调用，让 LLM 基于工具结果生成最终回复
-            return chatWithRounds(config, newMessages, skills, context, round + 1);
+            return chatWithRounds(config, newMessages, skills, context, round + 1, eventCallback);
         }
 
         // 没有 tool_calls，返回最终内容
@@ -320,5 +361,18 @@ public class FunctionCallingClient {
 
         log.debug("[FunctionCallingClient] API 响应: {} chars", response != null ? response.length() : 0);
         return response;
+    }
+
+    /**
+     * 获取工具的中文显示名称
+     */
+    private String getToolDisplayName(String toolName) {
+        return switch (toolName) {
+            case "web-search" -> "网络搜索";
+            case "url-fetch" -> "读取网页";
+            case "code-analyzer" -> "代码分析";
+            case "code-generator" -> "代码生成";
+            default -> toolName;
+        };
     }
 }

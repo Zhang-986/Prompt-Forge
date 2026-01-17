@@ -56,7 +56,7 @@ public class R2StorageService implements StorageService {
                     .endpointOverride(URI.create(endpoint))
                     .credentialsProvider(StaticCredentialsProvider.create(
                             AwsBasicCredentials.create(accessKey, secretKey)))
-                    .region(Region.of("us-east-1")) // R2 兼容 S3，通常使用 us-east-1
+                    .region(Region.AWS_GLOBAL)
                     .build();
             log.info("R2 storage service initialized. Endpoint: {}, Bucket: {}", endpoint, bucketName);
         } catch (Exception e) {

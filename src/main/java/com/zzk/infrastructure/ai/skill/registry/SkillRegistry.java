@@ -1,7 +1,9 @@
-package com.zzk.infrastructure.ai.skill;
+package com.zzk.infrastructure.ai.skill.registry;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.TypeReference;
+import com.zzk.infrastructure.ai.skill.core.SkillExecutor;
+import com.zzk.infrastructure.ai.skill.core.SkillMetadata;
 import com.zzk.infrastructure.persistence.mapper.AgentSkillMapper;
 import com.zzk.infrastructure.persistence.po.AgentSkillPO;
 import jakarta.annotation.PostConstruct;
@@ -153,6 +155,26 @@ public class SkillRegistry {
      */
     public boolean hasSkills() {
         return !metadataCache.isEmpty();
+    }
+
+    /**
+     * 获取所有启用的 Skills（用于前端展示）
+     */
+    public List<SkillMetadata> getAllEnabledSkills() {
+        return new ArrayList<>(metadataCache.values());
+    }
+
+    /**
+     * 根据名称列表获取 Skills
+     */
+    public List<SkillMetadata> getSkillsByNames(List<String> names) {
+        if (names == null || names.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return names.stream()
+                .filter(metadataCache::containsKey)
+                .map(metadataCache::get)
+                .toList();
     }
 
     /**

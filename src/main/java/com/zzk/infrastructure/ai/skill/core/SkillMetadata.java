@@ -1,4 +1,4 @@
-package com.zzk.infrastructure.ai.skill;
+package com.zzk.infrastructure.ai.skill.core;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

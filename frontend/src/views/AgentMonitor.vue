@@ -142,7 +142,7 @@ const logColumns = [
                                 </a-tag>
                             </template>
                             <template v-if="column.key === 'createdAt'">
-                                {{ new Date(record.createdAt).toLocaleString() }}
+                                {{ new Date(record.createdAt || record.startTime).toLocaleString() }}
                             </template>
                         </template>
                     </a-table>

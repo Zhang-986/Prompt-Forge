@@ -17,19 +17,37 @@ export interface CoachSession {
     promptGenerated: boolean
 }
 
+export interface SkillInfo {
+    name: string
+    displayName: string
+    description: string
+    category: string
+}
+
 export interface StartCoachRequest {
     initialInput: string
     provider?: string
+    selectedSkillNames?: string[]
 }
 
 export interface CoachChatRequest {
     sessionId: string
     message: string
+    selectedSkillNames?: string[]
 }
 
 export interface ConfirmPromptRequest {
     sessionId: string
     promptTemplateId: number
+}
+
+/**
+ * 获取可用的 Skills 列表
+ */
+export const getAvailableSkills = () => {
+    return request.get<any, { code: number; data: SkillInfo[]; message: string }>(
+        '/prompt-coach/skills'
+    )
 }
 
 /**

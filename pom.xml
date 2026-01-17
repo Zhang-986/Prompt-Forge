@@ -205,6 +205,13 @@
             <version>4.12</version>
         </dependency>
 
+        <!-- ==================== HTML Parser (Jsoup) ==================== -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.17.2</version>
+        </dependency>
+
         <!-- ==================== Object Storage (R2/S3) ==================== -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

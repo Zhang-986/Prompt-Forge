@@ -20,7 +20,9 @@ import {
     startAgentSession,
     sendAgentMessage,
     getCoachSession,
-    type CoachSession
+    getAvailableSkills,
+    type CoachSession,
+    type SkillInfo
 } from '../api/promptCoach'
 import { getAvailableModels, type AvailableModelInfo } from '../api/arena'
 
@@ -41,6 +43,11 @@ const selectedProvider = ref('')
 const availableProviders = ref<AvailableModelInfo[]>([])
 const loadingProviders = ref(false)
 const showModelModal = ref(false)
+
+// Skills 状态
+const availableSkills = ref<SkillInfo[]>([])
+const selectedSkills = ref<string[]>([])
+const loadingSkills = ref(false)
 
 
 const selectedModelInfo = computed(() => {
@@ -87,6 +94,7 @@ const userAvatar = ref('')
 // 页面加载时获取模型列表和用户信息
 onMounted(() => {
     loadProviders()
+    loadSkills()
     const userStr = localStorage.getItem('user')
     if (userStr) {
         try {
@@ -97,6 +105,64 @@ onMounted(() => {
         }
     }
 })
+
+// 加载可用 Skills
+const loadSkills = async () => {
+    loadingSkills.value = true
+    try {
+        const res = await getAvailableSkills()
+        if (res.code === 200) {
+            availableSkills.value = res.data
+        }
+    } catch (error) {
+        console.error('加载 Skills 失败', error)
+    } finally {
+        loadingSkills.value = false
+    }
+}
+
+// Slash 命令菜单状态
+const showSlashMenu = ref(false)
+const slashFilter = ref('')
+
+// 过滤 Skills（基于 / 后面的输入）
+const filteredSkills = computed(() => {
+    if (!slashFilter.value) return availableSkills.value
+    const filter = slashFilter.value.toLowerCase()
+    return availableSkills.value.filter(s => 
+        s.name.toLowerCase().includes(filter) || 
+        s.displayName.toLowerCase().includes(filter)
+    )
+})
+
+// 检测输入中的 / 命令
+const handleInputChange = () => {
+    // 如果模型不支持工具，不显示菜单
+    if (isSelectedModelUnsupported.value) {
+        showSlashMenu.value = false
+        return
+    }
+
+    const input = userInput.value
+    if (input.startsWith('/')) {
+        showSlashMenu.value = true
+        slashFilter.value = input.slice(1)
+    } else {
+        showSlashMenu.value = false
+        slashFilter.value = ''
+    }
+}
+
+// 选择 Skill（从 slash 菜单）
+const selectSkillFromMenu = (skill: SkillInfo) => {
+    // 设置选中的 Skill
+    selectedSkills.value = [skill.name]
+    // 清空输入框，让用户输入实际问题
+    userInput.value = ''
+    showSlashMenu.value = false
+    // 可选：显示一个提示
+    message.info(`已选择工具：${skill.displayName}，请输入你的问题`)
+}
 
 // 开始对话
 const startChat = async () => {
@@ -139,8 +205,9 @@ const startChat = async () => {
         let sessionId = session.value.sessionId
         if (!sessionId) {
             const res = await startAgentSession({
-                initialInput: initialInput, // 后端可能需要这个来初始化，但我们不让后端直接回复
-                provider: selectedProvider.value || undefined
+                initialInput: initialInput,
+                provider: selectedProvider.value || undefined,
+                selectedSkillNames: selectedSkills.value.length > 0 ? selectedSkills.value : undefined
             })
             if (res.code === 200) {
                 session.value = res.data
@@ -182,6 +249,9 @@ const startChat = async () => {
     }
 }
 
+const thoughtProcess = ref<{ type: string; content: string }[]>([])
+let currentEventType: string | null = null
+
 // 发送消息 (保持不变，但增加防抖或状态检查)
 const sendMessage = async () => {
     if (!userInput.value.trim() || !session.value) return
@@ -192,6 +262,8 @@ const sendMessage = async () => {
 
     sending.value = true
     currentAiResponse.value = ''
+    thoughtProcess.value = []
+    currentEventType = null
 
     session.value.history.push({
         role: 'user',
@@ -202,8 +274,65 @@ const sendMessage = async () => {
 
     try {
         await sendAgentMessage(
-            { sessionId: session.value.sessionId, message: userMessage },
+            {
+                sessionId: session.value.sessionId,
+                message: userMessage,
+                selectedSkillNames: selectedSkills.value.length > 0 ? selectedSkills.value : undefined
+            },
             (chunk) => {
+                // 处理自定义事件协议
+                if (chunk.startsWith('event: ')) {
+                    const type = chunk.replace('event: ', '').trim()
+                    currentEventType = type
+                    return
+                }
+
+                if (currentEventType) {
+                    // 如果当前是在处理事件
+                    if (currentEventType === 'THOUGHT') {
+                        thoughtProcess.value.push({ type: 'THOUGHT', content: chunk })
+                    } else if (currentEventType === 'TOOL_START') {
+                        // 解析 JSON: {"name":"xxx","display":"中文名"}
+                        try {
+                            const data = JSON.parse(chunk)
+                            thoughtProcess.value.push({ 
+                                type: 'TOOL_START', 
+                                content: data.display || data.name,
+                                name: data.name
+                            })
+                        } catch {
+                            thoughtProcess.value.push({ type: 'TOOL_START', content: chunk })
+                        }
+                    } else if (currentEventType === 'TOOL_END') {
+                        // 解析 JSON: {"name":"xxx","display":"中文名","length":1234}
+                        try {
+                            const data = JSON.parse(chunk)
+                            const last = thoughtProcess.value[thoughtProcess.value.length - 1]
+                            if (last && last.type === 'TOOL_START' && last.name === data.name) {
+                                last.type = 'TOOL_END'
+                                last.content = `${data.display} 完成 (${data.length} 字符)`
+                            } else {
+                                thoughtProcess.value.push({ 
+                                    type: 'TOOL_END', 
+                                    content: `${data.display} 完成 (${data.length} 字符)`
+                                })
+                            }
+                        } catch {
+                            const last = thoughtProcess.value[thoughtProcess.value.length - 1]
+                            if (last && last.type === 'TOOL_START') {
+                                last.type = 'TOOL_END'
+                                last.content = chunk
+                            } else {
+                                thoughtProcess.value.push({ type: 'TOOL_END', content: chunk })
+                            }
+                        }
+                    }
+                    currentEventType = null
+                    scrollToBottom()
+                    return
+                }
+
+                // 正常文本
                 currentAiResponse.value += chunk
                 scrollToBottom()
             },
@@ -280,7 +409,7 @@ const doSave = async () => {
         if (res.code === 200) {
             message.success('Prompt 已创建成功！')
             showSaveDialog.value = false
-            router.push(`/prompts/${res.data.id}/versions`)
+            router.push(`/app/prompts/${res.data.id}/versions`)
         } else {
             message.error(res.message || '保存失败')
         }
@@ -391,6 +520,17 @@ const handleKeydown = async (e: KeyboardEvent) => {
                 <p v-else-if="selectedModelInfo" class="coach-model-hint success">
                     <CheckOutlined /> 全功能模式 (支持搜索/代码分析)
                 </p>
+
+                <!-- Slash 命令提示（仅支持工具的模型显示） -->
+                <p v-if="availableSkills.length > 0 && !isSelectedModelUnsupported" class="slash-hint">
+                    输入 <code>/</code> 查看可用工具
+                </p>
+
+                <!-- 已选中的工具提示 -->
+                <p v-if="selectedSkills.length > 0 && !isSelectedModelUnsupported" class="selected-skill-hint">
+                    当前工具：{{ availableSkills.find(s => s.name === selectedSkills[0])?.displayName }}
+                    <a @click="selectedSkills = []">取消</a>
+                </p>
             </div>
 
             <!-- Model Selection Modal (Categorized) -->
@@ -413,6 +553,24 @@ const handleKeydown = async (e: KeyboardEvent) => {
                         <RobotOutlined v-else />
                     </div>
                     <div class="content markdown-body" v-html="renderMarkdown(turn.content)"></div>
+                </div>
+
+                <!-- 思维链展示区 (流式生成时) -->
+                <div v-if="sending && thoughtProcess.length > 0" class="thought-chain">
+                    <div v-for="(step, idx) in thoughtProcess" :key="idx" class="thought-item">
+                        <template v-if="step.type === 'THOUGHT'">
+                            <span class="step-icon">🤔</span>
+                            <span class="step-content">{{ step.content }}</span>
+                        </template>
+                        <template v-else-if="step.type === 'TOOL_START'">
+                            <span class="step-icon spin">⚙️</span>
+                            <span class="step-content">正在调用 {{ step.content }}...</span>
+                        </template>
+                        <template v-else-if="step.type === 'TOOL_END'">
+                            <span class="step-icon">✅</span>
+                            <span class="step-content">{{ step.content }}</span>
+                        </template>
+                    </div>
                 </div>
 
                 <!-- 正在生成的回复 -->
@@ -453,8 +611,31 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
         <!-- 输入区域 -->
         <div class="input-area">
-            <a-textarea ref="textareaRef" v-model:value="userInput" :placeholder="session ? '输入你的回复...' : '描述你想做什么...'"
-                :auto-size="{ minRows: 1, maxRows: 4 }" @keydown="handleKeydown" :disabled="sending" />
+            <!-- Slash 命令下拉菜单 -->
+            <div v-if="showSlashMenu" class="slash-menu">
+                <div class="slash-menu-header">可用工具</div>
+                <div 
+                    v-for="skill in filteredSkills" 
+                    :key="skill.name" 
+                    class="slash-menu-item"
+                    @click="selectSkillFromMenu(skill)"
+                >
+                    <span class="slash-cmd">/{{ skill.name }}</span>
+                    <span class="slash-desc">{{ skill.displayName }}</span>
+                </div>
+                <div v-if="filteredSkills.length === 0" class="slash-menu-empty">
+                    无匹配的工具
+                </div>
+            </div>
+            <a-textarea 
+                ref="textareaRef" 
+                v-model:value="userInput" 
+                :placeholder="session ? '输入你的回复...' : '描述你想做什么，输入 / 查看工具'"
+                :auto-size="{ minRows: 1, maxRows: 4 }" 
+                @keydown="handleKeydown" 
+                @input="handleInputChange"
+                :disabled="sending" 
+            />
             <a-button type="primary" :loading="loading || sending" @click="session ? sendMessage() : startChat()">
                 <SendOutlined />
             </a-button>
@@ -563,6 +744,89 @@ const handleKeydown = async (e: KeyboardEvent) => {
     color: var(--color-success);
 }
 
+/* Slash 命令提示 */
+.slash-hint {
+    margin-top: var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--color-text-tertiary);
+}
+
+.slash-hint code {
+    padding: 2px 6px;
+    background: var(--color-bg-tertiary);
+    border-radius: var(--radius-sm);
+    font-family: monospace;
+}
+
+.selected-skill-hint {
+    margin-top: var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--color-primary);
+}
+
+.selected-skill-hint a {
+    margin-left: var(--space-2);
+    color: var(--color-text-tertiary);
+    cursor: pointer;
+}
+
+.selected-skill-hint a:hover {
+    color: var(--color-error);
+}
+
+/* Slash 菜单 */
+.slash-menu {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    margin-bottom: 8px;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 100;
+}
+
+.slash-menu-header {
+    padding: 8px 12px;
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.slash-menu-item {
+    padding: 10px 12px;
+    display: flex;
+    gap: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.slash-menu-item:hover {
+    background: var(--color-bg-tertiary);
+}
+
+.slash-cmd {
+    font-family: monospace;
+    color: var(--color-primary);
+    font-weight: 500;
+}
+
+.slash-desc {
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+}
+
+.slash-menu-empty {
+    padding: 16px;
+    text-align: center;
+    color: var(--color-text-tertiary);
+    font-size: var(--text-sm);
+}
+
 /* 消息样式 */
 .messages {
     display: flex;
@@ -574,15 +838,18 @@ const handleKeydown = async (e: KeyboardEvent) => {
     display: flex;
     gap: var(--space-3);
     max-width: 80%;
+    width: fit-content; /* Critical fix: Don't stretch */
 }
 
 .message.user {
     flex-direction: row-reverse;
     align-self: flex-end;
+    margin-left: auto; /* Push to right */
 }
 
 .message.assistant {
     align-self: flex-start;
+    margin-right: auto;
 }
 
 .avatar {
@@ -594,7 +861,6 @@ const handleKeydown = async (e: KeyboardEvent) => {
     justify-content: center;
     flex-shrink: 0;
     overflow: hidden;
-    /* Ensure image fits circle */
 }
 
 .user-avatar-img {
@@ -612,21 +878,48 @@ const handleKeydown = async (e: KeyboardEvent) => {
 }
 
 .content {
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-lg);
+    padding: 12px 16px;
+    border-radius: 12px;
     line-height: 1.6;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    word-break: break-word; /* Ensure long text wraps */
+    overflow-wrap: break-word;
+    min-width: 0; /* Flexbox text overflow fix */
 }
 
 .message.user .content {
-    background: var(--color-primary);
-    color: white;
-    /* Ensure text is visible on primary color */
-    border-radius: var(--radius-lg) var(--radius-lg) 0 var(--radius-lg);
+    background: #1677ff !important; /* Ant Design Blue - hardcoded safety */
+    color: #ffffff !important;
+    border-radius: 12px 12px 0 12px;
+}
+
+.message.user .content :deep(*) {
+    color: #ffffff !important;
 }
 
 .message.assistant .content {
-    background: var(--color-bg-secondary);
-    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 0;
+    background: #F0F2F5 !important;
+    color: #000000 !important;
+    border: 1px solid #d9d9d9 !important;
+    border-radius: 12px 12px 12px 0;
+}
+
+/* 强制覆盖 markdown 内部所有元素的颜色 */
+.message.assistant .content :deep(*) {
+    color: #000000 !important;
+}
+
+.markdown-body {
+    background-color: transparent !important;
+    font-family: inherit !important;
+}
+
+.markdown-body :deep(pre) {
+    background: rgba(0, 0, 0, 0.05) !important;
+    border-radius: 6px;
 }
 
 .content pre {
@@ -712,6 +1005,7 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
 /* 输入区域 */
 .input-area {
+    position: relative;
     display: flex;
     gap: var(--space-3);
     padding: var(--space-4) var(--space-6);
@@ -733,6 +1027,48 @@ const handleKeydown = async (e: KeyboardEvent) => {
 .input-area :deep(.ant-btn) {
     height: auto;
     padding: var(--space-2) var(--space-4);
+}
+
+/* Thought Chain */
+.thought-chain {
+    margin-left: 44px;
+    margin-bottom: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    max-width: 80%;
+}
+
+.thought-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--color-bg-secondary);
+    border-radius: 6px;
+    border: 1px solid var(--color-border-light);
+    animation: fadeIn 0.3s ease;
+}
+
+.step-icon {
+    font-size: 14px;
+}
+
+.step-icon.spin {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* Custom Modal & Sidebar Layout */

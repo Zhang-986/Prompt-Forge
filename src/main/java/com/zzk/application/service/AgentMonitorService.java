@@ -50,6 +50,7 @@ public class AgentMonitorService {
                 .promptTokens(promptTokens)
                 .completionTokens(completionTokens)
                 .totalTokens(promptTokens + completionTokens)
+                .createdAt(LocalDateTime.now())
                 .build();
 
         logMapper.insert(logPO);
@@ -78,6 +79,7 @@ public class AgentMonitorService {
                 .errorMessage(error)
                 .inputSummary(truncate(inputSummary))
                 .outputSummary(truncate(outputSummary))
+                .createdAt(LocalDateTime.now())
                 .build();
 
         logMapper.insert(logPO);

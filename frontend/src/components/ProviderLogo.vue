@@ -3,7 +3,7 @@ import { h } from 'vue'
 
 // Import Config Assets
 import iconOpenAI from '@/assets/openai.svg'
-import iconGemini from '@/assets/gemini-color.svg'
+import iconGoogle from '@/assets/google-color.svg'
 import iconClaude from '@/assets/claude-color.svg'
 import iconDeepSeek from '@/assets/deepseek-color.svg'
 import iconQwen from '@/assets/qwen-color.svg'
@@ -20,7 +20,7 @@ const props = defineProps<{
 
 const logoMap: Record<string, string> = {
     openai: iconOpenAI,
-    google: iconGemini,
+    google: iconGoogle,
     claude: iconClaude,
     deepseek: iconDeepSeek,
     aliyun: iconQwen,

@@ -1,8 +1,10 @@
-package com.zzk.infrastructure.ai.skill;
+package com.zzk.infrastructure.ai.skill.executors;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.zzk.infrastructure.ai.skill.core.SkillExecutor;
+import com.zzk.infrastructure.ai.skill.core.SkillResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
