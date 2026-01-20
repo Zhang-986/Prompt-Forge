@@ -12,13 +12,12 @@ import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.util.List;
 
 /**
  * 敏感词检测切面
  * 
- * <p>拦截带有 @SensitiveCheck 注解的方法，对指定字段进行敏感词检测
+ * <p>
+ * 拦截带有 @SensitiveCheck 注解的方法，对指定字段进行敏感词检测
  * 
  * @author zzk
  * @since 1.0.0
@@ -37,13 +36,13 @@ public class SensitiveCheckAspect {
     @Around("@annotation(sensitiveCheck)")
     public Object aroundSensitiveCheck(ProceedingJoinPoint joinPoint, SensitiveCheck sensitiveCheck) throws Throwable {
         log.debug("敏感词检测切面触发: {}", joinPoint.getSignature().getName());
-        
+
         String[] fields = sensitiveCheck.fields();
         SensitiveCheck.Mode mode = sensitiveCheck.mode();
         Object[] args = joinPoint.getArgs();
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         String[] paramNames = signature.getParameterNames();
-        
+
         if (fields.length == 0) {
             // 如果没有指定字段，检测所有 String 类型参数
             checkAllStringArgs(args, paramNames, mode);
@@ -51,7 +50,7 @@ public class SensitiveCheckAspect {
             // 检测指定字段
             checkSpecifiedFields(args, paramNames, fields, mode);
         }
-        
+
         return joinPoint.proceed();
     }
 
@@ -61,8 +60,7 @@ public class SensitiveCheckAspect {
     private void checkAllStringArgs(Object[] args, String[] paramNames, SensitiveCheck.Mode mode) {
         for (int i = 0; i < args.length; i++) {
             Object arg = args[i];
-            if (arg instanceof String) {
-                String text = (String) arg;
+            if (arg instanceof String text) {
                 checkAndHandle(text, paramNames[i], mode);
             } else if (arg != null) {
                 // 检测对象中的所有 String 字段
@@ -97,11 +95,11 @@ public class SensitiveCheckAspect {
     private void checkSpecifiedFields(Object[] args, String[] paramNames, String[] fields, SensitiveCheck.Mode mode) {
         for (String fieldPath : fields) {
             String[] parts = fieldPath.split("\\.");
-            
+
             // 查找参数对象
             Object targetObj = null;
             int startIndex = 0;
-            
+
             for (int i = 0; i < args.length; i++) {
                 if (args[i] != null) {
                     // 如果字段路径以参数名开头
@@ -119,18 +117,18 @@ public class SensitiveCheckAspect {
                     }
                 }
             }
-            
+
             if (targetObj == null && args.length > 0 && args[0] != null) {
                 targetObj = args[0];
                 startIndex = 0;
             }
-            
+
             // 递归获取字段值
             Object value = targetObj;
             for (int i = startIndex; i < parts.length && value != null; i++) {
                 value = getFieldValue(value, parts[i]);
             }
-            
+
             if (value instanceof String) {
                 checkAndHandle((String) value, fieldPath, mode);
             }
@@ -141,7 +139,8 @@ public class SensitiveCheckAspect {
      * 获取对象字段值
      */
     private Object getFieldValue(Object obj, String fieldName) {
-        if (obj == null) return null;
+        if (obj == null)
+            return null;
         try {
             Field field = findField(obj.getClass(), fieldName);
             if (field != null) {
@@ -170,28 +169,20 @@ public class SensitiveCheckAspect {
     }
 
     /**
-     * 检测并处理敏感词
+     * 检测并处理敏感词（优化版：短路返回）
+     * 
+     * <p>
+     * 使用 containsSensitiveWord 进行快速判断，发现敏感词立即抛出异常，
+     * 不再统计具体有哪些敏感词，提升检测性能
      */
     private void checkAndHandle(String text, String fieldName, SensitiveCheck.Mode mode) {
-        if (text == null || text.isEmpty()) return;
-        
-        List<String> sensitiveWords = sensitiveWordService.findSensitiveWords(text);
-        
-        if (!sensitiveWords.isEmpty()) {
-            String wordsStr = String.join(", ", sensitiveWords);
-            log.warn("检测到敏感词 - 字段: {}, 敏感词: {}", fieldName, wordsStr);
-            
-            switch (mode) {
-                case BLOCK:
-                    throw new BusinessException("内容包含敏感词，请修改后重试");
-                case REPLACE:
-                    // 替换模式需要在原对象上修改，这里暂不支持
-                    log.info("敏感词已被替换: {}", wordsStr);
-                    break;
-                case WARN:
-                    log.warn("发现敏感词但不阻止: {}", wordsStr);
-                    break;
-            }
+        if (text == null || text.isEmpty())
+            return;
+
+        // 短路优化：发现即返回，不统计具体有哪些
+        if (sensitiveWordService.containsSensitiveWord(text)) {
+            log.warn("检测到敏感词 - 字段: {}", fieldName);
+            throw new BusinessException("内容包含敏感词，请修改后重试");
         }
     }
 }

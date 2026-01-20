@@ -29,22 +29,22 @@ import java.net.URI;
 @Service
 public class R2StorageService implements StorageService {
 
-    @Value("${storage.r2.endpoint}")
+    @Value("${storage.minio.endpoint}")
     private String endpoint;
 
-    @Value("${storage.r2.access-key}")
+    @Value("${storage.minio.access-key}")
     private String accessKey;
 
-    @Value("${storage.r2.secret-key}")
+    @Value("${storage.minio.secret-key}")
     private String secretKey;
 
-    @Value("${storage.r2.bucket-name}")
+    @Value("${storage.minio.bucket-name}")
     private String bucketName;
 
-    @Value("${storage.r2.region:auto}")
+    @Value("${storage.minio.region:auto}")
     private String region;
 
-    @Value("${storage.r2.public-domain:}")
+    @Value("${storage.minio.public-domain:}")
     private String publicDomain;
 
     private S3Client s3Client;

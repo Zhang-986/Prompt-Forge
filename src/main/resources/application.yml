@@ -13,9 +13,9 @@ spring:
   # ==================== 数据源配置 ====================
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/prompt_forge?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://10.147.17.199:3306/prompt_forge?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
-    password: zzk200520
+    password: 1234
     hikari:
       minimum-idle: 5
       maximum-pool-size: 20
@@ -27,7 +27,7 @@ spring:
   # ==================== Redis 配置 ====================
   data:
     redis:
-      host: localhost
+      host: 10.147.17.199
       port: 6379
       database: 0
       timeout: 10000ms
@@ -37,6 +37,7 @@ spring:
           max-wait: -1ms
           max-idle: 10
           min-idle: 5
+      password: 1234
 
   # ==================== 邮件配置 ====================
   mail:
@@ -193,13 +194,13 @@ cache:
 
 # ==================== 对象存储配置 (Cloudflare R2) ====================
 storage:
-  r2:
-    endpoint: ${R2_ENDPOINT:https://68804c0b3846c9310e05d7245b86275a.r2.cloudflarestorage.com}
-    access-key: ${R2_ACCESS_KEY:5c562f198c2be13a654ede288caa51b9}
-    secret-key: ${R2_SECRET_KEY:be6057163a75fb3b973a2b0655b256ae03daaa316240761ba72859c3a77c34fd}
-    bucket-name: ${R2_BUCKET_NAME:prompt-forge}
-    region: ${R2_REGION:auto}
-    public-domain: ${R2_PUBLIC_DOMAIN:https://pub-51a06f6cca7d4620a8f119c9122507e4.r2.dev}
+  minio: # 这里名字可以随你改
+    endpoint: http://10.147.17.199:9000
+    access-key: FTlDg8Dsg0FcU5pFL3M8
+    secret-key: IvMWhxVF2Uxnq0gkyMZo551xxcNolzBgQIgcrVsz
+    bucket-name: images  # 记得去 Minio 手动建一个
+    region: auto
+    public-domain: http://10.147.17.199:9000/images
 
 # ==================== API 文档配置 ====================
 springdoc:

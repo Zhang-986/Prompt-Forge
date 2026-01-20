@@ -102,9 +102,11 @@ public class FunctionCallingClient {
 
         // 发送思考中事件
         if (eventCallback != null && round == 0) {
-            eventCallback.accept("event: THOUGHT\ndata: 正在思考任务规划...\n\n");
+            eventCallback.accept("event: THOUGHT");
+            eventCallback.accept("正在思考任务规划...");
         } else if (eventCallback != null) {
-            eventCallback.accept("event: THOUGHT\ndata: 正在分析工具执行结果...\n\n");
+            eventCallback.accept("event: THOUGHT");
+            eventCallback.accept("正在分析工具执行结果...");
         }
 
         // 构建请求体
@@ -184,11 +186,13 @@ public class FunctionCallingClient {
 
                 log.info("[FunctionCallingClient] 执行工具: {} ({})", toolName, toolId);
 
-                // 发送工具调用事件（带中文显示名）
+                // 发送工具调用事件（带中文显示名和参数预览）
                 if (eventCallback != null) {
                     String displayName = getToolDisplayName(toolName);
-                    eventCallback.accept("event: TOOL_START\ndata: {\"name\":\"" + toolName + "\",\"display\":\""
-                            + displayName + "\"}\n\n");
+                    String paramsPreview = getParamsPreview(argsJson);
+                    eventCallback.accept("event: TOOL_START");
+                    eventCallback.accept("{\"name\":\"" + toolName + "\",\"display\":\""
+                            + displayName + "\",\"params\":" + escapeJson(paramsPreview) + "}");
                 }
 
                 // 解析参数
@@ -236,12 +240,15 @@ public class FunctionCallingClient {
                         getUserId(context), getSessionId(context), toolName,
                         skillStart, status, error, argsJson, toolResult);
 
-                // 发送工具完成事件（带结果长度）
+                // 发送工具完成事件（带结果长度和摘要）
                 if (eventCallback != null) {
                     String displayName = getToolDisplayName(toolName);
                     int resultLen = toolResult != null ? toolResult.length() : 0;
-                    eventCallback.accept("event: TOOL_END\ndata: {\"name\":\"" + toolName + "\",\"display\":\""
-                            + displayName + "\",\"length\":" + resultLen + "}\n\n");
+                    String preview = getResultPreview(toolResult);
+                    eventCallback.accept("event: TOOL_END");
+                    eventCallback.accept("{\"name\":\"" + toolName + "\",\"display\":\""
+                            + displayName + "\",\"length\":" + resultLen + ",\"preview\":" + escapeJson(preview)
+                            + "}");
                 }
 
                 // 添加 tool 结果消息
@@ -372,7 +379,54 @@ public class FunctionCallingClient {
             case "url-fetch" -> "读取网页";
             case "code-analyzer" -> "代码分析";
             case "code-generator" -> "代码生成";
+            case "evaluation" -> "Prompt质量评估";
+            case "prompt-library" -> "Prompt库搜索";
+            case "version-analyzer" -> "版本分析";
+            case "structurization" -> "Prompt结构化";
+            case "optimization" -> "Prompt优化";
             default -> toolName;
         };
+    }
+
+    /**
+     * 获取参数预览（最多 50 字符）
+     */
+    private String getParamsPreview(String argsJson) {
+        if (argsJson == null || argsJson.isBlank()) {
+            return "{}";
+        }
+        if (argsJson.length() <= 100) {
+            return argsJson;
+        }
+        return argsJson.substring(0, 97) + "...";
+    }
+
+    /**
+     * 获取结果预览（最多 100 字符）
+     */
+    private String getResultPreview(String result) {
+        if (result == null || result.isBlank()) {
+            return "";
+        }
+        // 提取第一行有意义的内容
+        String firstLine = result.split("\n")[0].trim();
+        if (firstLine.length() <= 100) {
+            return firstLine;
+        }
+        return firstLine.substring(0, 97) + "...";
+    }
+
+    /**
+     * 转义 JSON 字符串中的特殊字符
+     */
+    private String escapeJson(String str) {
+        if (str == null)
+            return "\"\"";
+        return "\"" + str
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t") + "\"";
     }
 }

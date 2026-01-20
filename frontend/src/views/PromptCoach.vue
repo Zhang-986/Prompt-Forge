@@ -249,7 +249,7 @@ const startChat = async () => {
     }
 }
 
-const thoughtProcess = ref<{ type: string; content: string }[]>([])
+const thoughtProcess = ref<{ type: string; content: string; name?: string; params?: string; preview?: string }[]>([])
 let currentEventType: string | null = null
 
 // 发送消息 (保持不变，但增加防抖或状态检查)
@@ -292,29 +292,32 @@ const sendMessage = async () => {
                     if (currentEventType === 'THOUGHT') {
                         thoughtProcess.value.push({ type: 'THOUGHT', content: chunk })
                     } else if (currentEventType === 'TOOL_START') {
-                        // 解析 JSON: {"name":"xxx","display":"中文名"}
+                        // 解析 JSON: {"name":"xxx","display":"中文名","params":"..."}
                         try {
                             const data = JSON.parse(chunk)
                             thoughtProcess.value.push({ 
                                 type: 'TOOL_START', 
                                 content: data.display || data.name,
-                                name: data.name
+                                name: data.name,
+                                params: data.params || ''
                             })
                         } catch {
                             thoughtProcess.value.push({ type: 'TOOL_START', content: chunk })
                         }
                     } else if (currentEventType === 'TOOL_END') {
-                        // 解析 JSON: {"name":"xxx","display":"中文名","length":1234}
+                        // 解析 JSON: {"name":"xxx","display":"中文名","length":1234,"preview":"..."}
                         try {
                             const data = JSON.parse(chunk)
                             const last = thoughtProcess.value[thoughtProcess.value.length - 1]
                             if (last && last.type === 'TOOL_START' && last.name === data.name) {
                                 last.type = 'TOOL_END'
-                                last.content = `${data.display} 完成 (${data.length} 字符)`
+                                last.content = `${data.display} 完成`
+                                last.preview = data.preview || `获取了 ${data.length} 字符数据`
                             } else {
                                 thoughtProcess.value.push({ 
                                     type: 'TOOL_END', 
-                                    content: `${data.display} 完成 (${data.length} 字符)`
+                                    content: `${data.display} 完成`,
+                                    preview: data.preview || `获取了 ${data.length} 字符数据`
                                 })
                             }
                         } catch {
@@ -557,18 +560,30 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
                 <!-- 思维链展示区 (流式生成时) -->
                 <div v-if="sending && thoughtProcess.length > 0" class="thought-chain">
-                    <div v-for="(step, idx) in thoughtProcess" :key="idx" class="thought-item">
+                    <div class="thought-chain-header">
+                        <span class="chain-icon"><SettingOutlined :spin="true" /></span>
+                        <span>AI 正在思考...</span>
+                    </div>
+                    <div v-for="(step, idx) in thoughtProcess" :key="idx" :class="['thought-item', step.type.toLowerCase()]">
                         <template v-if="step.type === 'THOUGHT'">
-                            <span class="step-icon">🤔</span>
-                            <span class="step-content">{{ step.content }}</span>
+                            <span class="step-icon thought-icon">[思]</span>
+                            <div class="step-body">
+                                <span class="step-content">{{ step.content }}</span>
+                            </div>
                         </template>
                         <template v-else-if="step.type === 'TOOL_START'">
-                            <span class="step-icon spin">⚙️</span>
-                            <span class="step-content">正在调用 {{ step.content }}...</span>
+                            <span class="step-icon tool-icon"><SettingOutlined :spin="true" /></span>
+                            <div class="step-body">
+                                <span class="step-content">正在调用 <strong>{{ step.content }}</strong></span>
+                                <span v-if="step.params" class="step-params">{{ step.params }}</span>
+                            </div>
                         </template>
                         <template v-else-if="step.type === 'TOOL_END'">
-                            <span class="step-icon">✅</span>
-                            <span class="step-content">{{ step.content }}</span>
+                            <span class="step-icon done-icon"><CheckOutlined /></span>
+                            <div class="step-body">
+                                <span class="step-content">{{ step.content }}</span>
+                                <span v-if="step.preview" class="step-preview">{{ step.preview }}</span>
+                            </div>
                         </template>
                     </div>
                 </div>
@@ -1029,36 +1044,125 @@ const handleKeydown = async (e: KeyboardEvent) => {
     padding: var(--space-2) var(--space-4);
 }
 
-/* Thought Chain */
+/* Thought Chain - Enhanced */
 .thought-chain {
     margin-left: 44px;
     margin-bottom: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
     font-size: 13px;
     color: var(--color-text-secondary);
-    max-width: 80%;
+    max-width: 85%;
+    background: linear-gradient(135deg, rgba(22, 119, 255, 0.03) 0%, rgba(22, 119, 255, 0.08) 100%);
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid rgba(22, 119, 255, 0.15);
+}
+
+.thought-chain-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin-bottom: 8px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.chain-icon {
+    font-size: 18px;
 }
 
 .thought-item {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
     background: var(--color-bg-secondary);
-    border-radius: 6px;
+    border-radius: 8px;
     border: 1px solid var(--color-border-light);
     animation: fadeIn 0.3s ease;
+    transition: all 0.2s ease;
+}
+
+.thought-item.tool_start {
+    border-left: 3px solid #faad14;
+    background: rgba(250, 173, 20, 0.05);
+}
+
+.thought-item.tool_end {
+    border-left: 3px solid #52c41a;
+    background: rgba(82, 196, 26, 0.05);
 }
 
 .step-icon {
     font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
 }
 
-.step-icon.spin {
-    animation: spin 1s linear infinite;
-    display: inline-block;
+.step-icon.thought-icon {
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.step-icon.tool-icon {
+    color: #faad14;
+}
+
+.step-icon.done-icon {
+    color: #52c41a;
+}
+
+.step-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.step-content {
+    line-height: 1.5;
+}
+
+.step-content strong {
+    color: var(--color-primary);
+}
+
+.step-params {
+    font-size: 12px;
+    color: var(--color-text-tertiary);
+    font-family: var(--font-mono);
+    background: var(--color-bg-tertiary);
+    padding: 4px 8px;
+    border-radius: 4px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.step-preview {
+    font-size: 12px;
+    color: #52c41a;
+    font-style: italic;
+    padding: 4px 8px;
+    background: rgba(82, 196, 26, 0.1);
+    border-radius: 4px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 @keyframes spin {
