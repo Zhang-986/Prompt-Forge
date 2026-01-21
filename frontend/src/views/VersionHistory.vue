@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { getPrompt, getVersionHistory, commitVersion, rollbackVersion, getVersionDiff, type Prompt, type PromptVersion, type DiffResult } from '../api/prompt'
 import { message, Modal } from 'ant-design-vue'
-import { ArrowLeftOutlined, EditOutlined, RobotOutlined, HistoryOutlined, SwapOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { EditOutlined, RobotOutlined, HistoryOutlined, SwapOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { optimizePrompt } from '../api/optimize'
 import { getAvailableModels, type AvailableModelInfo } from '../api/arena'
 
 
 const route = useRoute()
-const router = useRouter()
 const promptId = computed(() => Number(route.params.id))
 
 const loading = ref(false)
@@ -193,14 +192,6 @@ const toggleExpand = (versionId: number) => {
 }
 
 // 复制内容
-const copyContent = async (content: string) => {
-  try {
-    await navigator.clipboard.writeText(content)
-    message.success('已复制')
-  } catch {
-    message.error('复制失败')
-  }
-}
 
 // 加载最新版本到编辑器
 const loadLatest = () => {

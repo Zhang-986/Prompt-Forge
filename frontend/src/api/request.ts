@@ -30,9 +30,8 @@ const BUSINESS_ERROR_CODES: Record<number, string> = {
 }
 
 // 根据环境选择 API 地址
-// 开发环境: '/api' -> Vite 代理到 localhost:8080
-// 生产环境: 'https://api.nmcp.tech/api'
-const baseURL = import.meta.env.DEV ? '/api' : 'https://api.nmcp.tech/api'
+// 优先使用环境变量 VITE_API_BASE_URL，如果没有设置则默认为 /api
+const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 // 创建 axios 实例
 const request = axios.create({

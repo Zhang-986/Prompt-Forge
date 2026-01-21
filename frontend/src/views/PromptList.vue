@@ -6,15 +6,12 @@ import { getTags, createTag, deleteTag, getPromptTags, setPromptTags, TAG_COLORS
 import { exportPrompt, importPromptFile } from '../api/promptExport'
 import { optimizePrompt } from '../api/optimize'
 import { publishToPlaza, DEFAULT_CATEGORIES } from '../api/plaza'
-import { getAvailableModels } from '../api/arena'
+import { getAvailableModels, type AvailableModelInfo } from '../api/arena'
 import { message, Modal } from 'ant-design-vue'
 import {
   PlusOutlined, ImportOutlined, TagsOutlined, ExportOutlined, SendOutlined,
-  EditOutlined, HistoryOutlined, DeleteOutlined, LogoutOutlined,
-  AppstoreOutlined, ThunderboltOutlined, SettingOutlined, RobotOutlined,
-  CommentOutlined
+  EditOutlined, HistoryOutlined, DeleteOutlined, RobotOutlined,
 } from '@ant-design/icons-vue'
-import type { Workspace } from '../api/workspace'
 
 const router = useRouter()
 const loading = ref(false)
@@ -157,11 +154,6 @@ const loadAllPromptTags = async () => {
 }
 
 // 工作空间切换处理
-const handleWorkspaceChange = (workspace: Workspace) => {
-  currentWorkspaceId.value = workspace.id
-  loadPrompts()
-  loadTags()
-}
 
 // 加载标签
 const loadTags = async () => {
@@ -426,11 +418,6 @@ const viewVersions = (prompt: Prompt) => {
 }
 
 // 退出登录
-const handleLogout = () => {
-  localStorage.removeItem('token')
-  localStorage.removeItem('user')
-  router.push('/login')
-}
 
 // 获取当前用户
 const currentUser = ref<any>(null)

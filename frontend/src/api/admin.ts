@@ -319,3 +319,27 @@ export const getSyncStats = () => {
     return request.get<any, { code: number; data: SyncStats }>('/admin/models/sync/stats')
 }
 
+// Validation APIs
+
+export interface ValidationResult {
+    modelId: string
+    displayName: string
+    success: boolean
+    errorCode: string
+    errorMessage: string
+    latencyMs: number
+}
+
+export interface BatchValidationResult {
+    providerId: string
+    totalModels: number
+    successCount: number
+    failedCount: number
+    disabledCount: number
+    results: ValidationResult[]
+}
+
+export const validateProvider = (providerId: string) => {
+    return request.post<any, { code: number; data: BatchValidationResult }>(`/admin/models/providers/${providerId}/validate`)
+}
+

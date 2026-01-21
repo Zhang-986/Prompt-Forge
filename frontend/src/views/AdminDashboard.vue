@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
     DashboardOutlined,
@@ -15,7 +14,6 @@ import {
     CloseOutlined,
     StarOutlined,
     StarFilled,
-    HomeOutlined,
     CloudSyncOutlined
 } from '@ant-design/icons-vue'
 import AdminModels from './admin/AdminModels.vue'
@@ -43,7 +41,6 @@ import {
     type AdminLoginLog
 } from '../api/admin'
 
-const router = useRouter()
 
 // 当前选中的Tab
 const activeTab = ref('dashboard')
@@ -372,11 +369,6 @@ const handleDeletePrompt = async (prompt: AdminPrompt) => {
 }
 
 // 退出登录
-const handleLogout = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    router.push('/login')
-}
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
@@ -392,15 +384,6 @@ const formatDate = (dateStr: string) => {
 }
 
 // 解析模型 JSON 字符串
-const parseModels = (modelsStr: string): string[] => {
-    if (!modelsStr) return []
-    try {
-        const parsed = JSON.parse(modelsStr)
-        return Array.isArray(parsed) ? parsed : [modelsStr]
-    } catch {
-        return modelsStr.split(',').map(s => s.trim()).filter(Boolean)
-    }
-}
 
 // 角色选项
 const roleOptions = [
@@ -455,13 +438,13 @@ onMounted(() => {
             <main class="content">
                 <!-- Agent 监控 -->
                 <div v-if="activeTab === 'monitor'" class="tab-content">
-                     <AgentMonitor />
+                    <AgentMonitor />
                 </div>
 
                 <!-- 模型管理 -->
                 <div v-if="activeTab === 'models'" class="tab-content">
-                     <h2 class="tab-title">模型管理</h2>
-                     <AdminModels />
+                    <h2 class="tab-title">模型管理</h2>
+                    <AdminModels />
                 </div>
 
                 <!-- 仪表盘 -->
@@ -819,14 +802,14 @@ onMounted(() => {
                                         '-' }}...</td>
                                     <td>
                                         <div class="model-tags">
-                                            <a-tag color="blue">{{ session.modelAProvider }}</a-tag>
-                                            <a-tag color="purple">{{ session.modelBProvider }}</a-tag>
+                                            <a-tag color="blue">{{ (session as any).modelAProvider }}</a-tag>
+                                            <a-tag color="purple">{{ (session as any).modelBProvider }}</a-tag>
                                         </div>
                                     </td>
                                     <td>
                                         <a-tag
-                                            :color="session.winner ? 'green' : (session.status === 'COMPLETED' ? 'blue' : 'orange')">
-                                            {{ session.winner ? '已决出胜负' : session.status }}
+                                            :color="(session as any).winner ? 'green' : (session.status === 'COMPLETED' ? 'blue' : 'orange')">
+                                            {{ (session as any).winner ? '已决出胜负' : session.status }}
                                         </a-tag>
                                     </td>
                                     <td>{{ session.creatorId }}</td>
@@ -862,7 +845,7 @@ onMounted(() => {
                             <tbody>
                                 <tr v-for="log in loginLogs" :key="log.id">
                                     <td>{{ log.id }}</td>
-                                    <td>{{ log.userId }}</td>
+                                    <td>{{ (log as any).userId }}</td>
                                     <td>{{ log.username }}</td>
                                     <td>{{ log.ipAddress }}</td>
                                     <td class="text-ellipsis" :title="log.userAgent">{{ log.userAgent }}</td>

@@ -1,23 +1,17 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick, h } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { getPrompts, getVersionHistory, type Prompt, type PromptVersion } from '../api/prompt'
 import { getAvailableModels, submitVote, getLeaderboard, type ArenaEvent, type LeaderboardItem, type AvailableModelInfo } from '../api/arena'
 import { message } from 'ant-design-vue'
 import {
-  ArrowLeftOutlined,
   ThunderboltOutlined,
   TrophyOutlined,
   PlayCircleOutlined,
-  PauseCircleOutlined,
   StopOutlined,
-  WarningOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   FireOutlined,
   SwapOutlined,
   DownOutlined,
-  EyeOutlined,
   HistoryOutlined
 } from '@ant-design/icons-vue'
 import ArenaHistory from './components/ArenaHistory.vue'
@@ -43,7 +37,6 @@ marked.setOptions({
   gfm: true
 })
 
-const router = useRouter()
 const route = useRoute()
 
 // Provider Logos Map
@@ -142,15 +135,15 @@ const restoreSession = async (historyItem: any) => {
     if (res.code === 200) {
       const detail = res.data
       currentSessionId.value = detail.id
-      
+
       // Stop current competition if any
       if (isCompeting.value) stopCompete()
-      
+
       // Set Mode
       isViewingHistory.value = true
       isCompeting.value = false
       hasVoted.value = true
-      
+
       // Restore Vote Winner (from History Item)
       // Note: historyItem.winnerModel is the displayName(modified by backend) or modelId?
       // Backend getUserVotes returns DISPLAY NAME if mapped, or short name.
@@ -163,20 +156,20 @@ const restoreSession = async (historyItem: any) => {
       // Since `getUserVotes` already formatted names, we can force display.
       // But `votedWinner` is used as key in `getModelDisplayName`.
       // Let's try to map back or just set it if it matches modelA/B.
-      
+
       // Populate Data
       // Fix 1: Load Prompts and Versions to show correct Selector State
-      if (detail.promptId) {
-          selectedPromptId.value = detail.promptId
-          await loadVersions(detail.promptId)
+      if ((detail as any).promptId) {
+        selectedPromptId.value = (detail as any).promptId
+        await loadVersions((detail as any).promptId)
       }
       selectedVersionId.value = detail.promptVersionId
-      variables.value = detail.variables 
-      
+      variables.value = detail.variables
+
       // Models
       if (detail.models && detail.models.length >= 2) {
-         modelA.value = detail.models[0]
-         modelB.value = detail.models[1]
+        modelA.value = detail.models[0]
+        modelB.value = detail.models[1]
       }
 
       // Restore winner selection for display
@@ -197,21 +190,21 @@ const restoreSession = async (historyItem: any) => {
       // We will introduce `votedWinnerDisplayName` to explicitly show string.
       votedWinner.value = 'HISTORY_RESTORED' // Special flag?
       // Or just use a new ref for display.
-      
+
       // Let's hack: find which model ID in (modelA, modelB) roughly matches the winner string?
       // Or simply add `votedWinnerDisplayName` ref.
-      
+
       // Outputs
       const resA = detail.results.find((r: any) => r.modelId === modelA.value)
       const resB = detail.results.find((r: any) => r.modelId === modelB.value)
-      
+
       outputA.value = {
         content: resA?.content || '',
         finished: true,
         error: resA?.error,
         time: resA?.latencyMs
       }
-      
+
       outputB.value = {
         content: resB?.content || '',
         finished: true,
@@ -301,7 +294,7 @@ const loadModels = async () => {
       modelMap.value = map
 
       // Auto-select first two if available
-      if (models.value.length >= 2) {
+      if (models.value.length >= 2 && models.value[0] && models.value[1]) {
         modelA.value = models.value[0].modelId
         modelB.value = models.value[1].modelId
       }
@@ -318,7 +311,7 @@ const parseVariables = (content: string) => {
   const matches = content.matchAll(regex)
   const vars: Record<string, string> = {}
   for (const match of matches) {
-    const varName = match[1].trim()
+    const varName = match[1]?.trim()
     if (varName) vars[varName] = ''
   }
   variables.value = vars
@@ -366,7 +359,7 @@ const startCompete = () => {
   restoreWinnerName.value = null
 
   const token = localStorage.getItem('token')
-  const baseUrl = import.meta.env.VITE_API_URL || '/api'
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
 
   fetch(`${baseUrl}/arena/compete`, {
     method: 'POST',
@@ -406,7 +399,7 @@ const startCompete = () => {
                 // But here we are using fetch + reader, so we parse raw lines.
                 // The backend sends: data: {"type":"session", ...}
                 // or data: {"modelId":..., "type":"content", ...}
-                
+
                 const data = JSON.parse(jsonStr) as ArenaEvent
                 handleArenaEvent(data)
               }
@@ -480,10 +473,10 @@ const handleVote = async (choice: 'A' | 'B' | 'Tie') => {
 
   try {
     // Send sessionId if available
-    await submitVote({ 
+    await submitVote({
       sessionId: currentSessionId.value || undefined,
-      winnerModel: winner, 
-      loserModel: loser 
+      winnerModel: winner,
+      loserModel: loser
     })
     hasVoted.value = true
     message.success('投票成功！')
@@ -553,14 +546,14 @@ onUnmounted(() => stopCompete())
                 :disabled="!selectedPromptId" @change="onVersionChange" class="custom-select" :bordered="false"
                 popupClassName="custom-dropdown">
                 <a-select-option v-for="v in versions" :key="v.id" :value="v.id">v{{ v.versionNumber
-                  }}</a-select-option>
+                }}</a-select-option>
               </a-select>
             </div>
 
             <div class="divider-vertical" v-if="Object.keys(variables).length > 0"></div>
 
             <div class="vars-group" v-if="Object.keys(variables).length > 0">
-              <div v-for="(val, key) in variables" :key="key" class="var-input-wrapper">
+              <div v-for="(_val, key) in variables" :key="key" class="var-input-wrapper">
                 <input v-model="variables[key]" :placeholder="key" />
               </div>
             </div>
@@ -602,12 +595,12 @@ onUnmounted(() => stopCompete())
           <div class="model-header">
             <div class="corner-label">Model A</div>
             <div class="model-trigger-btn" @click="openModelSelector('A')">
-               <template v-if="modelA">
-                   <ProviderLogo :providerId="modelMap.get(modelA)?.provider || modelA.split(':')[0]" :size="20" />
-                   <span class="trigger-text">{{ getModelDisplayName(modelA) }}</span>
-               </template>
-               <span v-else class="trigger-placeholder">Select Model</span>
-               <DownOutlined class="trigger-arrow" />
+              <template v-if="modelA">
+                <ProviderLogo :providerId="modelMap.get(modelA)?.provider || modelA.split(':')[0] || ''" :size="20" />
+                <span class="trigger-text">{{ getModelDisplayName(modelA) }}</span>
+              </template>
+              <span v-else class="trigger-placeholder">Select Model</span>
+              <DownOutlined class="trigger-arrow" />
             </div>
           </div>
 
@@ -638,12 +631,12 @@ onUnmounted(() => stopCompete())
           <div class="model-header">
             <div class="corner-label">Model B</div>
             <div class="model-trigger-btn" @click="openModelSelector('B')">
-               <template v-if="modelB">
-                   <ProviderLogo :providerId="modelMap.get(modelB)?.provider || modelB.split(':')[0]" :size="20" />
-                   <span class="trigger-text">{{ getModelDisplayName(modelB) }}</span>
-               </template>
-               <span v-else class="trigger-placeholder">Select Model</span>
-               <DownOutlined class="trigger-arrow" />
+              <template v-if="modelB">
+                <ProviderLogo :providerId="modelMap.get(modelB)?.provider || modelB.split(':')[0] || ''" :size="20" />
+                <span class="trigger-text">{{ getModelDisplayName(modelB) }}</span>
+              </template>
+              <span v-else class="trigger-placeholder">Select Model</span>
+              <DownOutlined class="trigger-arrow" />
             </div>
           </div>
 
@@ -674,7 +667,8 @@ onUnmounted(() => stopCompete())
           </div>
           <div class="vote-result" v-else>
             <span v-if="votedWinner === 'tie'">🤝 It's a Tie!</span>
-            <span v-else>🎉 You voted for: <strong>{{ restoreWinnerName || getModelDisplayName(votedWinner!) }}</strong></span>
+            <span v-else>🎉 You voted for: <strong>{{ restoreWinnerName || getModelDisplayName(votedWinner!)
+            }}</strong></span>
           </div>
         </div>
       </div>
@@ -713,12 +707,8 @@ onUnmounted(() => stopCompete())
     <!-- History Drawer -->
     <ArenaHistory ref="historyRef" @restore="restoreSession" />
 
-    <ModelSelectorModal
-      v-model:open="showModelModal"
-      :models="models"
-      :selectedModelId="currentSelectionId"
-      @select="handleModelSelect"
-    />
+    <ModelSelectorModal v-model:open="showModelModal" :models="models" :selectedModelId="currentSelectionId"
+      @select="handleModelSelect" />
   </div>
 </template>
 
@@ -1226,35 +1216,39 @@ onUnmounted(() => stopCompete())
 }
 
 .model-trigger-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    padding: 8px 12px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-    height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  height: 40px;
 }
+
 .model-trigger-btn:hover {
-    border-color: #000;
+  border-color: #000;
 }
+
 .trigger-text {
-    flex: 1;
-    font-weight: 500;
-    font-size: 14px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  flex: 1;
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
 .trigger-placeholder {
-    flex: 1;
-    color: #9ca3af;
-    font-size: 14px;
+  flex: 1;
+  color: #9ca3af;
+  font-size: 14px;
 }
+
 .trigger-arrow {
-    font-size: 10px;
-    color: #9ca3af;
+  font-size: 10px;
+  color: #9ca3af;
 }
 </style>

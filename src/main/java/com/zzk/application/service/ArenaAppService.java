@@ -23,8 +23,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -67,6 +74,32 @@ public class ArenaAppService {
 
     @Qualifier("arenaExecutor")
     private final ThreadPoolExecutor arenaExecutor;
+
+    // 模型测试结果日志文件路径
+    private static final String MODEL_TEST_LOG_FILE = "model_test_results.log";
+    private static final DateTimeFormatter LOG_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /**
+     * 记录模型测试结果到本地文件（仅记录 404 模型不存在的错误）
+     */
+    private void logModelTestResult(String modelId, boolean success, long latencyMs, String errorMessage) {
+        // 只记录 404 错误（模型不存在）
+        if (success || errorMessage == null || !errorMessage.contains("404")) {
+            return;
+        }
+
+        try {
+            String timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT);
+            String line = String.format("[%s] ❌ 404 MODEL_NOT_FOUND | %s | 耗时: %dms | 错误: %s%n",
+                    timestamp, modelId, latencyMs, errorMessage);
+
+            Path logPath = Paths.get(MODEL_TEST_LOG_FILE);
+            Files.writeString(logPath, line, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            log.info("已记录不存在的模型到文件: {}", modelId);
+        } catch (IOException e) {
+            log.warn("写入模型测试日志失败: {}", e.getMessage());
+        }
+    }
 
     /**
      * 启动竞技场对比（SSE 流式）- 使用用户配置
@@ -164,18 +197,24 @@ public class ArenaAppService {
                             }
                             callModelWithUserConfig(emitter, modelId, finalPrompt, effectiveConfig,
                                     resultBuffers, completedCount, totalModels);
-                            // 保存成功结果
+                            // 保存成功结果并记录到文件
+                            long latencyMs = System.currentTimeMillis() - startTimes.get(modelId);
+                            logModelTestResult(modelId, true, latencyMs, null);
                             saveArenaResult(sessionId, modelId, resultBuffers.get(modelId).toString(),
                                     startTimes.get(modelId), "SUCCESS", null);
                         } else {
                             log.warn("用户未配置模型: {}", provider);
                             sendErrorEvent(emitter, modelId, "您没有配置该模型的 API Key，请先在模型配置中添加");
+                            long latencyMs = System.currentTimeMillis() - startTimes.get(modelId);
+                            logModelTestResult(modelId, false, latencyMs, "用户未配置该模型的 API Key");
                             saveArenaResult(sessionId, modelId, null, startTimes.get(modelId),
                                     "FAILED", "用户未配置该模型的 API Key");
                         }
                     } catch (Exception e) {
                         log.error("模型调用失败: modelId={}, error={}", modelId, e.getMessage());
                         sendErrorEvent(emitter, modelId, e.getMessage());
+                        long latencyMs = System.currentTimeMillis() - startTimes.get(modelId);
+                        logModelTestResult(modelId, false, latencyMs, e.getMessage());
                         saveArenaResult(sessionId, modelId, null, startTimes.get(modelId),
                                 "FAILED", e.getMessage());
                     }

@@ -1,46 +1,69 @@
 <script setup lang="ts">
-import { ref, computed, watch, defineProps, defineEmits } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { CloseOutlined } from '@ant-design/icons-vue'
 import ProviderLogo from './ProviderLogo.vue'
 import type { AvailableModelInfo } from '../api/arena'
 
 const props = defineProps<{
-  open: boolean
-  models: AvailableModelInfo[]
-  selectedModelId?: string
+    open: boolean
+    models: AvailableModelInfo[]
+    selectedModelId?: string
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:open', value: boolean): void
-  (e: 'select', modelId: string): void
+    (e: 'update:open', value: boolean): void
+    (e: 'select', modelId: string): void
 }>()
 
 const activeProvider = ref<string>('')
 
 // Computed: Unique Providers
 const sortedUniqueProviders = computed(() => {
-  const providerIds = new Set(props.models.map(p => p.provider))
-  return Array.from(providerIds).map(id => {
-    // Attempt to find a "nicer" name if possible, currently using ID
-    return {
-      id,
-      name: getProviderDisplayName(id)
-    }
-  }).sort((a, b) => {
-    const weights: Record<string, number> = { 
-        openai: 100, 
-        google: 90, 
-        github: 85,
-        aliyun: 80, // Tencent Hunyuan usually fits here or similar
-        deepseek: 75,
-        zhipu: 70,
-        moonshot: 65,
-        cloudflare: 60
-    }
-    const wa = weights[a.id] || 0
-    const wb = weights[b.id] || 0
-    return wb - wa
-  })
+    const providerIds = new Set(props.models.map(p => p.provider))
+    return Array.from(providerIds).map(id => {
+        // Attempt to find a "nicer" name if possible, currently using ID
+        return {
+            id,
+            name: getProviderDisplayName(id)
+        }
+    }).sort((a, b) => {
+        const weights: Record<string, number> = {
+            openai: 100,
+            google: 90,
+            github: 85,
+            aliyun: 80,
+            qwen: 80,
+            deepseek: 75,
+            zhipu: 70,
+            moonshot: 65,
+            baichuan: 63,
+            stepfun: 62,
+            minimax: 61,
+            hunyuan: 61,
+            claude: 60,
+            anthropic: 60,
+            gemini: 59,
+            google: 59,
+            azure: 58,
+            azureai: 58,
+            bedrock: 57,
+            cohere: 56,
+            mistral: 55,
+            groq: 54,
+            perplexity: 53,
+            novita: 52,
+            together: 51,
+            togetherai: 51,
+            sensenova: 50,
+
+            openrouter: 48,
+            microsoft: 47,
+            cloudflare: 40
+        }
+        const wa = weights[a.id] || 0
+        const wb = weights[b.id] || 0
+        return wb - wa
+    })
 })
 
 const getProviderDisplayName = (providerId: string) => {
@@ -48,13 +71,33 @@ const getProviderDisplayName = (providerId: string) => {
         openai: 'OpenAI GPT',
         google: 'Google Gemini',
         github: 'GitHub Models',
-        aliyun: '通义千问', // Aliyun
+        aliyun: '通义千问',
+        qwen: '通义千问',
         hunyuan: '腾讯混元',
         deepseek: 'DeepSeek',
         zhipu: '智谱 GLM',
         moonshot: 'Moonshot Kimi',
+        baichuan: '百川智能',
+        stepfun: '阶跃星辰',
+        minimax: 'MiniMax',
         cloudflare: 'Cloudflare Workers AI',
-        claude: 'Anthropic Claude'
+        claude: 'Anthropic Claude',
+        anthropic: 'Anthropic Claude',
+        gemini: 'Google Gemini',
+        azure: 'Microsoft Azure OpenAI',
+        azureai: 'Microsoft Azure OpenAI',
+        bedrock: 'Amazon Bedrock',
+        cohere: 'Cohere',
+        mistral: 'Mistral AI',
+        groq: 'Groq',
+        perplexity: 'Perplexity',
+        novita: 'Novita AI',
+        together: 'Together AI',
+        togetherai: 'Together AI',
+        sensenova: '商汤日日新',
+
+        openrouter: 'OpenRouter',
+        microsoft: 'Microsoft'
     }
     return map[providerId.toLowerCase()] || providerId
 }
@@ -69,16 +112,16 @@ const filteredModels = computed(() => {
 watch(() => props.open, (val) => {
     if (val) {
         if (props.selectedModelId) {
-             const m = props.models.find(x => x.modelId === props.selectedModelId)
-             if (m) {
-                 activeProvider.value = m.provider
-             } else if (sortedUniqueProviders.value.length > 0) {
-                 activeProvider.value = sortedUniqueProviders.value[0].id
-             }
+            const m = props.models.find(x => x.modelId === props.selectedModelId)
+            if (m) {
+                activeProvider.value = m.provider
+            } else if (sortedUniqueProviders.value.length > 0) {
+                activeProvider.value = sortedUniqueProviders.value[0]?.id || ''
+            }
         } else {
-             if (sortedUniqueProviders.value.length > 0) {
-                 activeProvider.value = sortedUniqueProviders.value[0].id
-             }
+            if (sortedUniqueProviders.value.length > 0) {
+                activeProvider.value = sortedUniqueProviders.value[0]?.id || ''
+            }
         }
     }
 })
@@ -94,53 +137,52 @@ const close = () => {
 </script>
 
 <template>
-  <div v-if="open" class="modal-overlay" @click.self="close">
-    <div class="modal-content model-selector-dialog">
-      <div class="modal-header">
-        <h3>选择 AI 模型</h3>
-        <button class="close-btn" @click="close">
-          <CloseOutlined />
-        </button>
-      </div>
-      
-      <div class="modal-body-layout">
-        <!-- Sidebar -->
-        <div class="category-sidebar">
-           <div v-for="p in sortedUniqueProviders" :key="p.id" 
-                class="category-item" 
-                :class="{ active: activeProvider === p.id }"
-                @click="activeProvider = p.id">
-                <ProviderLogo :providerId="p.id" :size="20" />
-                <span class="category-name">{{ p.name }}</span>
-           </div>
-        </div>
+    <div v-if="open" class="modal-overlay" @click.self="close">
+        <div class="modal-content model-selector-dialog">
+            <div class="modal-header">
+                <h3>选择 AI 模型</h3>
+                <button class="close-btn" @click="close">
+                    <CloseOutlined />
+                </button>
+            </div>
 
-        <!-- Content -->
-        <div class="model-content-area">
-           <div v-if="filteredModels.length > 0" class="provider-grid">
-               <div v-for="m in filteredModels" :key="m.modelId"
-                    class="provider-option"
-                    :class="{ selected: selectedModelId === m.modelId }"
-                    @click="selectModel(m.modelId)">
-                    <ProviderLogo :providerId="m.provider" :size="32" />
-                    <span class="opt-name">{{ m.displayName }}</span>
-                    <span class="opt-desc">{{ m.provider }}</span>
-               </div>
-           </div>
-           <div v-else class="empty-state">
-               该厂商暂无模型
-           </div>
+            <div class="modal-body-layout">
+                <!-- Sidebar -->
+                <div class="category-sidebar">
+                    <div v-for="p in sortedUniqueProviders" :key="p.id" class="category-item"
+                        :class="{ active: activeProvider === p.id }" @click="activeProvider = p.id">
+                        <ProviderLogo :providerId="p.id" :size="20" />
+                        <span class="category-name">{{ p.name }}</span>
+                    </div>
+                </div>
+
+                <!-- Content -->
+                <div class="model-content-area">
+                    <div v-if="filteredModels.length > 0" class="provider-grid">
+                        <div v-for="m in filteredModels" :key="m.modelId" class="provider-option"
+                            :class="{ selected: selectedModelId === m.modelId }" @click="selectModel(m.modelId)">
+                            <ProviderLogo :providerId="m.provider" :size="32" />
+                            <span class="opt-name">{{ m.displayName }}</span>
+                            <span class="opt-desc">{{ m.provider }}</span>
+                        </div>
+                    </div>
+                    <div v-else class="empty-state">
+                        该厂商暂无模型
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
     </div>
-  </div>
 </template>
 
 <style scoped>
 .modal-overlay {
     position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.5);
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
     z-index: 2000;
     display: flex;
     align-items: center;
@@ -187,8 +229,10 @@ const close = () => {
     border-radius: 4px;
     transition: all 0.2s;
     display: flex;
-    align-items: center; justify-content: center;
+    align-items: center;
+    justify-content: center;
 }
+
 .close-btn:hover {
     background: #f3f4f6;
     color: #374151;
@@ -198,6 +242,8 @@ const close = () => {
     display: flex;
     flex: 1;
     overflow: hidden;
+    min-height: 0;
+    /* Critical for nested flex scrolling */
 }
 
 .category-sidebar {
@@ -221,16 +267,19 @@ const close = () => {
     transition: all 0.2s;
     color: #4b5563;
 }
+
 .category-item:hover {
-    background: rgba(0,0,0,0.03);
+    background: rgba(0, 0, 0, 0.03);
     color: #111827;
 }
+
 .category-item.active {
     background: #fff;
     color: #000;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     font-weight: 500;
 }
+
 .category-name {
     font-size: 14px;
 }
@@ -282,6 +331,7 @@ const close = () => {
     color: #111827;
     line-height: 1.3;
 }
+
 .opt-desc {
     font-size: 12px;
     color: #9ca3af;

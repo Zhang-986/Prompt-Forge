@@ -1,6 +1,7 @@
 package com.zzk.interfaces.controller;
 
 import com.zzk.application.service.LobeChatSyncService;
+import com.zzk.application.service.ModelValidationService;
 import com.zzk.infrastructure.persistence.mapper.AvailableModelMapper;
 import com.zzk.infrastructure.persistence.mapper.ModelProviderMapper;
 import com.zzk.infrastructure.persistence.po.AvailableModelPO;
@@ -39,6 +40,7 @@ public class AdminModelController {
     private final ModelProviderMapper providerMapper;
     private final AvailableModelMapper modelMapper;
     private final LobeChatSyncService lobeChatSyncService;
+    private final ModelValidationService modelValidationService;
 
     // ==================== Provider 管理 ====================
 
@@ -295,6 +297,25 @@ public class AdminModelController {
         stats.put("manualModels", manualModels);
 
         return Result.success(stats);
+    }
+
+    // ==================== 模型验证功能 ====================
+
+    @Operation(summary = "验证厂商所有模型", description = "批量测试指定厂商的所有模型，自动禁用 404 的模型")
+    @PostMapping("/providers/{providerId}/validate")
+    public Result<ModelValidationService.BatchValidationResult> validateProviderModels(
+            @PathVariable String providerId,
+            @RequestAttribute("userId") Long userId) {
+        log.info("开始验证厂商模型: providerId={}, userId={}", providerId, userId);
+
+        try {
+            ModelValidationService.BatchValidationResult result = modelValidationService.validateProvider(providerId,
+                    userId);
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("验证厂商模型失败: providerId={}", providerId, e);
+            return Result.error("验证失败: " + e.getMessage());
+        }
     }
 
     // ==================== DTO ====================

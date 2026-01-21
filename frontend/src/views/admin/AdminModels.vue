@@ -1,14 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import {
     PlusOutlined,
-    EditOutlined,
-    DeleteOutlined,
-    SyncOutlined,
     GlobalOutlined,
-    CheckOutlined,
-    CloseOutlined,
     AppstoreOutlined,
     CloudSyncOutlined
 } from '@ant-design/icons-vue'
@@ -25,14 +20,18 @@ import {
     toggleAvailableModel,
     syncFromLobeChat,
     getSyncStats,
+    validateProvider,
     type AdminModelProvider,
     type AdminAvailableModel,
-    type SyncStats
+    type SyncStats,
+    type BatchValidationResult
 } from '../../api/admin'
 
 // 状态
 const loading = ref(false)
 const syncing = ref(false)
+const validating = ref(false)
+const validatingProvider = ref('')
 const activeView = ref<'providers' | 'models'>('providers')
 const syncStats = ref<SyncStats | null>(null)
 
@@ -212,7 +211,7 @@ const handleDeleteProvider = async (provider: AdminModelProvider) => {
 const showCreateModelModal = () => {
     modalMode.value = 'create'
     modelForm.value = {
-        providerId: selectedProviderId.value || (providers.value.length > 0 ? providers.value[0].id : ''),
+        providerId: selectedProviderId.value || (providers.value.length > 0 ? providers.value[0]?.id || '' : ''),
         modelId: '',
         displayName: '',
         description: '',
@@ -278,6 +277,38 @@ const handleDeleteModel = async (model: AdminAvailableModel) => {
     })
 }
 
+// 模型验证
+const handleValidateProvider = async (providerId: string) => {
+    validating.value = true
+    validatingProvider.value = providerId
+    message.loading({ content: `正在验证 ${getProviderName(providerId)} 的模型...（可能需要几分钟）`, key: 'validate', duration: 0 })
+
+    try {
+        const res = await validateProvider(providerId)
+        if (res.code === 200) {
+            const result = res.data
+            message.success({
+                content: `验证完成: 成功 ${result.successCount}, 失败 ${result.failedCount}, 已禁用 ${result.disabledCount} 个 404 模型`,
+                key: 'validate',
+                duration: 5
+            })
+            // 刷新数据
+            loadData()
+            if (activeView.value === 'models') {
+                loadModels()
+            }
+        } else {
+            message.error({ content: '验证失败: ' + res.message, key: 'validate' })
+        }
+    } catch (error) {
+        console.error('验证失败:', error)
+        message.error({ content: '验证失败', key: 'validate' })
+    } finally {
+        validating.value = false
+        validatingProvider.value = ''
+    }
+}
+
 // 获取厂商图标
 const getProviderIcon = (id: string) => {
     const iconMap: Record<string, string> = {
@@ -296,7 +327,6 @@ const getProviderIcon = (id: string) => {
         'baichuan': 'baichuan-color.svg',
         'minimax': 'minimax-color.svg',
         'stepfun': 'stepfun-color.svg',
-        'spark': 'spark-color.svg',
         'sensenova': 'sensenova-color.svg',
         'mistral': 'mistral-color.svg',
         'perplexity': 'perplexity-color.svg',
@@ -338,7 +368,8 @@ onMounted(() => {
         <!-- 顶部操作栏 -->
         <div class="actions-bar">
             <div class="view-switcher">
-                <a-radio-group v-model:value="activeView" button-style="solid" @change="(e: any) => switchView(e.target.value)">
+                <a-radio-group v-model:value="activeView" button-style="solid"
+                    @change="(e: any) => switchView(e.target.value)">
                     <a-radio-button value="providers">
                         <GlobalOutlined /> 厂商管理
                     </a-radio-button>
@@ -350,12 +381,16 @@ onMounted(() => {
 
             <div class="sync-actions">
                 <div class="sync-stats" v-if="syncStats">
-                    <span title="启用/总厂商">厂商: <strong>{{ syncStats.enabledProviders }}</strong>/{{ syncStats.totalProviders }}</span>
+                    <span title="启用/总厂商">厂商: <strong>{{ syncStats.enabledProviders }}</strong>/{{
+                        syncStats.totalProviders }}</span>
                     <a-divider type="vertical" />
-                    <span title="启用/总模型">模型: <strong>{{ syncStats.enabledModels }}</strong>/{{ syncStats.totalModels }}</span>
+                    <span title="启用/总模型">模型: <strong>{{ syncStats.enabledModels }}</strong>/{{ syncStats.totalModels
+                    }}</span>
                 </div>
                 <a-button type="primary" :loading="syncing" @click="handleSync">
-                    <template #icon><CloudSyncOutlined /></template>
+                    <template #icon>
+                        <CloudSyncOutlined />
+                    </template>
                     从 Lobe Chat 同步
                 </a-button>
             </div>
@@ -366,30 +401,34 @@ onMounted(() => {
             <div class="toolbar">
                 <h3>所有厂商</h3>
                 <a-button type="primary" @click="showCreateProviderModal">
-                    <template #icon><PlusOutlined /></template>
+                    <template #icon>
+                        <PlusOutlined />
+                    </template>
                     新增厂商
                 </a-button>
             </div>
 
-            <a-table :dataSource="providers" :rowKey="'id'" :loading="loading" :pagination="false" class="provider-table" :scroll="{ x: 1000 }">
+            <a-table :dataSource="providers" :rowKey="'id'" :loading="loading" :pagination="false"
+                class="provider-table" :scroll="{ x: 1000 }">
                 <a-table-column title="图标" width="70px" align="center">
                     <template #default="{ record }">
                         <div class="provider-icon-wrapper">
-                             <img :src="getProviderIcon(record.id)" :alt="record.name" class="provider-icon-img" 
-                                  @error="(e: any) => e.target.src = getProviderIcon('default')" />
+                            <img :src="getProviderIcon(record.id)" :alt="record.name" class="provider-icon-img"
+                                @error="(e: any) => e.target.src = getProviderIcon('default')" />
                         </div>
                     </template>
                 </a-table-column>
                 <a-table-column title="ID" dataIndex="id" width="100px">
-                     <template #default="{ text }"><span class="code-text">{{ text }}</span></template>
+                    <template #default="{ text }"><span class="code-text">{{ text }}</span></template>
                 </a-table-column>
-                <a-table-column title="名称" dataIndex="name" width="150px" >
+                <a-table-column title="名称" dataIndex="name" width="150px">
                     <template #default="{ text }"><strong>{{ text }}</strong></template>
                 </a-table-column>
                 <a-table-column title="Base URL" dataIndex="defaultBaseUrl" ellipsis />
                 <a-table-column title="SDK" dataIndex="sdkType" width="100px">
                     <template #default="{ text }">
-                        <a-tag :color="text === 'openai' ? 'blue' : (text === 'anthropic' ? 'orange' : 'green')">{{ text }}</a-tag>
+                        <a-tag :color="text === 'openai' ? 'blue' : (text === 'anthropic' ? 'orange' : 'green')">{{ text
+                        }}</a-tag>
                     </template>
                 </a-table-column>
                 <a-table-column title="状态" width="80px" align="center">
@@ -402,11 +441,14 @@ onMounted(() => {
                         <span class="date-text">{{ formatDate(record.syncedAt) }}</span>
                     </template>
                 </a-table-column>
-                <a-table-column title="操作" width="120px" align="center" fixed="right">
+                <a-table-column title="操作" width="180px" align="center" fixed="right">
                     <template #default="{ record }">
                         <a-space size="small">
+                            <a-button type="link" size="small" :loading="validating && validatingProvider === record.id"
+                                @click="handleValidateProvider(record.id)">验证</a-button>
                             <a-button type="link" size="small" @click="showEditProviderModal(record)">编辑</a-button>
-                            <a-button type="link" size="small" danger @click="handleDeleteProvider(record)">删除</a-button>
+                            <a-button type="link" size="small" danger
+                                @click="handleDeleteProvider(record)">删除</a-button>
                         </a-space>
                     </template>
                 </a-table-column>
@@ -417,14 +459,17 @@ onMounted(() => {
         <div v-if="activeView === 'models'" class="view-content">
             <div class="toolbar">
                 <div class="filters">
-                    <a-select v-model:value="selectedProviderId" style="width: 200px" placeholder="筛选厂商" allowClear @change="loadModels">
+                    <a-select v-model:value="selectedProviderId" style="width: 200px" placeholder="筛选厂商" allowClear
+                        @change="loadModels">
                         <a-select-option v-for="p in providers" :key="p.id" :value="p.id">
                             {{ p.name }}
                         </a-select-option>
                     </a-select>
                 </div>
                 <a-button type="primary" @click="showCreateModelModal">
-                    <template #icon><PlusOutlined /></template>
+                    <template #icon>
+                        <PlusOutlined />
+                    </template>
                     新增模型
                 </a-button>
             </div>
@@ -438,7 +483,7 @@ onMounted(() => {
                 <a-table-column title="显示名称" dataIndex="displayName" width="200px" />
                 <a-table-column title="模型ID" dataIndex="modelId" width="200px" />
                 <a-table-column title="上下文" dataIndex="contextWindow" width="100px">
-                     <template #default="{ text }">{{ text ? (text / 1024).toFixed(0) + 'k' : '-' }}</template>
+                    <template #default="{ text }">{{ text ? (text / 1024).toFixed(0) + 'k' : '-' }}</template>
                 </a-table-column>
                 <a-table-column title="能力" width="150px">
                     <template #default="{ record }">
@@ -449,7 +494,7 @@ onMounted(() => {
                     </template>
                 </a-table-column>
                 <a-table-column title="来源" dataIndex="source" width="80px">
-                     <template #default="{ text }">
+                    <template #default="{ text }">
                         <a-tag :color="text === 'sync' ? 'blue' : 'green'">{{ text === 'sync' ? '同步' : '手动' }}</a-tag>
                     </template>
                 </a-table-column>
@@ -470,7 +515,8 @@ onMounted(() => {
         </div>
 
         <!-- 厂商编辑模态框 -->
-        <a-modal v-model:visible="isProviderModalVisible" :title="modalMode === 'create' ? '新增厂商' : '编辑厂商'" @ok="handleProviderSubmit">
+        <a-modal v-model:visible="isProviderModalVisible" :title="modalMode === 'create' ? '新增厂商' : '编辑厂商'"
+            @ok="handleProviderSubmit">
             <a-form layout="vertical">
                 <a-form-item label="ID (唯一标识)" required>
                     <a-input v-model:value="providerForm.id" :disabled="modalMode === 'edit'" placeholder="如 openai" />
@@ -495,7 +541,8 @@ onMounted(() => {
         </a-modal>
 
         <!-- 模型编辑模态框 -->
-        <a-modal v-model:visible="isModelModalVisible" :title="modalMode === 'create' ? '新增模型' : '编辑模型'" @ok="handleModelSubmit">
+        <a-modal v-model:visible="isModelModalVisible" :title="modalMode === 'create' ? '新增模型' : '编辑模型'"
+            @ok="handleModelSubmit">
             <a-form layout="vertical">
                 <a-form-item label="所属厂商" required>
                     <a-select v-model:value="modelForm.providerId" :disabled="modalMode === 'edit'">
@@ -509,7 +556,8 @@ onMounted(() => {
                     <a-input v-model:value="modelForm.displayName" placeholder="如 GPT-4 Turbo" />
                 </a-form-item>
                 <a-form-item label="上下文长度 (Tokens)">
-                    <a-input-number v-model:value="modelForm.contextWindow" :min="1024" step="1024" style="width: 100%" />
+                    <a-input-number v-model:value="modelForm.contextWindow" :min="1024" step="1024"
+                        style="width: 100%" />
                 </a-form-item>
                 <a-form-item label="能力支持">
                     <a-checkbox v-model:checked="modelForm.supportsVision" :value="1">支持视觉</a-checkbox>

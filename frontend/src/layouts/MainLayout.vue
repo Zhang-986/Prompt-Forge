@@ -40,6 +40,19 @@
         </router-link>
       </nav>
 
+      <!-- BigModel.cn Promotion -->
+      <div class="sidebar-promo-wrapper">
+        <a href="https://www.bigmodel.cn/invite?icode=9v1maCD3s4Titga15Jy0C3HEaazDlIZGj9HxftzTbt4%3D" target="_blank"
+          class="sidebar-promo-card">
+          <div class="promo-content">
+            <div class="promo-badge">NEW</div>
+            <div class="promo-title">GLM-4.7 已上线</div>
+            <div class="promo-desc">免费领 2000万 Tokens &rarr;</div>
+          </div>
+          <div class="promo-shine"></div>
+        </a>
+      </div>
+
       <div class="sidebar-footer">
         <div class="workspace-section">
           <WorkspaceSelector v-model="currentWorkspaceId" @change="handleWorkspaceChange" />
@@ -131,13 +144,10 @@ onUnmounted(() => {
 })
 
 const isAdmin = computed(() => user.value?.role === 'ADMIN')
-const userInitials = computed(() => {
-  const name = user.value?.nickname || user.value?.username || 'U'
-  return name.substring(0, 1).toUpperCase()
-})
 const userRoleText = computed(() => isAdmin.value ? '管理员' : '普通用户')
 
-const handleWorkspaceChange = (id: number) => {
+const handleWorkspaceChange = (workspace: any) => {
+  const id = typeof workspace === 'number' ? workspace : workspace.id
   currentWorkspaceId.value = id
   localStorage.setItem('currentWorkspaceId', id.toString())
   // 可以在这里触发全局事件或刷新，简单起见刷新页面或依靠组件内部的 watcher
@@ -300,5 +310,86 @@ const handleLogout = () => {
 /* 覆盖 Workspace Selector 样式以适应 Sidebar */
 :deep(.workspace-selector) {
   width: 100%;
+}
+
+/* 广告样式 (Renamed to promo to avoid adblockers) */
+.sidebar-promo-wrapper {
+  padding: 0 var(--space-3) var(--space-3);
+  margin-top: auto;
+  /* 确保贴在底部 (如果 nav 没有撑满) */
+  flex-shrink: 0;
+  z-index: 10;
+  position: relative;
+}
+
+.sidebar-promo-card {
+  display: block;
+  position: relative;
+  background: linear-gradient(135deg, #1e40af 0%, #7e22ce 100%);
+  /* 深蓝到深紫 */
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  text-decoration: none;
+  overflow: hidden;
+  transition: all var(--transition-base);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-promo-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(126, 34, 206, 0.25);
+}
+
+.promo-content {
+  position: relative;
+  z-index: 2;
+}
+
+.promo-badge {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+
+.promo-title {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 2px;
+  letter-spacing: -0.2px;
+}
+
+.promo-desc {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* 光泽效果 */
+.promo-shine {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg,
+      transparent,
+      rgba(255, 255, 255, 0.2),
+      transparent);
+  transform: skewX(-20deg);
+  transition: 0.5s;
+  z-index: 1;
+}
+
+.sidebar-promo-card:hover .promo-shine {
+  left: 200%;
+  transition: 1s ease-in-out;
 }
 </style>

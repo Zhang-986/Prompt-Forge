@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getArenaHistory, getArenaHistoryDetail, type ArenaHistoryItem, type ArenaHistoryDetail } from '../api/arenaHistory'
 import { message } from 'ant-design-vue'
-import { ArrowLeftOutlined, HistoryOutlined, FileTextOutlined, DollarOutlined, ClockCircleOutlined } from '@ant-design/icons-vue'
+import { DollarOutlined, ClockCircleOutlined } from '@ant-design/icons-vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -62,7 +62,7 @@ const totalStats = computed(() => {
   if (!selectedSession.value?.results) return { tokens: 0, avgLatency: 0 }
   const results = selectedSession.value.results.filter(r => r.status === 'SUCCESS')
   const tokens = results.reduce((sum, r) => sum + (r.tokensUsed || 0), 0)
-  const avgLatency = results.length > 0 
+  const avgLatency = results.length > 0
     ? Math.round(results.reduce((sum, r) => sum + (r.latencyMs || 0), 0) / results.length)
     : 0
   return { tokens, avgLatency }
@@ -90,12 +90,7 @@ onMounted(() => {
       </div>
 
       <div v-else class="history-list">
-        <div 
-          v-for="item in historyList" 
-          :key="item.id" 
-          class="history-card"
-          @click="viewDetail(item.id)"
-        >
+        <div v-for="item in historyList" :key="item.id" class="history-card" @click="viewDetail(item.id)">
           <div class="card-header">
             <span class="session-id">#{{ item.id }}</span>
             <span :class="['status-badge', statusClass(item.status)]">
@@ -103,11 +98,7 @@ onMounted(() => {
             </span>
           </div>
           <div class="model-tags">
-            <span 
-              v-for="model in parseModels(item.models)" 
-              :key="model"
-              class="model-tag"
-            >
+            <span v-for="model in parseModels(item.models)" :key="model" class="model-tag">
               {{ model }}
             </span>
           </div>
@@ -125,7 +116,7 @@ onMounted(() => {
           <h3>竞技详情 #{{ selectedSession.id }}</h3>
           <button class="close-btn" @click="showDetailDialog = false">×</button>
         </div>
-        
+
         <div class="dialog-body">
           <!-- Stats Summary -->
           <div class="stats-summary">
@@ -153,19 +144,15 @@ onMounted(() => {
           <div class="results-section">
             <label>模型结果对比:</label>
             <div class="results-grid">
-              <div 
-                v-for="result in selectedSession.results" 
-                :key="result.modelId"
-                class="result-card"
-                :class="{ 'result-error': result.status !== 'SUCCESS' }"
-              >
+              <div v-for="result in selectedSession.results" :key="result.modelId" class="result-card"
+                :class="{ 'result-error': result.status !== 'SUCCESS' }">
                 <div class="result-header">
                   <span class="model-name">{{ result.modelId }}</span>
                   <span :class="['result-status', result.status === 'SUCCESS' ? 'success' : 'error']">
                     {{ result.status }}
                   </span>
                 </div>
-                
+
                 <!-- Stats Bar -->
                 <div class="result-stats">
                   <span class="stat" title="Token 消耗">
@@ -178,12 +165,9 @@ onMounted(() => {
 
                 <!-- Latency Bar -->
                 <div class="latency-bar-container">
-                  <div 
-                    class="latency-bar" 
-                    :style="{ width: Math.min((result.latencyMs || 0) / 50, 100) + '%' }"
-                  ></div>
+                  <div class="latency-bar" :style="{ width: Math.min((result.latencyMs || 0) / 50, 100) + '%' }"></div>
                 </div>
-                
+
                 <div class="result-content">
                   <template v-if="result.status === 'SUCCESS'">
                     {{ result.content }}
@@ -227,7 +211,8 @@ onMounted(() => {
   gap: var(--space-3);
 }
 
-.back-btn, .nav-btn {
+.back-btn,
+.nav-btn {
   padding: var(--space-2) var(--space-4);
   background: transparent;
   border: 1px solid var(--color-border);
@@ -237,7 +222,8 @@ onMounted(() => {
   transition: all var(--transition-fast);
 }
 
-.back-btn:hover, .nav-btn:hover {
+.back-btn:hover,
+.nav-btn:hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
 }
@@ -265,7 +251,8 @@ onMounted(() => {
   padding: var(--space-8);
 }
 
-.loading, .empty-state {
+.loading,
+.empty-state {
   text-align: center;
   padding: var(--space-12);
   color: var(--color-text-tertiary);

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 
 // Assuming images will be placed here by the user
 // If you want to use the generated images, ensure they are moved to this path

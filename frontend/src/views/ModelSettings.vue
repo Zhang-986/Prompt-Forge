@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, h, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import {
   getProviders,
   getModelConfigs,
@@ -13,7 +12,7 @@ import {
   type CreateConfigRequest
 } from '../api/modelConfig'
 import { message, Modal } from 'ant-design-vue'
-import { ArrowLeftOutlined, SettingOutlined, BulbOutlined, PlusOutlined, DeleteOutlined, StopOutlined, PlayCircleOutlined, CheckCircleFilled } from '@ant-design/icons-vue'
+import { SettingOutlined, BulbOutlined, PlusOutlined, DeleteOutlined, StopOutlined, CheckCircleFilled } from '@ant-design/icons-vue'
 
 // Import Config Assets
 import iconOpenAI from '@/assets/openai.svg'
@@ -31,7 +30,6 @@ import iconBedrock from '@/assets/bedrock-color.svg'
 import iconBaichuan from '@/assets/baichuan-color.svg'
 import iconMinimax from '@/assets/minimax-color.svg'
 import iconStepfun from '@/assets/stepfun-color.svg'
-import iconSpark from '@/assets/spark-color.svg'
 import iconSensenova from '@/assets/sensenova-color.svg'
 import iconMistral from '@/assets/mistral-color.svg'
 import iconPerplexity from '@/assets/perplexity-color.svg'
@@ -42,7 +40,6 @@ import iconTogether from '@/assets/together-color.svg'
 import iconOllama from '@/assets/ollama.svg'
 import iconOpenRouter from '@/assets/openrouter.svg'
 
-const router = useRouter()
 
 // 状态
 const loading = ref(false)
@@ -85,7 +82,6 @@ const logoMap: Record<string, string> = {
   baichuan: iconBaichuan,
   minimax: iconMinimax,
   stepfun: iconStepfun,
-  spark: iconSpark,
   sensenova: iconSensenova,
   mistral: iconMistral,
   perplexity: iconPerplexity,
@@ -179,18 +175,41 @@ const availableModelsForPref = computed(() => {
     const provider = providers.value.find(p => p.id === config.provider)
     const providerName = provider?.name || config.provider
 
-    // Use default provider models
-    if (provider?.models) {
-      provider.models.forEach(m => {
-        options.push({
-          label: `${providerName} - ${m.name}`,
-          value: `${config.provider}:${m.id}`, // Format: "openai:gpt-4"
-          provider: config.provider,
-          modelName: m.name,
-          providerName: providerName
+    // Check if config has specific active models (from auto-fetch or manual selection)
+    let modelsToUse: { id: string, name: string }[] = []
+
+    if (config.availableModels) {
+      try {
+        // availableModels is a JSON list of model IDs string[]
+        const parsedIds: string[] = JSON.parse(config.availableModels)
+
+        // Map IDs to objects. Try to find name in provider definitions, or use ID as name
+        modelsToUse = parsedIds.map(id => {
+          const def = provider?.models?.find(m => m.id === id)
+          return {
+            id: id,
+            name: def ? def.name : id
+          }
         })
-      })
+      } catch (e) {
+        console.error('Failed to parse availableModels', e)
+      }
     }
+
+    // fallback to default provider models if no specific models found/parsed
+    if (modelsToUse.length === 0 && provider?.models) {
+      modelsToUse = provider.models
+    }
+
+    modelsToUse.forEach(m => {
+      options.push({
+        label: `${providerName} - ${m.name}`,
+        value: `${config.provider}:${m.id}`, // Format: "openai:gpt-4"
+        provider: config.provider,
+        modelName: m.name,
+        providerName: providerName
+      })
+    })
   })
   return options
 })
@@ -219,7 +238,7 @@ const uniqueProvidersForPref = computed(() => {
 const activePrefModels = computed(() => {
   if (!activePrefProvider.value && uniqueProvidersForPref.value.length > 0) {
     // If no provider selected, select first one
-    return availableModelsForPref.value.filter(m => m.provider === uniqueProvidersForPref.value[0].id)
+    return availableModelsForPref.value.filter(m => uniqueProvidersForPref.value[0] && m.provider === uniqueProvidersForPref.value[0].id)
   }
   return availableModelsForPref.value.filter(m => m.provider === activePrefProvider.value)
 })
@@ -227,7 +246,7 @@ const activePrefModels = computed(() => {
 // Auto-select first provider when dialog opens
 watch(showPrefDialog, (val) => {
   if (val && uniqueProvidersForPref.value.length > 0 && !activePrefProvider.value) {
-    activePrefProvider.value = uniqueProvidersForPref.value[0].id
+    activePrefProvider.value = uniqueProvidersForPref.value[0]?.id || ''
   }
 })
 
@@ -258,7 +277,8 @@ const loadData = async () => {
       getModelConfigs()
     ])
     if (providersRes.code === 200) {
-      providers.value = providersRes.data
+      // 过滤掉讯飞星火
+      providers.value = providersRes.data.filter(p => !['spark', 'xunfei', 'ollama'].includes(p.id))
     }
     if (configsRes.code === 200) {
       configs.value = configsRes.data
@@ -368,10 +388,6 @@ const handleToggle = async (config: ModelConfig) => {
 }
 
 // 刷新可用模型
-const handleRefresh = async (config: ModelConfig) => {
-  // 此功能已废弃，现在由后端自动处理模型列表
-  message.info('系统会自动列出所有支持的模型')
-}
 
 // 删除配置
 const handleDelete = (config: ModelConfig) => {
@@ -392,9 +408,6 @@ const handleDelete = (config: ModelConfig) => {
 }
 
 // 返回
-const goBack = () => {
-  router.push('/prompts')
-}
 
 onMounted(() => {
   loadData()
@@ -619,21 +632,16 @@ onMounted(() => {
         <div class="dialog-body-layout">
           <!-- Left Sidebar: Provider Categories -->
           <div class="category-sidebar">
-            <div 
-              v-for="provider in uniqueProvidersForPref" 
-              :key="provider.id"
-              class="category-item"
-              :class="{ active: activePrefProvider === provider.id }"
-              @click="activePrefProvider = provider.id"
-            >
-               <ProviderLogo :providerId="provider.id" :size="20" />
-               <span class="category-name">{{ provider.name }}</span>
+            <div v-for="provider in uniqueProvidersForPref" :key="provider.id" class="category-item"
+              :class="{ active: activePrefProvider === provider.id }" @click="activePrefProvider = provider.id">
+              <ProviderLogo :providerId="provider.id" :size="20" />
+              <span class="category-name">{{ provider.name }}</span>
             </div>
           </div>
 
           <!-- Right Content: Model Grid -->
           <div class="model-content-area">
-             <div v-if="activePrefModels.length > 0" class="provider-grid">
+            <div v-if="activePrefModels.length > 0" class="provider-grid">
               <div v-for="m in activePrefModels" :key="m.value" class="provider-option"
                 :class="{ selected: defaultOptimizeModel === m.value }" @click="selectPreference(m.value)">
                 <ProviderLogo :providerId="m.provider" :size="32" />
@@ -642,7 +650,7 @@ onMounted(() => {
               </div>
             </div>
             <div v-else class="empty-state" style="padding: 20px;">
-               <p>该厂商暂无可用模型</p>
+              <p>该厂商暂无可用模型</p>
             </div>
           </div>
         </div>
@@ -655,7 +663,8 @@ onMounted(() => {
 <style scoped>
 /* Dialog & Layout */
 .model-selector-dialog {
-  width: 800px; /* Wider for sidebar layout */
+  width: 800px;
+  /* Wider for sidebar layout */
   max-width: 90vw;
   height: 600px;
   max-height: 85vh;
@@ -666,7 +675,8 @@ onMounted(() => {
 .dialog-body-layout {
   display: flex;
   flex: 1;
-  overflow: hidden; /* Contain scroll internally */
+  overflow: hidden;
+  /* Contain scroll internally */
 }
 
 /* Sidebar */
@@ -693,14 +703,14 @@ onMounted(() => {
 }
 
 .category-item:hover {
-  background: rgba(0,0,0,0.05);
+  background: rgba(0, 0, 0, 0.05);
   color: var(--color-text-primary);
 }
 
 .category-item.active {
   background: #fff;
   color: var(--color-primary);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   font-weight: 500;
 }
 

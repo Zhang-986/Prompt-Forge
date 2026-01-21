@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { getTemplates, getCategories, cloneTemplate, updatePlazaTemplate, deletePlazaTemplate, createCategory, updateCategory, deleteCategory, DEFAULT_CATEGORIES, type PromptTemplate, type PlazaCategory } from '../api/plaza'
 import { getWorkspaces, type Workspace } from '../api/workspace'
 import { message, Modal } from 'ant-design-vue'
-import { AppstoreOutlined, FileTextOutlined, ThunderboltOutlined, DownloadOutlined, EditOutlined, DeleteOutlined, SettingOutlined, PlusOutlined } from '@ant-design/icons-vue'
+import { DownloadOutlined, EditOutlined, DeleteOutlined, SettingOutlined } from '@ant-design/icons-vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -138,10 +138,6 @@ const openPreview = (template: PromptTemplate) => {
 }
 
 // 获取分类图标
-const getCategoryIcon = (category: string) => {
-  const cat = categories.value.find(c => c.value === category)
-  return cat?.icon || '📦'
-}
 
 // 获取分类名称
 const getCategoryLabel = (category: string) => {
@@ -168,11 +164,6 @@ try {
 const isAdmin = computed(() => currentUser.value?.role === 'ADMIN')
 
 // 退出登录
-const handleLogout = () => {
-  localStorage.removeItem('token')
-  localStorage.removeItem('user')
-  router.push('/login')
-}
 
 // ==================== 管理员功能 ====================
 

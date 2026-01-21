@@ -41,7 +41,7 @@ public class DynamicLlmClientFactory {
             case "anthropic", "claude" -> generateClaudeStream(config, prompt);
             // OpenAI 兼容厂商 (绝大多数)
             case "openai", "zhipu", "deepseek", "aliyun", "qwen", "moonshot", "cloudflare", "github", "hunyuan",
-                    "azure", "bedrock", "baichuan", "minimax", "stepfun", "spark", "yi", "sensenova",
+                    "azure", "bedrock", "baichuan", "minimax", "stepfun", "yi", "sensenova",
                     "mistral", "perplexity", "groq", "cohere", "novita", "togetherai",
                     "ollama", "openrouter" ->
                 generateOpenAICompatibleStream(config, prompt);
@@ -86,7 +86,7 @@ public class DynamicLlmClientFactory {
                             .flatMap(body -> {
                                 log.error("[Google] API 错误: status={}, body={}", response.statusCode(), body);
                                 return reactor.core.publisher.Mono.error(
-                                        new RuntimeException("API 调用失败: " + response.statusCode()));
+                                        new RuntimeException("API 调用失败: " + response.statusCode() + " - " + body));
                             });
                 })
                 .bodyToFlux(String.class)
@@ -121,7 +121,7 @@ public class DynamicLlmClientFactory {
 
         // 这些厂商的 Base URL 已包含版本路径，直接追加 /chat/completions
         if (List.of("zhipu", "aliyun", "qwen", "moonshot", "cloudflare", "hunyuan",
-                "baichuan", "minimax", "stepfun", "spark", "yi", "sensenova",
+                "baichuan", "minimax", "stepfun", "yi", "sensenova",
                 "mistral", "perplexity", "groq", "cohere", "novita", "togetherai",
                 "ollama", "openrouter").contains(provider)) {
             chatEndpoint = "/chat/completions";
@@ -153,8 +153,9 @@ public class DynamicLlmClientFactory {
                             .flatMap(body -> {
                                 log.error("[{}] API 错误: status={}, body={}", config.getProvider(),
                                         response.statusCode(), body);
+                                // 包含 body 以便识别 unknown_model 等特殊错误
                                 return reactor.core.publisher.Mono.error(
-                                        new RuntimeException("API 调用失败: " + response.statusCode()));
+                                        new RuntimeException("API 调用失败: " + response.statusCode() + " - " + body));
                             });
                 })
                 .bodyToFlux(String.class)
@@ -199,7 +200,7 @@ public class DynamicLlmClientFactory {
                             .flatMap(body -> {
                                 log.error("[Claude] API 错误: status={}, body={}", response.statusCode(), body);
                                 return reactor.core.publisher.Mono.error(
-                                        new RuntimeException("API 调用失败: " + response.statusCode()));
+                                        new RuntimeException("API 调用失败: " + response.statusCode() + " - " + body));
                             });
                 })
                 .bodyToFlux(String.class)

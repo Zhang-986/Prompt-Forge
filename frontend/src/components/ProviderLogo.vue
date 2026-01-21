@@ -12,6 +12,22 @@ import iconHunyuan from '@/assets/hunyuan-color.svg'
 import iconCloudflare from '@/assets/cloudflare-color.svg'
 import iconGithub from '@/assets/githubcopilot.svg'
 import iconMoonshot from '@/assets/moonshot.svg'
+import iconBaichuan from '@/assets/baichuan-color.svg'
+import iconStepfun from '@/assets/stepfun-color.svg'
+import iconMinimax from '@/assets/minimax-color.svg'
+import iconAzure from '@/assets/azureai-color.svg'
+import iconBedrock from '@/assets/bedrock-color.svg'
+import iconCohere from '@/assets/cohere-color.svg'
+import iconGroq from '@/assets/groq.svg'
+import iconMicrosoft from '@/assets/microsoft-color.svg'
+import iconMistral from '@/assets/mistral-color.svg'
+import iconNovita from '@/assets/novita-color.svg'
+import iconOllama from '@/assets/ollama.svg'
+import iconOpenrouter from '@/assets/openrouter.svg'
+import iconPerplexity from '@/assets/perplexity-color.svg'
+import iconSensenova from '@/assets/sensenova-color.svg'
+import iconTogether from '@/assets/together-color.svg'
+import iconAnthropic from '@/assets/anthropic.svg'
 
 const props = defineProps<{
     providerId: string,
@@ -28,7 +44,27 @@ const logoMap: Record<string, string> = {
     hunyuan: iconHunyuan,
     cloudflare: iconCloudflare,
     github: iconGithub,
-    moonshot: iconMoonshot
+    moonshot: iconMoonshot,
+    baichuan: iconBaichuan,
+    stepfun: iconStepfun,
+    minimax: iconMinimax,
+    qwen: iconQwen,
+    azure: iconAzure,
+    azureai: iconAzure,
+    bedrock: iconBedrock,
+    cohere: iconCohere,
+    groq: iconGroq,
+    microsoft: iconMicrosoft,
+    mistral: iconMistral,
+    novita: iconNovita,
+    ollama: iconOllama,
+    openrouter: iconOpenrouter,
+    perplexity: iconPerplexity,
+    sensenova: iconSensenova,
+    together: iconTogether,
+    togetherai: iconTogether,
+    anthropic: iconAnthropic,
+    gemini: iconGoogle, // alias
 }
 
 const renderLogo = () => {

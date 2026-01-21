@@ -8,9 +8,7 @@ import {
     RobotOutlined,
     UserOutlined,
     CheckOutlined,
-    ArrowLeftOutlined,
     SettingOutlined,
-    CloseOutlined,
     DownOutlined,
     InfoCircleOutlined
 } from '@ant-design/icons-vue'
@@ -78,7 +76,7 @@ const loadProviders = async () => {
             // Auto Select first available model
             if (availableProviders.value.length > 0) {
                 const first = availableProviders.value[0]
-                selectedProvider.value = first.modelId
+                if (first) selectedProvider.value = first.modelId
             }
         }
     } catch (error) {
@@ -129,8 +127,8 @@ const slashFilter = ref('')
 const filteredSkills = computed(() => {
     if (!slashFilter.value) return availableSkills.value
     const filter = slashFilter.value.toLowerCase()
-    return availableSkills.value.filter(s => 
-        s.name.toLowerCase().includes(filter) || 
+    return availableSkills.value.filter(s =>
+        s.name.toLowerCase().includes(filter) ||
         s.displayName.toLowerCase().includes(filter)
     )
 })
@@ -186,9 +184,13 @@ const startChat = async () => {
                 timestamp: new Date().toISOString()
             }],
             currentPhase: 'clarification',
+            phaseDescription: '',
+            turnCount: 0,
+            extractedInfo: {},
+            generatedPrompt: null,
             promptGenerated: false
         }
-    } else {
+    } else if (session.value) {
         session.value.history.push({
             role: 'user',
             content: initialInput,
@@ -202,7 +204,7 @@ const startChat = async () => {
 
     try {
         // 1. 创建会话 (如果还没有)
-        let sessionId = session.value.sessionId
+        let sessionId = session.value?.sessionId
         if (!sessionId) {
             const res = await startAgentSession({
                 initialInput: initialInput,
@@ -213,10 +215,10 @@ const startChat = async () => {
                 session.value = res.data
                 // 模拟打字机效果显示最后一条 AI 回复
                 const lastMsg = session.value!.history[session.value!.history.length - 1]
-                if (lastMsg.role === 'assistant') {
+                if (lastMsg && lastMsg.role === 'assistant') {
                     // 暂时从 history 移除，用 currentAiResponse 模拟流式
                     session.value!.history.pop()
-                    const fullContent = lastMsg.content
+                    const fullContent = lastMsg.content || ''
                     currentAiResponse.value = ''
 
                     // 模拟流式
@@ -295,8 +297,8 @@ const sendMessage = async () => {
                         // 解析 JSON: {"name":"xxx","display":"中文名","params":"..."}
                         try {
                             const data = JSON.parse(chunk)
-                            thoughtProcess.value.push({ 
-                                type: 'TOOL_START', 
+                            thoughtProcess.value.push({
+                                type: 'TOOL_START',
                                 content: data.display || data.name,
                                 name: data.name,
                                 params: data.params || ''
@@ -314,8 +316,8 @@ const sendMessage = async () => {
                                 last.content = `${data.display} 完成`
                                 last.preview = data.preview || `获取了 ${data.length} 字符数据`
                             } else {
-                                thoughtProcess.value.push({ 
-                                    type: 'TOOL_END', 
+                                thoughtProcess.value.push({
+                                    type: 'TOOL_END',
                                     content: `${data.display} 完成`,
                                     preview: data.preview || `获取了 ${data.length} 字符数据`
                                 })
@@ -433,9 +435,6 @@ const scrollToBottom = () => {
 }
 
 // 返回
-const goBack = () => {
-    router.back()
-}
 
 // 强制清空输入框 (同步执行)
 const clearInput = () => {
@@ -531,18 +530,14 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
                 <!-- 已选中的工具提示 -->
                 <p v-if="selectedSkills.length > 0 && !isSelectedModelUnsupported" class="selected-skill-hint">
-                    当前工具：{{ availableSkills.find(s => s.name === selectedSkills[0])?.displayName }}
+                    当前工具：{{availableSkills.find(s => s.name === selectedSkills[0])?.displayName}}
                     <a @click="selectedSkills = []">取消</a>
                 </p>
             </div>
 
             <!-- Model Selection Modal (Categorized) -->
-            <ModelSelectorModal 
-                v-model:open="showModelModal"
-                :models="availableProviders"
-                :selectedModelId="selectedProvider"
-                @select="selectModel"
-            />
+            <ModelSelectorModal v-model:open="showModelModal" :models="availableProviders"
+                :selectedModelId="selectedProvider" @select="selectModel" />
 
 
             <!-- 对话消息 -->
@@ -561,10 +556,13 @@ const handleKeydown = async (e: KeyboardEvent) => {
                 <!-- 思维链展示区 (流式生成时) -->
                 <div v-if="sending && thoughtProcess.length > 0" class="thought-chain">
                     <div class="thought-chain-header">
-                        <span class="chain-icon"><SettingOutlined :spin="true" /></span>
+                        <span class="chain-icon">
+                            <SettingOutlined :spin="true" />
+                        </span>
                         <span>AI 正在思考...</span>
                     </div>
-                    <div v-for="(step, idx) in thoughtProcess" :key="idx" :class="['thought-item', step.type.toLowerCase()]">
+                    <div v-for="(step, idx) in thoughtProcess" :key="idx"
+                        :class="['thought-item', step.type.toLowerCase()]">
                         <template v-if="step.type === 'THOUGHT'">
                             <span class="step-icon thought-icon">[思]</span>
                             <div class="step-body">
@@ -572,14 +570,18 @@ const handleKeydown = async (e: KeyboardEvent) => {
                             </div>
                         </template>
                         <template v-else-if="step.type === 'TOOL_START'">
-                            <span class="step-icon tool-icon"><SettingOutlined :spin="true" /></span>
+                            <span class="step-icon tool-icon">
+                                <SettingOutlined :spin="true" />
+                            </span>
                             <div class="step-body">
                                 <span class="step-content">正在调用 <strong>{{ step.content }}</strong></span>
                                 <span v-if="step.params" class="step-params">{{ step.params }}</span>
                             </div>
                         </template>
                         <template v-else-if="step.type === 'TOOL_END'">
-                            <span class="step-icon done-icon"><CheckOutlined /></span>
+                            <span class="step-icon done-icon">
+                                <CheckOutlined />
+                            </span>
                             <div class="step-body">
                                 <span class="step-content">{{ step.content }}</span>
                                 <span v-if="step.preview" class="step-preview">{{ step.preview }}</span>
@@ -629,12 +631,8 @@ const handleKeydown = async (e: KeyboardEvent) => {
             <!-- Slash 命令下拉菜单 -->
             <div v-if="showSlashMenu" class="slash-menu">
                 <div class="slash-menu-header">可用工具</div>
-                <div 
-                    v-for="skill in filteredSkills" 
-                    :key="skill.name" 
-                    class="slash-menu-item"
-                    @click="selectSkillFromMenu(skill)"
-                >
+                <div v-for="skill in filteredSkills" :key="skill.name" class="slash-menu-item"
+                    @click="selectSkillFromMenu(skill)">
                     <span class="slash-cmd">/{{ skill.name }}</span>
                     <span class="slash-desc">{{ skill.displayName }}</span>
                 </div>
@@ -642,15 +640,9 @@ const handleKeydown = async (e: KeyboardEvent) => {
                     无匹配的工具
                 </div>
             </div>
-            <a-textarea 
-                ref="textareaRef" 
-                v-model:value="userInput" 
-                :placeholder="session ? '输入你的回复...' : '描述你想做什么，输入 / 查看工具'"
-                :auto-size="{ minRows: 1, maxRows: 4 }" 
-                @keydown="handleKeydown" 
-                @input="handleInputChange"
-                :disabled="sending" 
-            />
+            <a-textarea ref="textareaRef" v-model:value="userInput"
+                :placeholder="session ? '输入你的回复...' : '描述你想做什么，输入 / 查看工具'" :auto-size="{ minRows: 1, maxRows: 4 }"
+                @keydown="handleKeydown" @input="handleInputChange" :disabled="sending" />
             <a-button type="primary" :loading="loading || sending" @click="session ? sendMessage() : startChat()">
                 <SendOutlined />
             </a-button>
@@ -853,13 +845,15 @@ const handleKeydown = async (e: KeyboardEvent) => {
     display: flex;
     gap: var(--space-3);
     max-width: 80%;
-    width: fit-content; /* Critical fix: Don't stretch */
+    width: fit-content;
+    /* Critical fix: Don't stretch */
 }
 
 .message.user {
     flex-direction: row-reverse;
     align-self: flex-end;
-    margin-left: auto; /* Push to right */
+    margin-left: auto;
+    /* Push to right */
 }
 
 .message.assistant {
@@ -900,13 +894,16 @@ const handleKeydown = async (e: KeyboardEvent) => {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    word-break: break-word; /* Ensure long text wraps */
+    word-break: break-word;
+    /* Ensure long text wraps */
     overflow-wrap: break-word;
-    min-width: 0; /* Flexbox text overflow fix */
+    min-width: 0;
+    /* Flexbox text overflow fix */
 }
 
 .message.user .content {
-    background: #1677ff !important; /* Ant Design Blue - hardcoded safety */
+    background: #1677ff !important;
+    /* Ant Design Blue - hardcoded safety */
     color: #ffffff !important;
     border-radius: 12px 12px 0 12px;
 }
@@ -1166,13 +1163,25 @@ const handleKeydown = async (e: KeyboardEvent) => {
 }
 
 @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-5px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Custom Modal & Sidebar Layout */
