@@ -43,7 +43,6 @@ const sortedUniqueProviders = computed(() => {
             claude: 60,
             anthropic: 60,
             gemini: 59,
-            google: 59,
             azure: 58,
             azureai: 58,
             bedrock: 57,

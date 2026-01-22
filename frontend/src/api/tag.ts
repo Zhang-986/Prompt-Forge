@@ -54,6 +54,11 @@ export function setPromptTags(promptId: number, tagIds: number[]) {
     return request.put<any, Result<void>>(`/tags/prompt/${promptId}`, tagIds)
 }
 
+// 批量获取工作空间内所有 Prompt 的标签映射
+export function getAllPromptTagMappings(workspaceId: number) {
+    return request.get<any, Result<Record<number, number[]>>>(`/tags/mappings?workspaceId=${workspaceId}`)
+}
+
 // 预定义颜色
 export const TAG_COLORS = [
     '#5e6ad2',  // Purple (default)

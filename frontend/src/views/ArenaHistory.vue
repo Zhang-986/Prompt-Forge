@@ -68,6 +68,17 @@ const totalStats = computed(() => {
   return { tokens, avgLatency }
 })
 
+// 格式化日期
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return ''
+  // 后端返回的时间如果是 UTC 但没有 Z 后缀，手动添加 Z 使其被识别为 UTC
+  // 简单判断：如果不包含 Z 且不包含 +TEMPO（时区偏移），则默认为 UTC
+  const normalizedDate = (dateStr.endsWith('Z') || dateStr.includes('+'))
+    ? dateStr
+    : `${dateStr}Z`
+  return new Date(normalizedDate).toLocaleString()
+}
+
 onMounted(() => {
   loadHistory()
 })
@@ -103,7 +114,7 @@ onMounted(() => {
             </span>
           </div>
           <div class="card-footer">
-            <span class="date">{{ new Date(item.createdAt).toLocaleString() }}</span>
+            <span class="date">{{ formatDate(item.createdAt) }}</span>
           </div>
         </div>
       </div>

@@ -27,13 +27,11 @@ export interface SkillInfo {
 export interface StartCoachRequest {
     initialInput: string
     provider?: string
-    selectedSkillNames?: string[]
 }
 
 export interface CoachChatRequest {
     sessionId: string
     message: string
-    selectedSkillNames?: string[]
 }
 
 export interface ConfirmPromptRequest {

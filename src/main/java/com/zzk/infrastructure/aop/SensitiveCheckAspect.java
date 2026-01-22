@@ -179,10 +179,11 @@ public class SensitiveCheckAspect {
         if (text == null || text.isEmpty())
             return;
 
-        // 短路优化：发现即返回，不统计具体有哪些
-        if (sensitiveWordService.containsSensitiveWord(text)) {
-            log.warn("检测到敏感词 - 字段: {}", fieldName);
-            throw new BusinessException("内容包含敏感词，请修改后重试");
+        // 使用 findFirstSensitiveWord 获取具体匹配的词
+        String matchedWord = sensitiveWordService.findFirstSensitiveWord(text);
+        if (matchedWord != null) {
+            log.warn("检测到敏感词 - 字段: {}, 触发词: 【{}】", fieldName, matchedWord);
+            throw new BusinessException("内容包含敏感词【" + matchedWord + "】，请修改后重试");
         }
     }
 }

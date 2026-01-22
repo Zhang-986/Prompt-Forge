@@ -20,9 +20,9 @@ import java.util.stream.Collectors;
 @Repository
 @RequiredArgsConstructor
 public class TagRepositoryImpl implements TagRepository {
-    
+
     private final TagMapper tagMapper;
-    
+
     @Override
     public Tag save(Tag tag) {
         TagPO po = toTagPO(tag);
@@ -34,60 +34,72 @@ public class TagRepositoryImpl implements TagRepository {
         }
         return tag;
     }
-    
+
     @Override
     public Optional<Tag> findById(Long id) {
         TagPO po = tagMapper.selectById(id);
         return Optional.ofNullable(po).map(this::toTag);
     }
-    
+
     @Override
     public List<Tag> findByWorkspaceId(Long workspaceId) {
         return tagMapper.selectByWorkspaceId(workspaceId).stream()
                 .map(this::toTag)
                 .collect(Collectors.toList());
     }
-    
+
     @Override
     public Optional<Tag> findByNameAndWorkspaceId(String name, Long workspaceId) {
         TagPO po = tagMapper.selectByNameAndWorkspaceId(name, workspaceId);
         return Optional.ofNullable(po).map(this::toTag);
     }
-    
+
     @Override
     public void deleteById(Long id) {
         tagMapper.deleteById(id);
     }
-    
+
     @Override
     public void addTagToPrompt(Long promptId, Long tagId) {
         tagMapper.addTagToPrompt(promptId, tagId);
     }
-    
+
     @Override
     public void removeTagFromPrompt(Long promptId, Long tagId) {
         tagMapper.removeTagFromPrompt(promptId, tagId);
     }
-    
+
     @Override
     public List<Tag> findTagsByPromptId(Long promptId) {
         return tagMapper.selectTagsByPromptId(promptId).stream()
                 .map(this::toTag)
                 .collect(Collectors.toList());
     }
-    
+
     @Override
     public List<Long> findPromptIdsByTagId(Long tagId) {
         return tagMapper.selectPromptIdsByTagId(tagId);
     }
-    
+
     @Override
     public void removeAllTagRelations(Long tagId) {
         tagMapper.removeAllTagRelations(tagId);
     }
-    
+
+    @Override
+    public java.util.Map<Long, java.util.List<Long>> findAllPromptTagMappingsByWorkspace(Long workspaceId) {
+        List<java.util.Map<String, Long>> relations = tagMapper.selectAllPromptTagRelationsByWorkspace(workspaceId);
+        java.util.Map<Long, java.util.List<Long>> result = new java.util.HashMap<>();
+        for (java.util.Map<String, Long> row : relations) {
+            Long promptId = ((Number) row.get("promptId")).longValue();
+            Long tagId = ((Number) row.get("tagId")).longValue();
+            result.computeIfAbsent(promptId, k -> new java.util.ArrayList<>()).add(tagId);
+        }
+        return result;
+    }
+
     // ==================== 转换方法 ====================
-    
+
     private Tag toTag(TagPO po) {
         return Tag.builder()
                 .id(po.getId())
@@ -98,7 +110,7 @@ public class TagRepositoryImpl implements TagRepository {
                 .createdAt(po.getCreatedAt())
                 .build();
     }
-    
+
     private TagPO toTagPO(Tag tag) {
         return TagPO.builder()
                 .id(tag.getId())

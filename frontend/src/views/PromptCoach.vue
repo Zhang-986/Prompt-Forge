@@ -18,9 +18,7 @@ import {
     startAgentSession,
     sendAgentMessage,
     getCoachSession,
-    getAvailableSkills,
-    type CoachSession,
-    type SkillInfo
+    type CoachSession
 } from '../api/promptCoach'
 import { getAvailableModels, type AvailableModelInfo } from '../api/arena'
 
@@ -42,10 +40,7 @@ const availableProviders = ref<AvailableModelInfo[]>([])
 const loadingProviders = ref(false)
 const showModelModal = ref(false)
 
-// Skills 状态
-const availableSkills = ref<SkillInfo[]>([])
-const selectedSkills = ref<string[]>([])
-const loadingSkills = ref(false)
+
 
 
 const selectedModelInfo = computed(() => {
@@ -92,7 +87,6 @@ const userAvatar = ref('')
 // 页面加载时获取模型列表和用户信息
 onMounted(() => {
     loadProviders()
-    loadSkills()
     const userStr = localStorage.getItem('user')
     if (userStr) {
         try {
@@ -104,63 +98,7 @@ onMounted(() => {
     }
 })
 
-// 加载可用 Skills
-const loadSkills = async () => {
-    loadingSkills.value = true
-    try {
-        const res = await getAvailableSkills()
-        if (res.code === 200) {
-            availableSkills.value = res.data
-        }
-    } catch (error) {
-        console.error('加载 Skills 失败', error)
-    } finally {
-        loadingSkills.value = false
-    }
-}
 
-// Slash 命令菜单状态
-const showSlashMenu = ref(false)
-const slashFilter = ref('')
-
-// 过滤 Skills（基于 / 后面的输入）
-const filteredSkills = computed(() => {
-    if (!slashFilter.value) return availableSkills.value
-    const filter = slashFilter.value.toLowerCase()
-    return availableSkills.value.filter(s =>
-        s.name.toLowerCase().includes(filter) ||
-        s.displayName.toLowerCase().includes(filter)
-    )
-})
-
-// 检测输入中的 / 命令
-const handleInputChange = () => {
-    // 如果模型不支持工具，不显示菜单
-    if (isSelectedModelUnsupported.value) {
-        showSlashMenu.value = false
-        return
-    }
-
-    const input = userInput.value
-    if (input.startsWith('/')) {
-        showSlashMenu.value = true
-        slashFilter.value = input.slice(1)
-    } else {
-        showSlashMenu.value = false
-        slashFilter.value = ''
-    }
-}
-
-// 选择 Skill（从 slash 菜单）
-const selectSkillFromMenu = (skill: SkillInfo) => {
-    // 设置选中的 Skill
-    selectedSkills.value = [skill.name]
-    // 清空输入框，让用户输入实际问题
-    userInput.value = ''
-    showSlashMenu.value = false
-    // 可选：显示一个提示
-    message.info(`已选择工具：${skill.displayName}，请输入你的问题`)
-}
 
 // 开始对话
 const startChat = async () => {
@@ -208,8 +146,7 @@ const startChat = async () => {
         if (!sessionId) {
             const res = await startAgentSession({
                 initialInput: initialInput,
-                provider: selectedProvider.value || undefined,
-                selectedSkillNames: selectedSkills.value.length > 0 ? selectedSkills.value : undefined
+                provider: selectedProvider.value || undefined
             })
             if (res.code === 200) {
                 session.value = res.data
@@ -278,8 +215,7 @@ const sendMessage = async () => {
         await sendAgentMessage(
             {
                 sessionId: session.value.sessionId,
-                message: userMessage,
-                selectedSkillNames: selectedSkills.value.length > 0 ? selectedSkills.value : undefined
+                message: userMessage
             },
             (chunk) => {
                 // 处理自定义事件协议
@@ -519,19 +455,8 @@ const handleKeydown = async (e: KeyboardEvent) => {
                 <p v-if="isSelectedModelUnsupported" class="coach-model-hint">
                     <InfoCircleOutlined /> 此模型不支持联网工具，仅提供对话建议
                 </p>
-                <p v-else-if="selectedModelInfo" class="coach-model-hint success">
-                    <CheckOutlined /> 全功能模式 (支持搜索/代码分析)
-                </p>
-
-                <!-- Slash 命令提示（仅支持工具的模型显示） -->
-                <p v-if="availableSkills.length > 0 && !isSelectedModelUnsupported" class="slash-hint">
-                    输入 <code>/</code> 查看可用工具
-                </p>
-
-                <!-- 已选中的工具提示 -->
-                <p v-if="selectedSkills.length > 0 && !isSelectedModelUnsupported" class="selected-skill-hint">
-                    当前工具：{{availableSkills.find(s => s.name === selectedSkills[0])?.displayName}}
-                    <a @click="selectedSkills = []">取消</a>
+                <p v-if="selectedModelInfo && !isSelectedModelUnsupported" class="coach-model-hint success">
+                    <CheckOutlined /> AI 可自动调用联网、代码分析等工具
                 </p>
             </div>
 
@@ -628,21 +553,9 @@ const handleKeydown = async (e: KeyboardEvent) => {
 
         <!-- 输入区域 -->
         <div class="input-area">
-            <!-- Slash 命令下拉菜单 -->
-            <div v-if="showSlashMenu" class="slash-menu">
-                <div class="slash-menu-header">可用工具</div>
-                <div v-for="skill in filteredSkills" :key="skill.name" class="slash-menu-item"
-                    @click="selectSkillFromMenu(skill)">
-                    <span class="slash-cmd">/{{ skill.name }}</span>
-                    <span class="slash-desc">{{ skill.displayName }}</span>
-                </div>
-                <div v-if="filteredSkills.length === 0" class="slash-menu-empty">
-                    无匹配的工具
-                </div>
-            </div>
             <a-textarea ref="textareaRef" v-model:value="userInput"
-                :placeholder="session ? '输入你的回复...' : '描述你想做什么，输入 / 查看工具'" :auto-size="{ minRows: 1, maxRows: 4 }"
-                @keydown="handleKeydown" @input="handleInputChange" :disabled="sending" />
+                :placeholder="session ? '输入你的回复...' : '描述你想做什么，AI 会自动调用合适的工具'" :auto-size="{ minRows: 1, maxRows: 4 }"
+                @keydown="handleKeydown" :disabled="sending" />
             <a-button type="primary" :loading="loading || sending" @click="session ? sendMessage() : startChat()">
                 <SendOutlined />
             </a-button>

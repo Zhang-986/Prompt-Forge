@@ -131,11 +131,13 @@ public class SensitiveWordService {
             }
         }
     }
+
     /**
      * 外部调度器：全文扫描
      */
     public boolean containsSensitiveWord(String text) {
-        if (text == null || text.isEmpty()) return false;
+        if (text == null || text.isEmpty())
+            return false;
 
         // 像雷达扫描一样，以每一个字符作为“起点”去试探
         for (int i = 0; i < text.length(); i++) {
@@ -150,7 +152,27 @@ public class SensitiveWordService {
     }
 
     /**
+     * 查找第一个匹配的敏感词（用于调试和日志）
+     * 
+     * @param text 待检测文本
+     * @return 匹配到的敏感词，未匹配返回 null
+     */
+    public String findFirstSensitiveWord(String text) {
+        if (text == null || text.isEmpty())
+            return null;
+
+        for (int i = 0; i < text.length(); i++) {
+            int length = checkSensitiveWord(text, i);
+            if (length > 0) {
+                return text.substring(i, i + length);
+            }
+        }
+        return null;
+    }
+
+    /**
      * 核心匹配引擎：从 startIndex 开始往后“摸”，看能摸到多长的敏感词
+     * 
      * @return 匹配到的最长合法词长度（如果没有合规词，返回 0）
      */
     @SuppressWarnings("unchecked")
@@ -158,8 +180,8 @@ public class SensitiveWordService {
         // 【初始化】指针回到 Trie 树的根节点
         Map<Character, Object> currentMap = sensitiveWordMap;
 
-        int matchLength = 0;      // 探路长度：只要树上有路，它就一直加
-        int lastMatchLength = 0;  // 确认长度：只有走到标记为 isEnd=true 的节点，才更新这个值
+        int matchLength = 0; // 探路长度：只要树上有路，它就一直加
+        int lastMatchLength = 0; // 确认长度：只有走到标记为 isEnd=true 的节点，才更新这个值
 
         // 【阶段 A：寻路】从指定的起点开始，一个字一个字往后读
         for (int i = startIndex; i < text.length(); i++) {
@@ -189,6 +211,5 @@ public class SensitiveWordService {
         // 返回最后一次“打卡成功”的步数
         return lastMatchLength;
     }
-
 
 }

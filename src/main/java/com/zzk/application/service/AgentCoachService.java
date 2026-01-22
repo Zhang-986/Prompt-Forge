@@ -44,6 +44,7 @@ public class AgentCoachService {
     private final DynamicLlmClientFactory llmFactory;
     private final SkillRegistry skillRegistry;
     private final FunctionCallingClient functionCallingClient;
+    private final SkillSelectorService skillSelectorService;
 
     public AgentCoachService(
             PromptCoachSessionRepository sessionRepository,
@@ -51,13 +52,15 @@ public class AgentCoachService {
             UserModelConfigRepository userConfigRepository,
             DynamicLlmClientFactory llmFactory,
             SkillRegistry skillRegistry,
-            FunctionCallingClient functionCallingClient) {
+            FunctionCallingClient functionCallingClient,
+            SkillSelectorService skillSelectorService) {
         this.sessionRepository = sessionRepository;
         this.preferenceRepository = preferenceRepository;
         this.userConfigRepository = userConfigRepository;
         this.llmFactory = llmFactory;
         this.skillRegistry = skillRegistry;
         this.functionCallingClient = functionCallingClient;
+        this.skillSelectorService = skillSelectorService;
 
         log.info("[AgentCoachService] 初始化完成，SkillRegistry 已加载 {} 个技能",
                 skillRegistry.getAllSkillNames().size());
@@ -66,15 +69,13 @@ public class AgentCoachService {
     /**
      * 开始 Agent 会话
      * 
-     * 使用用户选择的 Skills 进行 Function Calling
+     * 使用 LLM 自动推断需要的 Skills 进行 Function Calling
      * 
-     * @param userId             用户ID
-     * @param initialInput       初始输入
-     * @param provider           AI 模型提供商
-     * @param selectedSkillNames 用户选择的 Skill 名称列表（为空则使用纯文本模式）
+     * @param userId       用户ID
+     * @param initialInput 初始输入
+     * @param provider     AI 模型提供商
      */
-    public PromptCoachSession startAgentSession(Long userId, String initialInput, String provider,
-            List<String> selectedSkillNames) {
+    public PromptCoachSession startAgentSession(Long userId, String initialInput, String provider) {
         // 1. 获取用户模型配置
         UserModelConfig modelConfig = selectModel(userId, provider);
 
@@ -90,11 +91,12 @@ public class AgentCoachService {
         // 3. 添加用户初始输入
         session.addUserMessage(initialInput);
 
-        // 4. 使用用户选择的 Skills（而非自动匹配）
-        List<SkillMetadata> selectedSkills = skillRegistry.getSkillsByNames(selectedSkillNames);
-        log.info("[startAgentSession] 用户选择了 {} 个 Skill: {}",
+        // 4. LLM 自动推断需要的 Skills（核心改动：从手动选择改为自动推断）
+        List<String> inferredSkillNames = skillSelectorService.inferRequiredSkills(initialInput, modelConfig);
+        List<SkillMetadata> selectedSkills = skillRegistry.getSkillsByNames(inferredSkillNames);
+        log.info("[startAgentSession] LLM 自动推断需要 {} 个 Skill: {}",
                 selectedSkills.size(),
-                selectedSkills.stream().map(SkillMetadata::getName).toList());
+                inferredSkillNames);
 
         // 5. 构建消息列表
         String systemPrompt = buildAgentSystemPrompt(session);
@@ -139,13 +141,12 @@ public class AgentCoachService {
     /**
      * Agent 对话（带工具调用）
      * 
-     * 使用用户选择的 Skills 进行 Function Calling
+     * 使用 LLM 自动推断需要的 Skills 进行 Function Calling
      * 
-     * @param sessionId          会话ID
-     * @param userMessage        用户消息
-     * @param selectedSkillNames 用户选择的 Skill 名称列表（为空则使用纯文本模式）
+     * @param sessionId   会话ID
+     * @param userMessage 用户消息
      */
-    public Flux<String> agentChat(String sessionId, String userMessage, List<String> selectedSkillNames) {
+    public Flux<String> agentChat(String sessionId, String userMessage) {
         PromptCoachSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new BusinessException("会话不存在或已过期"));
 
@@ -157,11 +158,12 @@ public class AgentCoachService {
 
         UserModelConfig modelConfig = selectModel(session.getUserId(), session.getProvider());
 
-        // 使用用户选择的 Skills（而非自动匹配）
-        List<SkillMetadata> selectedSkills = skillRegistry.getSkillsByNames(selectedSkillNames);
-        log.info("[agentChat] 用户选择了 {} 个 Skill: {}",
+        // LLM 自动推断需要的 Skills（核心改动：从手动选择改为自动推断）
+        List<String> inferredSkillNames = skillSelectorService.inferRequiredSkills(userMessage, modelConfig);
+        List<SkillMetadata> selectedSkills = skillRegistry.getSkillsByNames(inferredSkillNames);
+        log.info("[agentChat] LLM 自动推断需要 {} 个 Skill: {}",
                 selectedSkills.size(),
-                selectedSkills.stream().map(SkillMetadata::getName).toList());
+                inferredSkillNames);
 
         // 构建消息列表
         String systemPrompt = buildAgentSystemPrompt(session);
@@ -256,24 +258,46 @@ public class AgentCoachService {
      */
     private String buildAgentSystemPrompt(PromptCoachSession session) {
         return """
-                你是一位具备超能力的精英产品专家（Product Expert），拥有多种工具来帮助用户。
+                你是一位 Prompt 工程专家，帮助用户快速生成高质量的 AI Prompt。
 
-                当你需要获取最新信息、分析代码仓库或评估 Prompt 质量时，请主动调用相应工具。
+                当你需要获取最新信息、分析代码仓库时，请主动调用相应工具。
 
-                当前阶段: %s (%s)
+                当前阶段: %s
+                对话轮数: %d
                 已收集信息:
                 %s
 
-                引导策略：
-                1. **深度挖掘**：追问到底，至少 5-8 轮对话深度。
-                2. **提供方案**：给出 2-4 个方案让用户选择，而不是开放式提问。
-                3. **主动使用工具**：如果用户提到技术栈、GitHub 链接，主动调用相应工具获取信息。
-                4. **最终输出**：在 PROMPT_GENERATION 阶段，用 "---最终Prompt---" 标记输出最终 Prompt。
+                **核心策略：先给出可用的 Prompt，再根据反馈优化**
+
+                工作流程：
+                1. **首轮对话**：根据用户描述，直接生成一个"初版 Prompt"（用 ---初版Prompt--- 标记）
+                   - 不要问太多问题，先给用户一个可用的东西
+                   - 初版可以不完美，但要能用
+
+                2. **后续对话**：根据用户反馈进行优化
+                   - 如果用户说"挺好/可以"，确认是否需要调整，如不需要则输出最终版
+                   - 如果用户提出具体修改意见，针对性调整
+                   - 如果用户表示不满意但没说具体问题，追问 1-2 个关键点
+
+                3. **最终输出**：当用户确认满意后，用 ---最终Prompt--- 标记输出
+
+                输出格式示例：
+                ```
+                根据你的描述，我为你生成了初版 Prompt：
+
+                ---初版Prompt---
+                [你生成的 Prompt 内容]
+                ---
+
+                如果需要调整，请告诉我：
+                - 想修改哪些地方？
+                - 有没有漏掉的要求？
+                ```
 
                 注意：使用中文回复。
                 """.formatted(
-                session.getCurrentPhase().name(),
                 session.getCurrentPhase().getDescription(),
+                session.getHistory().size() / 2, // 对话轮数
                 session.getFormattedExtractedInfo());
     }
 
@@ -321,32 +345,19 @@ public class AgentCoachService {
      * 解析 AI 回复并更新会话状态
      */
     private void parseAndUpdateSession(PromptCoachSession session, String response) {
-        // 检测是否生成了最终 Prompt
-        if (response.contains("---最终Prompt---") || response.contains("最终Prompt") ||
-                response.contains("生成的Prompt") || response.contains("最终的Prompt")) {
-            session.setCurrentPhase(CoachPhase.PROMPT_GENERATION);
+        // 检测初版 Prompt（用于记录进度，但不触发"保存"按钮）
+        if (response.contains("---初版Prompt---")) {
+            session.setCurrentPhase(CoachPhase.DETAIL_COLLECTION); // 进入细化阶段
+            log.info("[parseAndUpdateSession] 检测到初版 Prompt，进入细化阶段");
+        }
 
-            // 提取最终 Prompt
+        // 检测最终 Prompt（用户确认满意后才触发）
+        if (response.contains("---最终Prompt---") || response.contains("【最终Prompt】")) {
             String prompt = extractFinalPrompt(response);
-            if (prompt != null) {
+            if (prompt != null && prompt.length() > 50) {
+                session.setCurrentPhase(CoachPhase.PROMPT_GENERATION);
                 session.setGeneratedPrompt(prompt);
-            }
-        }
-
-        // 检测阶段转换信号
-        if (response.contains("技术栈") || response.contains("使用什么技术")) {
-            if (session.getCurrentPhase() == CoachPhase.GOAL_CLARIFICATION) {
-                session.setCurrentPhase(CoachPhase.SCENARIO_DEFINITION);
-            }
-        }
-        if (response.contains("具体功能") || response.contains("核心功能")) {
-            if (session.getCurrentPhase() == CoachPhase.SCENARIO_DEFINITION) {
-                session.setCurrentPhase(CoachPhase.DETAIL_COLLECTION);
-            }
-        }
-        if (response.contains("输出格式") || response.contains("格式要求")) {
-            if (session.getCurrentPhase() == CoachPhase.DETAIL_COLLECTION) {
-                session.setCurrentPhase(CoachPhase.FORMAT_PREFERENCE);
+                log.info("[parseAndUpdateSession] 检测到最终 Prompt，长度: {}", prompt.length());
             }
         }
     }

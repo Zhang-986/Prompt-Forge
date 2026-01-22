@@ -22,9 +22,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class TagAppService {
-    
+
     private final TagRepository tagRepository;
-    
+
     /**
      * 创建标签
      */
@@ -35,7 +35,7 @@ public class TagAppService {
         if (tagRepository.findByNameAndWorkspaceId(request.getName(), workspaceId).isPresent()) {
             throw new IllegalArgumentException("标签名称已存在");
         }
-        
+
         Tag tag = Tag.builder()
                 .name(request.getName())
                 .color(request.getColor() != null ? request.getColor() : Tag.COLOR_PURPLE)
@@ -43,11 +43,11 @@ public class TagAppService {
                 .workspaceId(workspaceId)
                 .createdAt(LocalDateTime.now())
                 .build();
-        
+
         tag = tagRepository.save(tag);
         return toTagDTO(tag);
     }
-    
+
     /**
      * 获取工作空间所有标签
      */
@@ -56,7 +56,7 @@ public class TagAppService {
                 .map(this::toTagDTO)
                 .collect(Collectors.toList());
     }
-    
+
     /**
      * 获取 Prompt 的标签
      */
@@ -65,7 +65,7 @@ public class TagAppService {
                 .map(this::toTagDTO)
                 .collect(Collectors.toList());
     }
-    
+
     /**
      * 删除标签
      */
@@ -76,7 +76,7 @@ public class TagAppService {
         // 再删除标签
         tagRepository.deleteById(tagId);
     }
-    
+
     /**
      * 为 Prompt 添加标签
      */
@@ -85,10 +85,10 @@ public class TagAppService {
         // 检查标签是否存在
         tagRepository.findById(tagId)
                 .orElseThrow(() -> new IllegalArgumentException("标签不存在"));
-        
+
         tagRepository.addTagToPrompt(promptId, tagId);
     }
-    
+
     /**
      * 移除 Prompt 的标签
      */
@@ -96,7 +96,7 @@ public class TagAppService {
     public void removeTagFromPrompt(Long promptId, Long tagId) {
         tagRepository.removeTagFromPrompt(promptId, tagId);
     }
-    
+
     /**
      * 批量设置 Prompt 的标签
      */
@@ -106,14 +106,14 @@ public class TagAppService {
         List<Long> currentTagIds = tagRepository.findTagsByPromptId(promptId).stream()
                 .map(Tag::getId)
                 .collect(Collectors.toList());
-        
+
         // 需要移除的标签
         for (Long currentTagId : currentTagIds) {
             if (!tagIds.contains(currentTagId)) {
                 tagRepository.removeTagFromPrompt(promptId, currentTagId);
             }
         }
-        
+
         // 需要添加的标签
         for (Long tagId : tagIds) {
             if (!currentTagIds.contains(tagId)) {
@@ -121,9 +121,18 @@ public class TagAppService {
             }
         }
     }
-    
+
+    /**
+     * 批量获取工作空间内所有 Prompt 的标签 ID 映射
+     * 
+     * @return Map of promptId -> List of tagIds
+     */
+    public java.util.Map<Long, java.util.List<Long>> getAllPromptTagMappings(Long workspaceId) {
+        return tagRepository.findAllPromptTagMappingsByWorkspace(workspaceId);
+    }
+
     // ==================== DTO 转换 ====================
-    
+
     private TagDTO toTagDTO(Tag tag) {
         return TagDTO.builder()
                 .id(tag.getId())

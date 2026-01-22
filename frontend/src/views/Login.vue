@@ -3,17 +3,13 @@ import { ref, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { login, register, getCaptcha, sendEmailCode, type LoginData, type RegisterData, type CaptchaResult } from '../api/user'
 import { message } from 'ant-design-vue'
-import { ReloadOutlined } from '@ant-design/icons-vue'
 import logo from '@/assets/logo.svg'
-import LoginMascot from '@/components/LoginMascot.vue'
 
 const router = useRouter()
 const route = useRoute()
 
 const activeTab = ref('login')
 const loading = ref(false)
-// Mascot mode state
-const mascotMode = ref<'normal' | 'password'>('normal')
 
 // 验证码相关
 const captchaRequired = ref(false)
@@ -179,7 +175,7 @@ const handleRegister = async () => {
       localStorage.setItem('token', res.data.token)
       localStorage.setItem('user', JSON.stringify(res.data.user))
       message.success('注册成功')
-      router.push('/prompts')
+      router.push('/app/prompts')
     } else {
       message.error(res.message || '注册失败')
     }
@@ -189,45 +185,34 @@ const handleRegister = async () => {
     loading.value = false
   }
 }
-
-// Input focus handlers for Mascot
-const handleInputFocus = (type: 'normal' | 'password') => {
-  mascotMode.value = type
-}
-
-const handleInputBlur = () => {
-  // Optional: Delay return to normal or keep looking?
-  // Usually returns to normal when clicking away
-  mascotMode.value = 'normal'
-}
 </script>
 
 <template>
   <div class="login-container">
-    <div class="login-card">
-      <LoginMascot :mode="mascotMode" />
-      <div class="logo">
+    <div class="login-box">
+      <div class="login-header">
         <img :src="logo" alt="Logo" class="logo-icon" />
-        <span class="logo-text">Prompt-Forge</span>
+        <h1 class="logo-text">Prompt-Forge</h1>
       </div>
 
-      <a-tabs v-model:activeKey="activeTab" centered>
+      <h2 class="welcome-text">欢迎回来</h2>
+
+      <a-tabs v-model:activeKey="activeTab" centered class="auth-tabs" :tabBarStyle="{ borderBottom: 'none' }">
         <a-tab-pane key="login" tab="登录">
-          <a-form layout="vertical">
-            <a-form-item label="用户名" required>
-              <a-input v-model:value="loginForm.username" placeholder="请输入用户名" size="large"
-                @focus="handleInputFocus('normal')" @blur="handleInputBlur" />
+          <a-form layout="vertical" class="auth-form">
+            <a-form-item>
+              <a-input v-model:value="loginForm.username" placeholder="用户名" size="large" class="minimal-input" />
             </a-form-item>
-            <a-form-item label="密码" required>
-              <a-input-password v-model:value="loginForm.password" placeholder="请输入密码" size="large"
-                @focus="handleInputFocus('password')" @blur="handleInputBlur" />
+            <a-form-item>
+              <a-input-password v-model:value="loginForm.password" placeholder="密码" size="large"
+                class="minimal-input" />
             </a-form-item>
 
             <!-- 验证码区域 -->
-            <a-form-item v-if="captchaRequired" label="验证码" required>
+            <a-form-item v-if="captchaRequired">
               <div class="captcha-row">
-                <a-input v-model:value="loginForm.captchaCode" placeholder="请输入验证码" size="large" class="captcha-input"
-                  @pressEnter="handleLogin" />
+                <a-input v-model:value="loginForm.captchaCode" placeholder="验证码" size="large"
+                  class="minimal-input captcha-input" @pressEnter="handleLogin" />
                 <div class="captcha-image-wrapper" @click="fetchCaptcha">
                   <img v-if="captchaData?.captchaImage" :src="captchaData.captchaImage" alt="验证码"
                     class="captcha-image" />
@@ -235,52 +220,47 @@ const handleInputBlur = () => {
                     <a-spin v-if="captchaLoading" size="small" />
                     <span v-else>点击获取</span>
                   </div>
-                  <div class="captcha-refresh" title="点击刷新">
-                    <ReloadOutlined />
-                  </div>
                 </div>
               </div>
             </a-form-item>
 
             <a-form-item>
-              <a-button type="primary" @click="handleLogin" :loading="loading" block size="large">
-                登录
+              <a-button type="primary" @click="handleLogin" :loading="loading" block size="large" class="submit-btn">
+                继续
               </a-button>
             </a-form-item>
           </a-form>
         </a-tab-pane>
 
         <a-tab-pane key="register" tab="注册">
-          <a-form layout="vertical">
-            <a-form-item label="用户名" required>
-              <a-input v-model:value="registerForm.username" placeholder="请输入用户名" size="large"
-                @focus="handleInputFocus('normal')" @blur="handleInputBlur" />
+          <a-form layout="vertical" class="auth-form">
+            <a-form-item>
+              <a-input v-model:value="registerForm.username" placeholder="用户名" size="large" class="minimal-input" />
             </a-form-item>
-            <a-form-item label="邮箱" required>
-              <a-input v-model:value="registerForm.email" type="email" placeholder="请输入邮箱" size="large"
-                @focus="handleInputFocus('normal')" @blur="handleInputBlur" />
+            <a-form-item>
+              <a-input v-model:value="registerForm.email" type="email" placeholder="邮箱地址" size="large"
+                class="minimal-input" />
             </a-form-item>
-            <a-form-item label="邮箱验证码" required>
+            <a-form-item>
               <div class="email-code-row">
-                <a-input v-model:value="registerForm.emailCode" placeholder="请输入验证码" size="large"
-                  class="email-code-input" />
-                <a-button size="large" :loading="emailCodeLoading" :disabled="emailCodeCooldown > 0"
-                  @click="handleSendEmailCode" class="send-code-btn">
-                  {{ emailCodeCooldown > 0 ? `${emailCodeCooldown}秒后重发` : '发送验证码' }}
+                <a-input v-model:value="registerForm.emailCode" placeholder="验证码" size="large"
+                  class="minimal-input email-input" />
+                <a-button type="link" :loading="emailCodeLoading" :disabled="emailCodeCooldown > 0"
+                  @click="handleSendEmailCode" class="send-code-link">
+                  {{ emailCodeCooldown > 0 ? `${emailCodeCooldown}s` : '发送验证码' }}
                 </a-button>
               </div>
             </a-form-item>
-            <a-form-item label="密码" required>
-              <a-input-password v-model:value="registerForm.password" placeholder="请输入密码" size="large"
-                @focus="handleInputFocus('password')" @blur="handleInputBlur" />
-            </a-form-item>
-            <a-form-item label="确认密码" required>
-              <a-input-password v-model:value="confirmPassword" placeholder="请再次输入密码" size="large"
-                @focus="handleInputFocus('password')" @blur="handleInputBlur" />
+            <a-form-item>
+              <a-input-password v-model:value="registerForm.password" placeholder="密码" size="large"
+                class="minimal-input" />
             </a-form-item>
             <a-form-item>
-              <a-button type="primary" @click="handleRegister" :loading="loading" block size="large">
-                注册
+              <a-input-password v-model:value="confirmPassword" placeholder="确认密码" size="large" class="minimal-input" />
+            </a-form-item>
+            <a-form-item>
+              <a-button type="primary" @click="handleRegister" :loading="loading" block size="large" class="submit-btn">
+                创建账号
               </a-button>
             </a-form-item>
           </a-form>
@@ -296,25 +276,25 @@ const handleInputBlur = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-primary);
+  background-color: #ffffff;
+  color: #000000;
 }
 
-.login-card {
-  width: 400px;
-  padding: var(--space-8);
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  position: relative;
-  /* Context for mascot absolute positioning */
-}
-
-.logo {
+.login-box {
+  width: 100%;
+  max-width: 320px;
+  padding: 0 20px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-8);
+}
+
+.login-header {
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
 
 .logo-icon {
@@ -323,16 +303,59 @@ const handleInputBlur = () => {
 }
 
 .logo-text {
-  font-size: var(--text-xl);
+  font-size: 20px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: #000;
 }
 
-/* 验证码样式 */
-.captcha-row {
+.welcome-text {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 32px;
+  color: #0d0d0d;
+}
+
+.auth-tabs {
+  width: 100%;
+}
+
+/* Minimalist Input Styles */
+.minimal-input {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  box-shadow: none !important;
+  font-size: 14px;
+  padding: 12px;
+  height: 48px;
+}
+
+.minimal-input:focus,
+.minimal-input:hover {
+  border-color: #000;
+}
+
+/* Button Styles */
+.submit-btn {
+  height: 48px;
+  background-color: #000;
+  border-color: #000;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.submit-btn:hover {
+  background-color: #333;
+  border-color: #333;
+}
+
+/* Captcha & Email layout */
+.captcha-row,
+.email-code-row {
   display: flex;
-  gap: var(--space-3);
-  align-items: center;
+  gap: 10px;
+  position: relative;
 }
 
 .captcha-input {
@@ -340,17 +363,16 @@ const handleInputBlur = () => {
 }
 
 .captcha-image-wrapper {
-  position: relative;
-  width: 120px;
-  height: 40px;
-  border-radius: var(--radius-md);
+  height: 48px;
+  width: 100px;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
   overflow: hidden;
   cursor: pointer;
-  background: var(--color-bg-tertiary);
-  border: 1px solid var(--color-border-light);
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #f9f9f9;
 }
 
 .captcha-image {
@@ -359,70 +381,43 @@ const handleInputBlur = () => {
   object-fit: cover;
 }
 
-.captcha-placeholder {
-  color: var(--color-text-tertiary);
-  font-size: var(--text-xs);
-}
-
-.captcha-refresh {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 18px;
-  height: 18px;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-primary);
-  font-size: 10px;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
-
-.captcha-image-wrapper:hover .captcha-refresh {
-  opacity: 1;
-}
-
-/* 邮箱验证码样式 */
-.email-code-row {
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
-}
-
-.email-code-input {
+.email-input {
   flex: 1;
 }
 
-.send-code-btn {
-  min-width: 120px;
-  white-space: nowrap;
+.send-code-link {
+  height: 48px;
+  color: #000;
+  padding: 0 10px;
 }
 
-/* 强制修复密码框内部边框 */
-:deep(.ant-input-affix-wrapper) {
-  padding: 0;
-  background: transparent !important;
-  border-color: var(--color-border-light) !important;
+.send-code-link:hover {
+  color: #333;
 }
 
-:deep(.ant-input-affix-wrapper > input.ant-input) {
-  border: none !important;
-  box-shadow: none !important;
-  background: transparent !important;
-  margin: 0 !important;
-  padding: 4px 11px !important;
-  /* 恢复默认内边距 */
-  height: 38px !important;
-  /* 匹配 large size */
+/* Override Ant Design Tabs to be very minimal */
+:deep(.ant-tabs-nav::before) {
+  border-bottom: none !important;
 }
 
-/* 聚焦时只改变外层 wrapper 的边框 */
-:deep(.ant-input-affix-wrapper:focus),
-:deep(.ant-input-affix-wrapper-focused) {
-  border-color: var(--color-primary) !important;
-  box-shadow: none !important;
+:deep(.ant-tabs-tab) {
+  font-size: 14px;
+  color: #666;
+  padding: 8px 0;
+  margin: 0 16px 0 0;
+}
+
+:deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
+  color: #000 !important;
+  font-weight: 500;
+}
+
+:deep(.ant-tabs-ink-bar) {
+  background: #000 !important;
+}
+
+/* Form Item spacing */
+:deep(.ant-form-item) {
+  margin-bottom: 16px;
 }
 </style>

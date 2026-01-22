@@ -286,7 +286,7 @@ const handleValidateProvider = async (providerId: string) => {
     try {
         const res = await validateProvider(providerId)
         if (res.code === 200) {
-            const result = res.data
+            const result: BatchValidationResult = res.data
             message.success({
                 content: `验证完成: 成功 ${result.successCount}, 失败 ${result.failedCount}, 已禁用 ${result.disabledCount} 个 404 模型`,
                 key: 'validate',
@@ -298,7 +298,7 @@ const handleValidateProvider = async (providerId: string) => {
                 loadModels()
             }
         } else {
-            message.error({ content: '验证失败: ' + res.message, key: 'validate' })
+            message.error({ content: '验证失败: ' + (res as any).message, key: 'validate' })
         }
     } catch (error) {
         console.error('验证失败:', error)

@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getPrompts, createPrompt, deletePrompt, updatePrompt, getLatestVersion, type Prompt } from '../api/prompt'
-import { getTags, createTag, deleteTag, getPromptTags, setPromptTags, TAG_COLORS, type Tag } from '../api/tag'
+import { getTags, createTag, deleteTag, getPromptTags, setPromptTags, getAllPromptTagMappings, TAG_COLORS, type Tag } from '../api/tag'
 import { exportPrompt, importPromptFile } from '../api/promptExport'
 import { optimizePrompt } from '../api/optimize'
 import { publishToPlaza, DEFAULT_CATEGORIES } from '../api/plaza'
@@ -139,18 +139,15 @@ const filteredPrompts = computed(() => {
   })
 })
 
-// 加载所有 Prompt 的标签
+// 加载所有 Prompt 的标签 (批量获取，减少 N+1 请求)
 const loadAllPromptTags = async () => {
-  const newMap: Record<number, number[]> = {}
-  for (const prompt of prompts.value) {
-    try {
-      const res = await getPromptTags(prompt.id)
-      if (res.code === 200) {
-        newMap[prompt.id] = res.data.map((t: Tag) => t.id)
-      }
-    } catch { }
-  }
-  promptTagsMap.value = newMap
+  if (currentWorkspaceId.value === undefined) return
+  try {
+    const res = await getAllPromptTagMappings(currentWorkspaceId.value)
+    if (res.code === 200) {
+      promptTagsMap.value = res.data || {}
+    }
+  } catch { }
 }
 
 // 工作空间切换处理
@@ -414,7 +411,7 @@ const handleDelete = (prompt: Prompt) => {
 
 // 查看版本历史
 const viewVersions = (prompt: Prompt) => {
-  router.push(`/prompts/${prompt.id}/versions`)
+  router.push({ name: 'VersionHistory', params: { id: prompt.id } })
 }
 
 // 退出登录

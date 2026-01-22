@@ -67,15 +67,14 @@ public class PromptCoachController {
                         HttpServletRequest httpRequest) {
 
                 Long userId = (Long) httpRequest.getAttribute("userId");
-                log.info("开始 Agent Coach 会话: userId={}, initialInput={}, skills={}",
-                                userId, request.getInitialInput(), request.getSelectedSkillNames());
+                log.info("开始 Agent Coach 会话: userId={}, initialInput={}",
+                                userId, request.getInitialInput());
 
-                // 统一路由到 Agent Service
+                // 统一路由到 Agent Service（Skills 由 AI 自动推断）
                 PromptCoachSession session = agentCoachService.startAgentSession(
                                 userId,
                                 request.getInitialInput(),
-                                request.getProvider(),
-                                request.getSelectedSkillNames());
+                                request.getProvider());
 
                 return Result.success(CoachSessionResponse.from(session));
         }
@@ -90,14 +89,13 @@ public class PromptCoachController {
                         HttpServletRequest httpRequest) {
 
                 Long userId = (Long) httpRequest.getAttribute("userId");
-                log.info("开始 Agent Coach 会话: userId={}, initialInput={}, skills={}",
-                                userId, request.getInitialInput(), request.getSelectedSkillNames());
+                log.info("开始 Agent Coach 会话: userId={}, initialInput={}",
+                                userId, request.getInitialInput());
 
                 PromptCoachSession session = agentCoachService.startAgentSession(
                                 userId,
                                 request.getInitialInput(),
-                                request.getProvider(),
-                                request.getSelectedSkillNames());
+                                request.getProvider());
 
                 return Result.success(CoachSessionResponse.from(session));
         }
@@ -109,13 +107,12 @@ public class PromptCoachController {
         @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
         @Operation(summary = "发送消息", description = "发送用户消息，SSE 流式返回 AI 回复（Agent 模式）")
         public Flux<ServerSentEvent<String>> chat(@Valid @RequestBody CoachChatRequest request) {
-                log.info("Coach 对话: sessionId={}, message={}, skills={}",
-                                request.getSessionId(), request.getMessage(), request.getSelectedSkillNames());
+                log.info("Coach 对话: sessionId={}, message={}",
+                                request.getSessionId(), request.getMessage());
 
                 return agentCoachService.agentChat(
                                 request.getSessionId(),
-                                request.getMessage(),
-                                request.getSelectedSkillNames())
+                                request.getMessage())
                                 .map(chunk -> ServerSentEvent.<String>builder()
                                                 .data(chunk.replace("\n", "\\n"))
                                                 .build())
@@ -130,13 +127,12 @@ public class PromptCoachController {
         @PostMapping(value = "/agent/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
         @Operation(summary = "Agent 对话", description = "发送消息到 Agent Coach，支持自动调用工具获取信息")
         public Flux<ServerSentEvent<String>> agentChat(@Valid @RequestBody CoachChatRequest request) {
-                log.info("Agent Coach 对话: sessionId={}, message={}, skills={}",
-                                request.getSessionId(), request.getMessage(), request.getSelectedSkillNames());
+                log.info("Agent Coach 对话: sessionId={}, message={}",
+                                request.getSessionId(), request.getMessage());
 
                 return agentCoachService.agentChat(
                                 request.getSessionId(),
-                                request.getMessage(),
-                                request.getSelectedSkillNames())
+                                request.getMessage())
                                 .map(chunk -> ServerSentEvent.<String>builder()
                                                 .data(chunk.replace("\n", "\\n"))
                                                 .build())
