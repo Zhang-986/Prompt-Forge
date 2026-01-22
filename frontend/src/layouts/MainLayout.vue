@@ -42,6 +42,11 @@
 
       <!-- BigModel.cn Promotion -->
       <div class="sidebar-promo-wrapper">
+        <div class="promo-hint">
+          <span class="hint-question">没有 API Key？</span>
+          <span class="hint-arrow">↓</span>
+          <span class="hint-answer">点这里免费领！</span>
+        </div>
         <a href="https://www.bigmodel.cn/invite?icode=9v1maCD3s4Titga15Jy0C3HEaazDlIZGj9HxftzTbt4%3D" target="_blank"
           class="sidebar-promo-card">
           <div class="promo-content">
@@ -320,6 +325,49 @@ const handleLogout = () => {
   flex-shrink: 0;
   z-index: 10;
   position: relative;
+}
+
+/* API Key 引导提示 */
+.promo-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: linear-gradient(135deg, rgba(126, 34, 206, 0.08) 0%, rgba(30, 64, 175, 0.08) 100%);
+  border-radius: var(--radius-md);
+  border: 1px dashed rgba(126, 34, 206, 0.25);
+}
+
+.hint-question {
+  font-size: 12px;
+  color: #7e22ce;
+  font-weight: 500;
+}
+
+.hint-arrow {
+  font-size: 16px;
+  color: #7e22ce;
+  animation: bounce 1s infinite;
+  line-height: 1;
+}
+
+@keyframes bounce {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(3px);
+  }
+}
+
+.hint-answer {
+  font-size: 11px;
+  color: #1e40af;
+  font-weight: 600;
 }
 
 .sidebar-promo-card {

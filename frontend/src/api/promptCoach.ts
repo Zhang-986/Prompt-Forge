@@ -68,7 +68,7 @@ export const sendCoachMessage = async (
     onError: (error: Error) => void
 ) => {
     const token = localStorage.getItem('token')
-    const baseUrl = import.meta.env.VITE_API_URL || '/api'
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
 
     try {
         const response = await fetch(`${baseUrl}/prompt-coach/chat`, {
@@ -158,7 +158,7 @@ export const sendAgentMessage = async (
     onError: (error: Error) => void
 ) => {
     const token = localStorage.getItem('token')
-    const baseUrl = import.meta.env.VITE_API_URL || '/api'
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
 
     try {
         const response = await fetch(`${baseUrl}/prompt-coach/agent/chat`, {

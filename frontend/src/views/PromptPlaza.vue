@@ -120,7 +120,7 @@ const handleClone = async () => {
         okText: '去查看',
         cancelText: '继续浏览',
         onOk: () => {
-          router.push(`/prompts/${res.data.id}/versions`)
+          router.push(`/app/prompts/${res.data.id}/versions`)
         }
       })
     }

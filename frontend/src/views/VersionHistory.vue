@@ -402,9 +402,9 @@ onMounted(() => {
 
               <!-- 内容预览（默认显示前3行） -->
               <div class="version-preview" @click.stop="toggleExpand(version.id)">
-                <pre v-if="!expandedVersions.has(version.id)">{{ version.content.split('\n').slice(0, 3).join('\n') }}{{
-                  version.content.split('\n').length > 3 ? '\n...' : '' }}</pre>
-                <pre v-else>{{ version.content }}</pre>
+                <pre v-if="!expandedVersions.has(version.id)">{{ (version.content || '').split('\n').slice(0, 3).join('\n') }}{{
+                  (version.content || '').split('\n').length > 3 ? '\n...' : '' }}</pre>
+                <pre v-else>{{ version.content || '' }}</pre>
               </div>
 
               <!-- 版本说明（小字） -->
