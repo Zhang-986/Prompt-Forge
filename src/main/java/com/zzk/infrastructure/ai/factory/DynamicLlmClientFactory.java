@@ -120,7 +120,7 @@ public class DynamicLlmClientFactory {
         String provider = config.getProvider();
 
         // 这些厂商的 Base URL 已包含版本路径，直接追加 /chat/completions
-        if (List.of("zhipu", "aliyun", "qwen", "moonshot", "cloudflare", "hunyuan",
+        if (List.of("openai", "deepseek", "zhipu", "aliyun", "qwen", "moonshot", "cloudflare", "hunyuan",
                 "baichuan", "minimax", "stepfun", "yi", "sensenova",
                 "mistral", "perplexity", "groq", "cohere", "novita", "togetherai",
                 "ollama", "openrouter").contains(provider)) {
@@ -132,7 +132,7 @@ public class DynamicLlmClientFactory {
         } else if (provider.equals("bedrock")) {
             chatEndpoint = "/model/" + model + "/invoke"; // AWS Bedrock 特殊路径
         } else {
-            chatEndpoint = "/v1/chat/completions"; // 标准 OpenAI 格式
+            chatEndpoint = "/chat/completions"; // 默认使用不带 /v1 的路径（假设 baseUrl 已包含版本）
         }
 
         return webClientBuilder.build()
@@ -153,9 +153,10 @@ public class DynamicLlmClientFactory {
                             .flatMap(body -> {
                                 log.error("[{}] API 错误: status={}, body={}", config.getProvider(),
                                         response.statusCode(), body);
-                                // 包含 body 以便识别 unknown_model 等特殊错误
+                                // 对错误信息进行脱敏，返回用户友好的消息
+                                String userFriendlyMessage = sanitizeApiError(response.statusCode().value(), body);
                                 return reactor.core.publisher.Mono.error(
-                                        new RuntimeException("API 调用失败: " + response.statusCode() + " - " + body));
+                                        new RuntimeException(userFriendlyMessage));
                             });
                 })
                 .bodyToFlux(String.class)
@@ -357,5 +358,33 @@ public class DynamicLlmClientFactory {
                     .toList();
         }
         return List.of();
+    }
+
+    /**
+     * 对 API 错误信息进行脱敏处理，避免泄露 API Key 等敏感信息到前端
+     */
+    private String sanitizeApiError(int statusCode, String rawBody) {
+        // 根据状态码返回用户友好的消息
+        switch (statusCode) {
+            case 401:
+                return "API Key 无效或已过期，请在「模型配置」中检查您的 API Key";
+            case 403:
+                return "API Key 权限不足，请确认是否已开通对应模型的访问权限";
+            case 404:
+                // 检查是否是模型不存在
+                if (rawBody != null && rawBody.contains("model")) {
+                    return "请求的模型不存在或未开通，请检查模型配置";
+                }
+                return "API 接口不存在，请检查配置的 Base URL 是否正确";
+            case 429:
+                return "API 请求过于频繁，请稍后再试";
+            case 500:
+            case 502:
+            case 503:
+                return "AI 服务暂时不可用，请稍后再试";
+            default:
+                // 对于其他错误，只返回状态码，不暴露原始错误内容
+                return "AI 服务调用失败 (错误码: " + statusCode + ")，请稍后重试或联系管理员";
+        }
     }
 }

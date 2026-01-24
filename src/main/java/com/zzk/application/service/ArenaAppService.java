@@ -138,7 +138,7 @@ public class ArenaAppService {
                 .models(modelsJson)
                 .status("RUNNING")
                 .creatorId(userId)
-                .createdAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai")))
                 .build();
         arenaSessionRepository.save(session);
         final Long sessionId = session.getId();
@@ -271,7 +271,7 @@ public class ArenaAppService {
                     .latencyMs(latencyMs)
                     .status(status)
                     .errorMessage(errorMessage)
-                    .createdAt(LocalDateTime.now())
+                    .createdAt(LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai")))
                     .build();
             arenaResultRepository.save(result);
             log.debug("保存竞技结果: sessionId={}, modelId={}", sessionId, modelId);
@@ -476,7 +476,7 @@ public class ArenaAppService {
                         .winnerModel(winnerModel)
                         .loserModel(loserModel)
                         .voterId(voterId)
-                        .createdAt(LocalDateTime.now())
+                        .createdAt(LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai")))
                         .build());
     }
 

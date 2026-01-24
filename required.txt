@@ -1,4 +1,0 @@
-1.  Coach 需要打磨代码，查看代码
-2.  Github, Tavily API KEY  填充
-3.  实现按需加载的AgentSkills填充处理
-4.  

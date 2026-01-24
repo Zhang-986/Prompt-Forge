@@ -664,7 +664,7 @@ onMounted(() => {
       <div class="model-select-content">
         <p class="model-hint">请选择用于优化 Prompt 的 AI 模型：</p>
         <a-radio-group v-model:value="selectedOptimizeModel" class="model-radio-group">
-          <a-radio v-for="model in availableModels" :key="model.provider" :value="model.provider"
+          <a-radio v-for="model in availableModels" :key="model.modelId" :value="model.modelId"
             class="model-radio-item">
             {{ model.displayName }}
           </a-radio>
