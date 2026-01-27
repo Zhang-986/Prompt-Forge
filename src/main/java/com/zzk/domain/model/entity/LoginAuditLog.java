@@ -11,7 +11,8 @@ import java.time.LocalDateTime;
 /**
  * 登录审计日志实体
  * 
- * <p>记录每次登录尝试的详细信息，用于安全审计和异常行为分析。
+ * <p>
+ * 记录每次登录尝试的详细信息，用于安全审计和异常行为分析。
  * 
  * @author zzk
  * @since 1.0.0
@@ -84,13 +85,26 @@ public class LoginAuditLog {
      * 创建失败日志的工厂方法
      */
     public static LoginAuditLog failure(String username, String ipAddress, String userAgent,
-                                        LoginResult result, String reason) {
+            LoginResult result, String reason) {
         return LoginAuditLog.builder()
                 .username(username)
                 .ipAddress(ipAddress)
                 .userAgent(userAgent)
                 .result(result)
                 .failureReason(reason)
+                .createdAt(LocalDateTime.now())
+                .build();
+    }
+
+    /**
+     * 创建注册后自动登录日志的工厂方法
+     */
+    public static LoginAuditLog registerSuccess(String username, String ipAddress, String userAgent) {
+        return LoginAuditLog.builder()
+                .username(username)
+                .ipAddress(ipAddress)
+                .userAgent(userAgent)
+                .result(LoginResult.REGISTER_SUCCESS)
                 .createdAt(LocalDateTime.now())
                 .build();
     }

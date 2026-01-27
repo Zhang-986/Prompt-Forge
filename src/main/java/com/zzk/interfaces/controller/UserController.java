@@ -150,7 +150,9 @@ public class UserController {
      */
     @PostMapping("/register")
     @Operation(summary = "用户注册")
-    public Result<Map<String, Object>> register(@Valid @RequestBody RegisterRequest request) {
+    public Result<Map<String, Object>> register(
+            HttpServletRequest httpRequest,
+            @Valid @RequestBody RegisterRequest request) {
         log.info("用户注册: username={}", request.getUsername());
 
         // 验证邮箱验证码
@@ -184,6 +186,13 @@ public class UserController {
 
         // 生成 JWT Token
         String token = jwtUtil.generateToken(user.getId(), user.getUsername());
+
+        // 记录登录日志（注册后自动登录）
+        String ip = getClientIp(httpRequest);
+        String userAgent = httpRequest.getHeader("User-Agent");
+        loginGuardService.logAudit(LoginAuditLog.registerSuccess(
+                user.getUsername(), ip, userAgent));
+        log.info("注册后自动登录日志已记录: username={}, ip={}", user.getUsername(), ip);
 
         Map<String, Object> data = new HashMap<>();
         data.put("token", token);

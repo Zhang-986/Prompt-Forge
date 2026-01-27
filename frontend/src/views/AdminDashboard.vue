@@ -835,7 +835,7 @@ onMounted(() => {
                             <thead>
                                 <tr>
                                     <th>ID</th>
-                                    <th>用户ID</th>
+
                                     <th>用户名</th>
                                     <th>IP地址</th>
                                     <th>User Agent</th>
@@ -845,7 +845,7 @@ onMounted(() => {
                             <tbody>
                                 <tr v-for="log in loginLogs" :key="log.id">
                                     <td>{{ log.id }}</td>
-                                    <td>{{ (log as any).userId }}</td>
+
                                     <td>{{ log.username }}</td>
                                     <td>{{ log.ipAddress }}</td>
                                     <td class="text-ellipsis" :title="log.userAgent">{{ log.userAgent }}</td>

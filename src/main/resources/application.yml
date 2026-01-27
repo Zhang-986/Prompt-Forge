@@ -18,7 +18,7 @@ spring:
   # ==================== 数据源配置 ====================
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: your-mysql-url
+    url: jdbc:mysql://10.147.17.199:3306/prompt_forge?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
     password: 1234
     hikari:
@@ -32,7 +32,7 @@ spring:
   # ==================== Redis 配置 ====================
   data:
     redis:
-      host: your-redis-host
+      host: 10.147.17.199
       port: 6379
       database: 0
       timeout: 10000ms
@@ -200,12 +200,12 @@ cache:
 # ==================== 对象存储配置 (Cloudflare R2) ====================
 storage:
   minio: # 这里名字可以随你改
-    endpoint: your-endpoint
-    access-key: your--access-key
-    secret-key: your-secret-key
+    endpoint: http://10.147.17.199:9000
+    access-key: FTlDg8Dsg0FcU5pFL3M8
+    secret-key: IvMWhxVF2Uxnq0gkyMZo551xxcNolzBgQIgcrVsz
     bucket-name: images  # 记得去 Minio 手动建一个
     region: auto
-    public-domain: your-domain
+    public-domain: http://10.147.17.199:9000/images
 
 # ==================== API 文档配置 ====================
 springdoc:
@@ -237,7 +237,7 @@ logging:
 
 # Tavily Search API (用于 WebSearchTool)
 tavily:
-  api-key: your-tavily-api-key  # 👈 填这里
+  api-key: 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  # 👈 填这里
 
 github:
-  token: your-github-token
+  token: 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
