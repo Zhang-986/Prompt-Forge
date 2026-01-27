@@ -144,37 +144,41 @@ const startChat = async () => {
         // 1. 创建会话 (如果还没有)
         let sessionId = session.value?.sessionId
         if (!sessionId) {
+            // ⚡ 性能优化：快速创建会话（< 100ms）
             const res = await startAgentSession({
                 initialInput: initialInput,
                 provider: selectedProvider.value || undefined
             })
             if (res.code === 200) {
                 session.value = res.data
-                // 模拟打字机效果显示最后一条 AI 回复
-                const lastMsg = session.value!.history[session.value!.history.length - 1]
-                if (lastMsg && lastMsg.role === 'assistant') {
-                    // 暂时从 history 移除，用 currentAiResponse 模拟流式
-                    session.value!.history.pop()
-                    const fullContent = lastMsg.content || ''
-                    currentAiResponse.value = ''
-
-                    // 模拟流式
-                    let i = 0
-                    const interval = setInterval(() => {
-                        currentAiResponse.value += fullContent.charAt(i)
-                        i++
+                sessionId = res.data.sessionId
+                
+                // ⚡ 立即获取首次 AI 回复（真正的 SSE 流式）
+                thoughtProcess.value = []
+                await sendAgentMessage(
+                    { sessionId: sessionId, message: null as any }, // null 表示首次对话
+                    (chunk) => {
+                        handleSSEChunk(chunk)
                         scrollToBottom()
-                        if (i >= fullContent.length) {
-                            clearInterval(interval)
-                            // 恢复到 history
-                            session.value!.history.push(lastMsg)
-                            currentAiResponse.value = ''
-                            sending.value = false
+                    },
+                    () => {
+                        // 完成后保存到 history
+                        if (currentAiResponse.value) {
+                            session.value!.history.push({
+                                role: 'assistant',
+                                content: currentAiResponse.value,
+                                timestamp: new Date().toISOString()
+                            })
                         }
-                    }, 30) // 30ms 一个字
-                } else {
-                    sending.value = false
-                }
+                        currentAiResponse.value = ''
+                        sending.value = false
+                    },
+                    (error) => {
+                        message.error('获取回复失败: ' + error.message)
+                        currentAiResponse.value = ''
+                        sending.value = false
+                    }
+                )
             } else {
                 message.error(res.message || '启动失败')
                 userInput.value = initialInput
@@ -189,7 +193,88 @@ const startChat = async () => {
 }
 
 const thoughtProcess = ref<{ type: string; content: string; name?: string; params?: string; preview?: string }[]>([])
-let currentEventType: string | null = null
+
+// 处理 SSE 事件流
+const handleSSEChunk = (chunk: string) => {
+    // 检查是否是后端发送的事件标记（格式：__SSE_EVENT__:TYPE:data）
+    if (chunk.startsWith('__SSE_EVENT__:')) {
+        const parts = chunk.split(':')
+        const eventType = parts[1]
+        const data = parts.slice(2).join(':')
+        
+        switch (eventType) {
+            case 'THOUGHT':
+                thoughtProcess.value.push({ type: 'thought', content: data })
+                break
+            case 'TOOL_START':
+                try {
+                    const toolInfo = JSON.parse(data)
+                    thoughtProcess.value.push({ 
+                        type: 'tool_start', 
+                        content: toolInfo.display || toolInfo.name,
+                        name: toolInfo.name,
+                        params: toolInfo.params
+                    })
+                } catch (e) {
+                    console.error('解析 TOOL_START 失败:', e)
+                }
+                break
+            case 'TOOL_END':
+                try {
+                    const toolResult = JSON.parse(data)
+                    thoughtProcess.value.push({ 
+                        type: 'tool_end', 
+                        content: toolResult.display || '执行完成',
+                        preview: toolResult.preview || `结果长度: ${toolResult.length} 字符`
+                    })
+                } catch (e) {
+                    console.error('解析 TOOL_END 失败:', e)
+                }
+                break
+        }
+    } 
+    // 检查是否是前端包装的事件（格式：__EVENT__:TYPE:data，来自旧的SSE解析）
+    else if (chunk.startsWith('__EVENT__:')) {
+        const parts = chunk.split(':')
+        const eventType = parts[1]
+        const data = parts.slice(2).join(':')
+        
+        switch (eventType) {
+            case 'THOUGHT':
+                thoughtProcess.value.push({ type: 'thought', content: data })
+                break
+            case 'TOOL_START':
+                try {
+                    const toolInfo = JSON.parse(data)
+                    thoughtProcess.value.push({ 
+                        type: 'tool_start', 
+                        content: toolInfo.display || toolInfo.name,
+                        name: toolInfo.name,
+                        params: toolInfo.params
+                    })
+                } catch (e) {
+                    console.error('解析 TOOL_START 失败:', e)
+                }
+                break
+            case 'TOOL_END':
+                try {
+                    const toolResult = JSON.parse(data)
+                    thoughtProcess.value.push({ 
+                        type: 'tool_end', 
+                        content: toolResult.display || '执行完成',
+                        preview: toolResult.preview || `结果长度: ${toolResult.length} 字符`
+                    })
+                } catch (e) {
+                    console.error('解析 TOOL_END 失败:', e)
+                }
+                break
+        }
+    } 
+    else {
+        // 普通文本内容，追加到 AI 回复
+        currentAiResponse.value += chunk
+    }
+}
 
 // 发送消息 (保持不变，但增加防抖或状态检查)
 const sendMessage = async () => {
@@ -202,7 +287,6 @@ const sendMessage = async () => {
     sending.value = true
     currentAiResponse.value = ''
     thoughtProcess.value = []
-    currentEventType = null
 
     session.value.history.push({
         role: 'user',
@@ -218,63 +302,7 @@ const sendMessage = async () => {
                 message: userMessage
             },
             (chunk) => {
-                // 处理自定义事件协议
-                if (chunk.startsWith('event: ')) {
-                    const type = chunk.replace('event: ', '').trim()
-                    currentEventType = type
-                    return
-                }
-
-                if (currentEventType) {
-                    // 如果当前是在处理事件
-                    if (currentEventType === 'THOUGHT') {
-                        thoughtProcess.value.push({ type: 'THOUGHT', content: chunk })
-                    } else if (currentEventType === 'TOOL_START') {
-                        // 解析 JSON: {"name":"xxx","display":"中文名","params":"..."}
-                        try {
-                            const data = JSON.parse(chunk)
-                            thoughtProcess.value.push({
-                                type: 'TOOL_START',
-                                content: data.display || data.name,
-                                name: data.name,
-                                params: data.params || ''
-                            })
-                        } catch {
-                            thoughtProcess.value.push({ type: 'TOOL_START', content: chunk })
-                        }
-                    } else if (currentEventType === 'TOOL_END') {
-                        // 解析 JSON: {"name":"xxx","display":"中文名","length":1234,"preview":"..."}
-                        try {
-                            const data = JSON.parse(chunk)
-                            const last = thoughtProcess.value[thoughtProcess.value.length - 1]
-                            if (last && last.type === 'TOOL_START' && last.name === data.name) {
-                                last.type = 'TOOL_END'
-                                last.content = `${data.display} 完成`
-                                last.preview = data.preview || `获取了 ${data.length} 字符数据`
-                            } else {
-                                thoughtProcess.value.push({
-                                    type: 'TOOL_END',
-                                    content: `${data.display} 完成`,
-                                    preview: data.preview || `获取了 ${data.length} 字符数据`
-                                })
-                            }
-                        } catch {
-                            const last = thoughtProcess.value[thoughtProcess.value.length - 1]
-                            if (last && last.type === 'TOOL_START') {
-                                last.type = 'TOOL_END'
-                                last.content = chunk
-                            } else {
-                                thoughtProcess.value.push({ type: 'TOOL_END', content: chunk })
-                            }
-                        }
-                    }
-                    currentEventType = null
-                    scrollToBottom()
-                    return
-                }
-
-                // 正常文本
-                currentAiResponse.value += chunk
+                handleSSEChunk(chunk)
                 scrollToBottom()
             },
             async () => {
@@ -487,14 +515,14 @@ const handleKeydown = async (e: KeyboardEvent) => {
                         <span>AI 正在思考...</span>
                     </div>
                     <div v-for="(step, idx) in thoughtProcess" :key="idx"
-                        :class="['thought-item', step.type.toLowerCase()]">
-                        <template v-if="step.type === 'THOUGHT'">
-                            <span class="step-icon thought-icon">[思]</span>
+                        :class="['thought-item', step.type]">
+                        <template v-if="step.type === 'thought'">
+                            <span class="step-icon thought-icon">💭</span>
                             <div class="step-body">
                                 <span class="step-content">{{ step.content }}</span>
                             </div>
                         </template>
-                        <template v-else-if="step.type === 'TOOL_START'">
+                        <template v-else-if="step.type === 'tool_start'">
                             <span class="step-icon tool-icon">
                                 <SettingOutlined :spin="true" />
                             </span>
@@ -503,7 +531,7 @@ const handleKeydown = async (e: KeyboardEvent) => {
                                 <span v-if="step.params" class="step-params">{{ step.params }}</span>
                             </div>
                         </template>
-                        <template v-else-if="step.type === 'TOOL_END'">
+                        <template v-else-if="step.type === 'tool_end'">
                             <span class="step-icon done-icon">
                                 <CheckOutlined />
                             </span>

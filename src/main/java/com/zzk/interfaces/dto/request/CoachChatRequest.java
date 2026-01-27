@@ -15,7 +15,6 @@ public class CoachChatRequest {
     @Schema(description = "会话ID")
     private String sessionId;
 
-    @NotBlank(message = "消息不能为空")
-    @Schema(description = "用户消息", example = "员工考勤管理")
+    @Schema(description = "用户消息（首次对话传 null，使用 session 中的 initialInput；后续对话传新消息）", example = "员工考勤管理")
     private String message;
 }

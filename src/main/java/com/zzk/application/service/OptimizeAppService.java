@@ -23,19 +23,19 @@ public class OptimizeAppService {
     private final UserModelConfigRepository userConfigRepository;
 
     private static final String META_PROMPT_TEMPLATE = """
-            You are an expert Prompt Engineer. Your task is to rewrite and optimize the user's input prompt to be high-quality, structured, and effective.
+        你是一位顶尖的 Prompt 工程师。你的任务是将用户的输入提示词进行改写和优化，使其成为高质量、结构清晰且效果极佳的提示。
 
-            Follow these guidelines:
-            1. Assign a clear Role (Persona).
-            2. Define the Task and Goal clearly.
-            3. Add Constraints or Format requirements.
-            4. Use placeholders like {{variable}} for dynamic parts if inferred.
+        请严格遵循以下原则进行优化：
+        1. 赋予一个明确的角色（Persona）
+        2. 清晰定义任务（Task）与最终目标（Goal）
+        3. 加入必要的约束条件（Constraints）或输出格式要求（Format requirements）
+        4. 如有动态可替换的部分，适当使用 {{变量名}} 这样的占位符
 
-            User Input:
-            %s
+        用户原始输入：
+        %s
 
-            Return ONLY the optimized prompt content. Do not include introductory or concluding remarks.
-            """;
+        只返回优化后的完整提示词内容，禁止包含任何开头介绍、结尾说明或其他多余文字。
+        """;
 
     /**
      * 优化 Prompt

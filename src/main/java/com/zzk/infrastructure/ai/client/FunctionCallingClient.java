@@ -19,10 +19,10 @@ import java.util.*;
 
 /**
  * 手搓 Function Calling 客户端
- * 
+ * <p>
  * 支持所有 OpenAI 兼容厂商（包括智谱、DeepSeek 等国内厂商）。
  * 绕过 Spring AI 的路径限制，自行控制 API 路径和协议解析。
- * 
+ *
  * @author zzk
  * @since 1.0.0
  */
@@ -37,8 +37,8 @@ public class FunctionCallingClient {
     private static final int MAX_TOOL_CALL_ROUNDS = 5; // 防止无限循环
 
     public FunctionCallingClient(WebClient.Builder webClientBuilder,
-            SkillRegistry skillRegistry,
-            AgentMonitorService monitorService) {
+                                 SkillRegistry skillRegistry,
+                                 AgentMonitorService monitorService) {
         this.webClientBuilder = webClientBuilder;
         this.skillRegistry = skillRegistry;
         this.monitorService = monitorService;
@@ -46,7 +46,7 @@ public class FunctionCallingClient {
 
     /**
      * 带 Function Calling 的对话
-     * 
+     *
      * @param config   用户模型配置
      * @param messages 消息列表
      * @param skills   选中的 Skill 列表
@@ -54,15 +54,15 @@ public class FunctionCallingClient {
      * @return AI 最终回复
      */
     public String chat(UserModelConfig config,
-            List<Map<String, Object>> messages,
-            List<SkillMetadata> skills,
-            Map<String, Object> context) {
+                       List<Map<String, Object>> messages,
+                       List<SkillMetadata> skills,
+                       Map<String, Object> context) {
         return chat(config, messages, skills, context, null);
     }
 
     /**
      * 带 Function Calling 的对话 (支持过程回调)
-     * 
+     *
      * @param config        用户模型配置
      * @param messages      消息列表
      * @param skills        选中的 Skill 列表
@@ -71,10 +71,10 @@ public class FunctionCallingClient {
      * @return AI 最终回复
      */
     public String chat(UserModelConfig config,
-            List<Map<String, Object>> messages,
-            List<SkillMetadata> skills,
-            Map<String, Object> context,
-            java.util.function.Consumer<String> eventCallback) {
+                       List<Map<String, Object>> messages,
+                       List<SkillMetadata> skills,
+                       Map<String, Object> context,
+                       java.util.function.Consumer<String> eventCallback) {
         return chatWithRounds(config, messages, skills, context, 0, eventCallback);
     }
 
@@ -82,11 +82,11 @@ public class FunctionCallingClient {
      * 递归调用（带轮次限制）
      */
     private String chatWithRounds(UserModelConfig config,
-            List<Map<String, Object>> messages,
-            List<SkillMetadata> skills,
-            Map<String, Object> context,
-            int round,
-            java.util.function.Consumer<String> eventCallback) {
+                                  List<Map<String, Object>> messages,
+                                  List<SkillMetadata> skills,
+                                  Map<String, Object> context,
+                                  int round,
+                                  java.util.function.Consumer<String> eventCallback) {
         if (round >= MAX_TOOL_CALL_ROUNDS) {
             log.warn("[FunctionCallingClient] 达到最大工具调用轮次 {}", MAX_TOOL_CALL_ROUNDS);
             return "抱歉，工具调用次数过多，请尝试简化请求。";
@@ -102,11 +102,9 @@ public class FunctionCallingClient {
 
         // 发送思考中事件
         if (eventCallback != null && round == 0) {
-            eventCallback.accept("event: THOUGHT");
-            eventCallback.accept("正在思考任务规划...");
+            eventCallback.accept("__SSE_EVENT__:THOUGHT:正在思考任务规划...");
         } else if (eventCallback != null) {
-            eventCallback.accept("event: THOUGHT");
-            eventCallback.accept("正在分析工具执行结果...");
+            eventCallback.accept("__SSE_EVENT__:THOUGHT:正在分析工具执行结果...");
         }
 
         // 构建请求体
@@ -190,8 +188,7 @@ public class FunctionCallingClient {
                 if (eventCallback != null) {
                     String displayName = getToolDisplayName(toolName);
                     String paramsPreview = getParamsPreview(argsJson);
-                    eventCallback.accept("event: TOOL_START");
-                    eventCallback.accept("{\"name\":\"" + toolName + "\",\"display\":\""
+                    eventCallback.accept("__SSE_EVENT__:TOOL_START:{\"name\":\"" + toolName + "\",\"display\":\""
                             + displayName + "\",\"params\":" + escapeJson(paramsPreview) + "}");
                 }
 
@@ -245,8 +242,7 @@ public class FunctionCallingClient {
                     String displayName = getToolDisplayName(toolName);
                     int resultLen = toolResult != null ? toolResult.length() : 0;
                     String preview = getResultPreview(toolResult);
-                    eventCallback.accept("event: TOOL_END");
-                    eventCallback.accept("{\"name\":\"" + toolName + "\",\"display\":\""
+                    eventCallback.accept("__SSE_EVENT__:TOOL_END:{\"name\":\"" + toolName + "\",\"display\":\""
                             + displayName + "\",\"length\":" + resultLen + ",\"preview\":" + escapeJson(preview)
                             + "}");
                 }
@@ -319,10 +315,9 @@ public class FunctionCallingClient {
         return switch (provider.toLowerCase()) {
             // 这些厂商的 baseUrl 已包含版本路径，直接用 /chat/completions
             case "zhipu", "hunyuan", "baichuan", "moonshot", "qwen", "aliyun",
-                    "deepseek", "minimax", "stepfun", "spark", "yi", "sensenova",
-                    "mistral", "perplexity", "groq", "cohere", "novita", "togetherai",
-                    "ollama", "openrouter" ->
-                "/chat/completions";
+                 "deepseek", "minimax", "stepfun", "spark", "yi", "sensenova",
+                 "mistral", "perplexity", "groq", "cohere", "novita", "togetherai",
+                 "ollama", "openrouter" -> "/chat/completions";
             // Azure 风格
             case "github" -> "/chat/completions?api-version=2024-12-01-preview";
             // 标准 OpenAI 格式

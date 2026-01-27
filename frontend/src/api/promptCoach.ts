@@ -17,13 +17,6 @@ export interface CoachSession {
     promptGenerated: boolean
 }
 
-export interface SkillInfo {
-    name: string
-    displayName: string
-    description: string
-    category: string
-}
-
 export interface StartCoachRequest {
     initialInput: string
     provider?: string
@@ -31,111 +24,7 @@ export interface StartCoachRequest {
 
 export interface CoachChatRequest {
     sessionId: string
-    message: string
-}
-
-export interface ConfirmPromptRequest {
-    sessionId: string
-    promptTemplateId: number
-}
-
-/**
- * 获取可用的 Skills 列表
- */
-export const getAvailableSkills = () => {
-    return request.get<any, { code: number; data: SkillInfo[]; message: string }>(
-        '/prompt-coach/skills'
-    )
-}
-
-/**
- * 开始 Coach 会话
- */
-export const startCoachSession = (data: StartCoachRequest) => {
-    return request.post<any, { code: number; data: CoachSession; message: string }>(
-        '/prompt-coach/start',
-        data
-    )
-}
-
-/**
- * 发送消息（SSE 流式）
- */
-export const sendCoachMessage = async (
-    data: CoachChatRequest,
-    onChunk: (chunk: string) => void,
-    onComplete: () => void,
-    onError: (error: Error) => void
-) => {
-    const token = localStorage.getItem('token')
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
-
-    try {
-        const response = await fetch(`${baseUrl}/prompt-coach/chat`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': token ? `Bearer ${token}` : ''
-            },
-            body: JSON.stringify(data)
-        })
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`)
-        }
-
-        const reader = response.body?.getReader()
-        if (!reader) {
-            throw new Error('无法读取响应流')
-        }
-
-        const decoder = new TextDecoder()
-        let buffer = ''
-
-        while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-
-            // 保留最后一个可能不完整的行
-            buffer = lines.pop() || ''
-
-            for (const line of lines) {
-                if (line.trim() === '') continue
-
-                // 处理 SSE 数据行 (支持 "data:" 和 "data: " 两种格式)
-                if (line.startsWith('data:')) {
-                    // 去掉 "data:" 前缀，然后 trim 掉可能的前导空格
-                    let data = line.slice(5)
-                    if (data.startsWith(' ')) {
-                        data = data.slice(1)
-                    }
-
-                    if (data === '[DONE]') {
-                        onComplete()
-                        return
-                    }
-                    // 还原换行符
-                    onChunk(data.replace(/\\n/g, '\n'))
-                }
-            }
-        }
-
-        // 处理最后剩余的 buffer
-        if (buffer.startsWith('data:') && !buffer.includes('[DONE]')) {
-            let data = buffer.slice(5)
-            if (data.startsWith(' ')) {
-                data = data.slice(1)
-            }
-            onChunk(data.replace(/\\n/g, '\n'))
-        }
-
-        onComplete()
-    } catch (error) {
-        onError(error as Error)
-    }
+    message: string | null  // null 表示首次对话，使用 session 中的 initialInput
 }
 
 /**
@@ -181,6 +70,7 @@ export const sendAgentMessage = async (
 
         const decoder = new TextDecoder()
         let buffer = ''
+        let currentEvent: string | null = null
 
         while (true) {
             const { done, value } = await reader.read()
@@ -192,8 +82,18 @@ export const sendAgentMessage = async (
             buffer = lines.pop() || ''
 
             for (const line of lines) {
-                if (line.trim() === '') continue
+                if (line.trim() === '') {
+                    currentEvent = null
+                    continue
+                }
 
+                // 解析 event: 行
+                if (line.startsWith('event:')) {
+                    currentEvent = line.slice(6).trim()
+                    continue
+                }
+
+                // 解析 data: 行
                 if (line.startsWith('data:')) {
                     let data = line.slice(5)
                     if (data.startsWith(' ')) {
@@ -204,7 +104,13 @@ export const sendAgentMessage = async (
                         onComplete()
                         return
                     }
-                    onChunk(data.replace(/\\n/g, '\n'))
+
+                    // 传递事件类型和数据
+                    if (currentEvent) {
+                        onChunk(`__EVENT__:${currentEvent}:${data}`)
+                    } else {
+                        onChunk(data.replace(/\\n/g, '\n'))
+                    }
                 }
             }
         }
@@ -229,15 +135,5 @@ export const sendAgentMessage = async (
 export const getCoachSession = (sessionId: string) => {
     return request.get<any, { code: number; data: CoachSession; message: string }>(
         `/prompt-coach/session/${sessionId}`
-    )
-}
-
-/**
- * 确认并保存 Prompt
- */
-export const confirmPrompt = (data: ConfirmPromptRequest) => {
-    return request.post<any, { code: number; data: string; message: string }>(
-        '/prompt-coach/confirm',
-        data
     )
 }

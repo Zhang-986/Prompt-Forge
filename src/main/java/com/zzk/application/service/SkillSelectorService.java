@@ -10,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -91,7 +90,6 @@ public class SkillSelectorService {
                 1. 如果用户给了普通网页 URL（非 GitHub），返回 ["url-fetch"]
                 2. 如果用户给了 GitHub 仓库链接，返回 ["code-analyzer"]
                 3. 如果用户询问最新信息、技术动态、框架版本等需要联网查询的内容，返回 ["web-search"]
-                4. 如果用户要求评估 Prompt 质量，返回 ["prompt-evaluator"]
                 5. 如果不需要任何工具，返回 []
                 6. 可以同时返回多个工具，如 ["url-fetch", "web-search"]
 

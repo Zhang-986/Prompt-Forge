@@ -24,13 +24,13 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Agent 增强版 Coach 服务
- * 
+ *
  * <p>
  * 基于 Claude Agent Skills 架构重构：
  * - 三层渐进式加载（Metadata → Instructions → Execute）
  * - 手搓 Function Calling 支持所有 AI 厂商
  * - 按需加载 Skill 节省 Token
- * 
+ *
  * @author zzk
  * @since 1.0.0
  */
@@ -46,14 +46,13 @@ public class AgentCoachService {
     private final FunctionCallingClient functionCallingClient;
     private final SkillSelectorService skillSelectorService;
 
-    public AgentCoachService(
-            PromptCoachSessionRepository sessionRepository,
-            UserPreferenceRepository preferenceRepository,
-            UserModelConfigRepository userConfigRepository,
-            DynamicLlmClientFactory llmFactory,
-            SkillRegistry skillRegistry,
-            FunctionCallingClient functionCallingClient,
-            SkillSelectorService skillSelectorService) {
+    public AgentCoachService(PromptCoachSessionRepository sessionRepository,
+                             UserPreferenceRepository preferenceRepository,
+                             UserModelConfigRepository userConfigRepository,
+                             DynamicLlmClientFactory llmFactory,
+                             SkillRegistry skillRegistry,
+                             FunctionCallingClient functionCallingClient,
+                             SkillSelectorService skillSelectorService) {
         this.sessionRepository = sessionRepository;
         this.preferenceRepository = preferenceRepository;
         this.userConfigRepository = userConfigRepository;
@@ -67,10 +66,43 @@ public class AgentCoachService {
     }
 
     /**
-     * 开始 Agent 会话
-     * 
+     * 快速创建会话（不调用 LLM）
+     * <p>
+     * 优化首次加载性能：只创建会话对象，LLM 调用延迟到 chat 接口
+     *
+     * @param userId       用户ID
+     * @param initialInput 初始输入
+     * @param provider     AI 模型提供商
+     * @return 会话对象
+     */
+    public PromptCoachSession createSession(Long userId, String initialInput, String provider) {
+        // 1. 获取用户模型配置
+        UserModelConfig modelConfig = selectModel(userId, provider);
+
+        // 2. 创建会话
+        String sessionId = UUID.randomUUID().toString().replace("-", "");
+        PromptCoachSession session = PromptCoachSession.builder()
+                .sessionId(sessionId)
+                .userId(userId)
+                .provider(modelConfig.getProvider())
+                .currentPhase(CoachPhase.GOAL_CLARIFICATION)
+                .build();
+
+        // 3. 添加用户初始输入（但不调用 LLM）
+        session.addUserMessage(initialInput);
+
+        // 4. 保存会话
+        sessionRepository.save(session);
+        
+        log.info("[createSession] 快速创建会话: sessionId={}, userId={}", sessionId, userId);
+        return session;
+    }
+
+    /**
+     * 开始 Agent 会话（原方法保留，向后兼容）
+     * <p>
      * 使用 LLM 自动推断需要的 Skills 进行 Function Calling
-     * 
+     *
      * @param userId       用户ID
      * @param initialInput 初始输入
      * @param provider     AI 模型提供商
@@ -91,8 +123,10 @@ public class AgentCoachService {
         // 3. 添加用户初始输入
         session.addUserMessage(initialInput);
 
-        // 4. LLM 自动推断需要的 Skills（核心改动：从手动选择改为自动推断）
+        // 4. LLM 自动推断需要的 Skills
+        // 智能推断
         List<String> inferredSkillNames = skillSelectorService.inferRequiredSkills(initialInput, modelConfig);
+        // 按需加载
         List<SkillMetadata> selectedSkills = skillRegistry.getSkillsByNames(inferredSkillNames);
         log.info("[startAgentSession] LLM 自动推断需要 {} 个 Skill: {}",
                 selectedSkills.size(),
@@ -140,11 +174,12 @@ public class AgentCoachService {
 
     /**
      * Agent 对话（带工具调用）
-     * 
+     * <p>
      * 使用 LLM 自动推断需要的 Skills 进行 Function Calling
-     * 
+     * 支持首次对话（处理 initialInput）和后续对话
+     *
      * @param sessionId   会话ID
-     * @param userMessage 用户消息
+     * @param userMessage 用户消息（首次对话传 null，使用会话中的 initialInput）
      */
     public Flux<String> agentChat(String sessionId, String userMessage) {
         PromptCoachSession session = sessionRepository.findById(sessionId)
@@ -154,12 +189,25 @@ public class AgentCoachService {
             return Flux.just("抱歉，对话轮数已达上限。请根据当前生成的 Prompt 进行调整，或开启新会话。");
         }
 
-        session.addUserMessage(userMessage);
+        // 处理首次对话：如果是空消息且会话只有 1 条用户消息（initialInput），直接使用它
+        boolean isFirstChat = (userMessage == null || userMessage.isBlank()) 
+                && session.getHistory().size() == 1;
+        
+        String actualMessage;
+        if (isFirstChat) {
+            // 首次对话：使用 initialInput
+            actualMessage = session.getHistory().get(0).content();
+            log.info("[agentChat] 首次对话，使用 initialInput: {}", actualMessage);
+        } else {
+            // 后续对话：使用新消息
+            actualMessage = userMessage;
+            session.addUserMessage(userMessage);
+        }
 
         UserModelConfig modelConfig = selectModel(session.getUserId(), session.getProvider());
 
         // LLM 自动推断需要的 Skills（核心改动：从手动选择改为自动推断）
-        List<String> inferredSkillNames = skillSelectorService.inferRequiredSkills(userMessage, modelConfig);
+        List<String> inferredSkillNames = skillSelectorService.inferRequiredSkills(actualMessage, modelConfig);
         List<SkillMetadata> selectedSkills = skillRegistry.getSkillsByNames(inferredSkillNames);
         log.info("[agentChat] LLM 自动推断需要 {} 个 Skill: {}",
                 selectedSkills.size(),
@@ -169,7 +217,13 @@ public class AgentCoachService {
         String systemPrompt = buildAgentSystemPrompt(session);
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(Map.of("role", "system", "content", systemPrompt));
-        messages.add(Map.of("role", "user", "content", buildUserMessageWithHistory(session)));
+        
+        // 首次对话：只发送 initialInput；后续对话：发送完整历史
+        if (isFirstChat) {
+            messages.add(Map.of("role", "user", "content", actualMessage));
+        } else {
+            messages.add(Map.of("role", "user", "content", buildUserMessageWithHistory(session)));
+        }
 
         // 构建执行上下文
         Map<String, Object> context = Map.of(
@@ -259,41 +313,41 @@ public class AgentCoachService {
     private String buildAgentSystemPrompt(PromptCoachSession session) {
         return """
                 你是一位 Prompt 工程专家，帮助用户快速生成高质量的 AI Prompt。
-
+                
                 当你需要获取最新信息、分析代码仓库时，请主动调用相应工具。
-
+                
                 当前阶段: %s
                 对话轮数: %d
                 已收集信息:
                 %s
-
+                
                 **核心策略：先给出可用的 Prompt，再根据反馈优化**
-
+                
                 工作流程：
                 1. **首轮对话**：根据用户描述，直接生成一个"初版 Prompt"（用 ---初版Prompt--- 标记）
                    - 不要问太多问题，先给用户一个可用的东西
                    - 初版可以不完美，但要能用
-
+                
                 2. **后续对话**：根据用户反馈进行优化
                    - 如果用户说"挺好/可以"，确认是否需要调整，如不需要则输出最终版
                    - 如果用户提出具体修改意见，针对性调整
                    - 如果用户表示不满意但没说具体问题，追问 1-2 个关键点
-
+                
                 3. **最终输出**：当用户确认满意后，用 ---最终Prompt--- 标记输出
-
+                
                 输出格式示例：
                 ```
                 根据你的描述，我为你生成了初版 Prompt：
-
+                
                 ---初版Prompt---
                 [你生成的 Prompt 内容]
                 ---
-
+                
                 如果需要调整，请告诉我：
                 - 想修改哪些地方？
                 - 有没有漏掉的要求？
                 ```
-
+                
                 注意：使用中文回复。
                 """.formatted(
                 session.getCurrentPhase().getDescription(),
@@ -322,7 +376,7 @@ public class AgentCoachService {
 
     /**
      * 确认并保存最终 Prompt
-     * 
+     *
      * @param sessionId        会话ID
      * @param promptTemplateId 关联的模板ID（新版本将保存到此模板）
      * @return 生成的 Prompt 内容
@@ -367,7 +421,7 @@ public class AgentCoachService {
      */
     private String extractFinalPrompt(String response) {
         // 尝试提取标记后的内容
-        String[] markers = { "---最终Prompt---", "```", "【最终Prompt】" };
+        String[] markers = {"---最终Prompt---", "```", "【最终Prompt】"};
         for (String marker : markers) {
             int startIndex = response.indexOf(marker);
             if (startIndex != -1) {

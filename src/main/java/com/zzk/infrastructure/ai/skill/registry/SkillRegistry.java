@@ -69,42 +69,6 @@ public class SkillRegistry {
     }
 
     /**
-     * 根据用户意图选择 Skill（三层加载的入口）
-     * 
-     * @param userMessage 用户消息
-     * @return 匹配到的 Skill 列表
-     */
-    public List<SkillMetadata> selectByIntent(String userMessage) {
-        List<SkillMetadata> selected = new ArrayList<>();
-
-        if (metadataCache.isEmpty()) {
-            log.warn("[SkillRegistry] 元数据缓存为空，无法匹配 Skill");
-            return selected;
-        }
-
-        String lowerMessage = userMessage.toLowerCase();
-
-        // 1. CORE 技能始终加载
-        metadataCache.values().stream()
-                .filter(m -> "CORE".equalsIgnoreCase(m.getCategory()))
-                .forEach(selected::add);
-
-        // 2. 其他技能按关键词匹配
-        metadataCache.values().stream()
-                .filter(m -> !"CORE".equalsIgnoreCase(m.getCategory()))
-                .filter(m -> m.getTriggerKeywords() != null && !m.getTriggerKeywords().isEmpty())
-                .filter(m -> m.getTriggerKeywords().stream()
-                        .anyMatch(kw -> lowerMessage.contains(kw.toLowerCase())))
-                .forEach(selected::add);
-
-        log.info("[SkillRegistry] 用户消息匹配到 {} 个 Skill: {}",
-                selected.size(),
-                selected.stream().map(SkillMetadata::getName).toList());
-
-        return selected;
-    }
-
-    /**
      * 生成 OpenAI 格式的 tools JSON
      * 
      * @param skills 选中的 Skill 列表
@@ -135,13 +99,6 @@ public class SkillRegistry {
         return executorMap.get(skillName);
     }
 
-    /**
-     * 加载 Level 2 Instructions（按需调用）
-     */
-    public String loadInstructions(String skillName) {
-        AgentSkillPO skill = skillMapper.selectByName(skillName);
-        return skill != null ? skill.getInstructions() : "";
-    }
 
     /**
      * 获取所有已加载的 Skill 名称
