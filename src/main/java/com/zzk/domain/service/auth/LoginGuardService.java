@@ -15,14 +15,16 @@ import java.util.Optional;
 /**
  * 登录防护领域服务
  * 
- * <p>实现阶梯式登录防御机制：
+ * <p>
+ * 实现阶梯式登录防御机制：
  * <ul>
- *   <li>失败 N1 次：触发验证码</li>
- *   <li>失败 N2 次：短期封禁</li>
- *   <li>失败 N3 次：长期封禁</li>
+ * <li>失败 N1 次：触发验证码</li>
+ * <li>失败 N2 次：短期封禁</li>
+ * <li>失败 N3 次：长期封禁</li>
  * </ul>
  * 
- * <p>阈值从 {@link LoginGuardConfig} 读取，支持动态配置。
+ * <p>
+ * 阈值从 {@link LoginGuardConfig} 读取，支持动态配置。
  * 
  * @author zzk
  * @since 1.0.0
@@ -52,7 +54,8 @@ public class LoginGuardService {
     /**
      * 登录前检查
      * 
-     * <p>检查当前 IP+账号 是否被封禁、是否需要验证码。
+     * <p>
+     * 检查当前 IP+账号 是否被封禁、是否需要验证码。
      * 
      * @param ip       客户端IP
      * @param username 用户名
@@ -60,7 +63,7 @@ public class LoginGuardService {
      */
     public LoginAttemptInfo preLoginCheck(String ip, String username) {
         String guardKey = buildGuardKey(ip, username);
-        
+
         // 1. 检查是否被封禁
         Optional<LocalDateTime> banExpiration = guardRepository.getBanExpiration(guardKey);
         if (banExpiration.isPresent()) {
@@ -68,21 +71,22 @@ public class LoginGuardService {
             log.warn("登录被封禁: guardKey={}, 解封时间={}", guardKey, banExpiration.get());
             return LoginAttemptInfo.banned(guardKey, failureCount, banExpiration.get());
         }
-        
+
         // 2. 检查失败次数，判断是否需要验证码
         int failureCount = guardRepository.getFailureCount(guardKey);
         boolean captchaRequired = failureCount >= config.getCaptchaTriggerCount();
-        
-        log.debug("登录前检查: guardKey={}, failureCount={}, captchaRequired={}", 
+
+        log.debug("登录前检查: guardKey={}, failureCount={}, captchaRequired={}",
                 guardKey, failureCount, captchaRequired);
-        
+
         return LoginAttemptInfo.normal(guardKey, failureCount, captchaRequired);
     }
 
     /**
      * 记录登录失败
      * 
-     * <p>原子递增失败计数，并根据阈值判断是否需要封禁。
+     * <p>
+     * 原子递增失败计数，并根据阈值判断是否需要封禁。
      * 
      * @param ip       客户端IP
      * @param username 用户名
@@ -91,27 +95,29 @@ public class LoginGuardService {
      */
     public LoginAttemptInfo recordFailure(String ip, String username, String reason) {
         String guardKey = buildGuardKey(ip, username);
-        
+
         // 原子递增失败计数
         int newCount = guardRepository.incrementFailureCount(guardKey, config.getCounterExpiration());
         log.info("登录失败记录: guardKey={}, newCount={}, reason={}", guardKey, newCount, reason);
-        
+
         // 判断是否需要封禁
         if (newCount >= config.getLongBanTriggerCount()) {
             // 长期封禁
-            guardRepository.setBan(guardKey, config.getLongBanDuration());
-            LocalDateTime bannedUntil = LocalDateTime.now().plus(config.getLongBanDuration());
-            log.warn("触发长期封禁: guardKey={}, duration={}", guardKey, config.getLongBanDuration());
+            LocalDateTime bannedUntil = LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai"))
+                    .plus(config.getLongBanDuration());
+            guardRepository.setBan(guardKey, bannedUntil);
+            log.warn("触发长期封禁: guardKey={}, bannedUntil={}", guardKey, bannedUntil);
             return LoginAttemptInfo.banned(guardKey, newCount, bannedUntil);
-            
+
         } else if (newCount >= config.getShortBanTriggerCount()) {
             // 短期封禁
-            guardRepository.setBan(guardKey, config.getShortBanDuration());
-            LocalDateTime bannedUntil = LocalDateTime.now().plus(config.getShortBanDuration());
-            log.warn("触发短期封禁: guardKey={}, duration={}", guardKey, config.getShortBanDuration());
+            LocalDateTime bannedUntil = LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai"))
+                    .plus(config.getShortBanDuration());
+            guardRepository.setBan(guardKey, bannedUntil);
+            log.warn("触发短期封禁: guardKey={}, bannedUntil={}", guardKey, bannedUntil);
             return LoginAttemptInfo.banned(guardKey, newCount, bannedUntil);
         }
-        
+
         // 未封禁，但可能需要验证码
         boolean captchaRequired = newCount >= config.getCaptchaTriggerCount();
         return LoginAttemptInfo.normal(guardKey, newCount, captchaRequired);
@@ -120,7 +126,8 @@ public class LoginGuardService {
     /**
      * 记录登录成功
      * 
-     * <p>清除失败计数器。
+     * <p>
+     * 清除失败计数器。
      * 
      * @param ip       客户端IP
      * @param username 用户名
@@ -157,7 +164,8 @@ public class LoginGuardService {
     /**
      * 记录审计日志
      * 
-     * <p>自动根据 IP 地址填充地理位置信息。
+     * <p>
+     * 自动根据 IP 地址填充地理位置信息。
      * 
      * @param auditLog 审计日志
      */
@@ -168,9 +176,9 @@ public class LoginGuardService {
                 String geoLocation = ipGeoService.getFormattedLocation(auditLog.getIpAddress());
                 auditLog.setGeoLocation(geoLocation);
             }
-            
+
             auditLogRepository.save(auditLog);
-            log.debug("审计日志已记录: username={}, result={}, geoLocation={}", 
+            log.debug("审计日志已记录: username={}, result={}, geoLocation={}",
                     auditLog.getUsername(), auditLog.getResult(), auditLog.getGeoLocation());
         } catch (Exception e) {
             // 审计日志记录失败不应影响主流程

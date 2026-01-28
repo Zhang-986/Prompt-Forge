@@ -98,79 +98,6 @@ public class AgentCoachService {
         return session;
     }
 
-    /**
-     * 开始 Agent 会话（原方法保留，向后兼容）
-     * <p>
-     * 使用 LLM 自动推断需要的 Skills 进行 Function Calling
-     *
-     * @param userId       用户ID
-     * @param initialInput 初始输入
-     * @param provider     AI 模型提供商
-     */
-    public PromptCoachSession startAgentSession(Long userId, String initialInput, String provider) {
-        // 1. 获取用户模型配置
-        UserModelConfig modelConfig = selectModel(userId, provider);
-
-        // 2. 创建会话
-        String sessionId = UUID.randomUUID().toString().replace("-", "");
-        PromptCoachSession session = PromptCoachSession.builder()
-                .sessionId(sessionId)
-                .userId(userId)
-                .provider(modelConfig.getProvider())
-                .currentPhase(CoachPhase.GOAL_CLARIFICATION)
-                .build();
-
-        // 3. 添加用户初始输入
-        session.addUserMessage(initialInput);
-
-        // 4. LLM 自动推断需要的 Skills
-        // 智能推断
-        List<String> inferredSkillNames = skillSelectorService.inferRequiredSkills(initialInput, modelConfig);
-        // 按需加载
-        List<SkillMetadata> selectedSkills = skillRegistry.getSkillsByNames(inferredSkillNames);
-        log.info("[startAgentSession] LLM 自动推断需要 {} 个 Skill: {}",
-                selectedSkills.size(),
-                inferredSkillNames);
-
-        // 5. 构建消息列表
-        String systemPrompt = buildAgentSystemPrompt(session);
-        List<Map<String, Object>> messages = new ArrayList<>();
-        messages.add(Map.of("role", "system", "content", systemPrompt));
-        messages.add(Map.of("role", "user", "content", initialInput));
-
-        // 6. 构建执行上下文
-        Map<String, Object> context = Map.of(
-                "userId", userId,
-                "sessionId", sessionId,
-                "phase", session.getCurrentPhase().name());
-
-        // 7. 调用 AI（使用手搓 Function Calling）
-        String aiResponse;
-        if (skillRegistry.hasSkills() && !selectedSkills.isEmpty()) {
-            // 全功能模式：使用 FunctionCallingClient
-            aiResponse = functionCallingClient.chat(modelConfig, messages, selectedSkills, context);
-        } else {
-            // 降级模式：纯文本生成
-            log.info("[startAgentSession] 无可用 Skill，使用降级模式");
-            StringBuilder result = new StringBuilder();
-            llmFactory.generateStream(modelConfig, buildAgentPrompt(session))
-                    .toIterable()
-                    .forEach(result::append);
-            aiResponse = result.toString();
-        }
-
-        // 8. 更新会话状态
-        session.addAssistantMessage(aiResponse);
-        try {
-            parseAndUpdateSession(session, aiResponse);
-        } catch (Exception e) {
-            log.warn("[startAgentSession] 解析状态失败", e);
-        }
-
-        // 9. 保存会话
-        sessionRepository.save(session);
-        return session;
-    }
 
     /**
      * Agent 对话（带工具调用）
@@ -206,7 +133,7 @@ public class AgentCoachService {
 
         UserModelConfig modelConfig = selectModel(session.getUserId(), session.getProvider());
 
-        // LLM 自动推断需要的 Skills（核心改动：从手动选择改为自动推断）
+        // LLM 自动推断需要的 Skills
         List<String> inferredSkillNames = skillSelectorService.inferRequiredSkills(actualMessage, modelConfig);
         List<SkillMetadata> selectedSkills = skillRegistry.getSkillsByNames(inferredSkillNames);
         log.info("[agentChat] LLM 自动推断需要 {} 个 Skill: {}",

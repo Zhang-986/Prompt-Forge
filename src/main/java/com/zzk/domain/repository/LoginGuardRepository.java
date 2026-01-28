@@ -42,9 +42,9 @@ public interface LoginGuardRepository {
      * 设置封禁
      * 
      * @param guardKey 防护键
-     * @param duration 封禁时长
+     * @param bannedUntil 封禁截止时间
      */
-    void setBan(String guardKey, Duration duration);
+    void setBan(String guardKey, LocalDateTime bannedUntil);
 
     /**
      * 获取封禁截止时间

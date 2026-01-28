@@ -16,7 +16,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * 登录防护仓储 Redisson 实现
  * 
- * <p>使用 Redisson 的原子计数器和分布式缓存实现高并发下的原子性保证。
+ * <p>
+ * 使用 Redisson 的原子计数器和分布式缓存实现高并发下的原子性保证。
  * 
  * @author zzk
  * @since 1.0.0
@@ -42,16 +43,16 @@ public class RedissonLoginGuardRepository implements LoginGuardRepository {
     public int incrementFailureCount(String guardKey, Duration expiration) {
         String key = FAILURE_COUNT_PREFIX + guardKey;
         RAtomicLong counter = redissonClient.getAtomicLong(key);
-        
+
         // 原子递增
         long newValue = counter.incrementAndGet();
-        
+
         // 首次设置过期时间
         if (newValue == 1) {
             counter.expire(expiration);
             log.debug("设置计数器过期时间: key={}, expiration={}", key, expiration);
         }
-        
+
         log.debug("失败计数递增: key={}, newValue={}", key, newValue);
         return (int) newValue;
     }
@@ -71,13 +72,15 @@ public class RedissonLoginGuardRepository implements LoginGuardRepository {
     }
 
     @Override
-    public void setBan(String guardKey, Duration duration) {
+    public void setBan(String guardKey, LocalDateTime bannedUntil) {
         String key = BAN_PREFIX + guardKey;
-        LocalDateTime bannedUntil = LocalDateTime.now().plus(duration);
-        
+
+        // 计算到截止时间的剩余时长
+        Duration remaining = Duration.between(LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai")), bannedUntil);
+
         RBucket<String> bucket = redissonClient.getBucket(key);
-        bucket.set(bannedUntil.toString(), duration.toMillis(), TimeUnit.MILLISECONDS);
-        
+        bucket.set(bannedUntil.toString(), remaining.toMillis(), TimeUnit.MILLISECONDS);
+
         log.info("设置封禁: key={}, bannedUntil={}", key, bannedUntil);
     }
 
@@ -86,13 +89,21 @@ public class RedissonLoginGuardRepository implements LoginGuardRepository {
         String key = BAN_PREFIX + guardKey;
         RBucket<String> bucket = redissonClient.getBucket(key);
         String value = bucket.get();
-        
+
         if (value == null) {
             return Optional.empty();
         }
-        
+
         try {
             LocalDateTime bannedUntil = LocalDateTime.parse(value);
+
+            // 检查是否已过期
+            if (LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai")).isAfter(bannedUntil)) {
+                log.info("封禁时间已过期，自动清除: key={}, bannedUntil={}", key, bannedUntil);
+                bucket.delete(); // 手动清除过期的 key
+                return Optional.empty();
+            }
+
             return Optional.of(bannedUntil);
         } catch (Exception e) {
             log.warn("解析封禁时间失败: key={}, value={}", key, value, e);
