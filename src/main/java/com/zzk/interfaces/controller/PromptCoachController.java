@@ -70,18 +70,32 @@ public class PromptCoachController {
     @PostMapping(value = "/agent/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(summary = "Agent 对话", description = "发送消息到 Agent Coach，支持自动调用工具获取信息")
     public Flux<ServerSentEvent<String>> agentChat(@Valid @RequestBody CoachChatRequest request) {
-        log.info("Agent Coach 对话: sessionId={}, message={}",
-                request.getSessionId(), request.getMessage());
+        String threadName = Thread.currentThread().getName();
+        log.info("┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓");
+        log.info("┃ [{}] Controller接收请求", threadName);
+        log.info("┃ sessionId: {}, message: {}", request.getSessionId(), request.getMessage());
+        log.info("┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛");
 
         return agentCoachService.agentChat(
                         request.getSessionId(),
                         request.getMessage())
+                .doOnNext(chunk -> {
+                    if (chunk.contains("__SSE_EVENT__")) {
+                        log.info("    [{}] Controller收到事件: {}", 
+                                Thread.currentThread().getName(), 
+                                chunk.substring(0, Math.min(50, chunk.length())));
+                    }
+                })
                 .map(chunk -> ServerSentEvent.<String>builder()
                         .data(chunk.replace("\n", "\\n"))
                         .build())
                 .concatWith(Flux.just(ServerSentEvent.<String>builder()
                         .data("[DONE]")
-                        .build()));
+                        .build()))
+                .doOnComplete(() -> {
+                    log.info("━━━━ [{}] Controller: SSE流推送完成 ━━━━", 
+                            Thread.currentThread().getName());
+                });
     }
 
     /**

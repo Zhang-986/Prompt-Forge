@@ -84,7 +84,7 @@ public class AgentCoachService {
         PromptCoachSession session = PromptCoachSession.builder()
                 .sessionId(sessionId)
                 .userId(userId)
-                .provider(modelConfig.getProvider())
+                .provider(provider)  // 保存完整的 provider:model 信息 ✅
                 .currentPhase(CoachPhase.GOAL_CLARIFICATION)
                 .build();
 
@@ -101,14 +101,25 @@ public class AgentCoachService {
 
     /**
      * Agent 对话（带工具调用）
-     * <p>
-     * 使用 LLM 自动推断需要的 Skills 进行 Function Calling
+     * 
+     * <p>性能优化版：
+     * - 快速加载会话并返回 Flux（< 50ms）
+     * - 所有耗时操作（Skill 推断、LLM 调用）在异步线程中执行
+     * - 不阻塞 Tomcat 主线程，提高并发能力
+     * 
+     * <p>使用 LLM 自动推断需要的 Skills 进行 Function Calling
      * 支持首次对话（处理 initialInput）和后续对话
      *
      * @param sessionId   会话ID
      * @param userMessage 用户消息（首次对话传 null，使用会话中的 initialInput）
+     * @return 响应式流，实时推送 AI 回复和工具执行进度
      */
     public Flux<String> agentChat(String sessionId, String userMessage) {
+        long startTime = System.currentTimeMillis();
+        String threadName = Thread.currentThread().getName();
+        log.info("┏━━ [{}] 阶段1: Tomcat线程接收请求", threadName);
+        
+        // ====== 阶段1：快速加载会话（同步，< 50ms）======
         PromptCoachSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new BusinessException("会话不存在或已过期"));
 
@@ -116,103 +127,215 @@ public class AgentCoachService {
             return Flux.just("抱歉，对话轮数已达上限。请根据当前生成的 Prompt 进行调整，或开启新会话。");
         }
 
-        // 处理首次对话：如果是空消息且会话只有 1 条用户消息（initialInput），直接使用它
-        boolean isFirstChat = (userMessage == null || userMessage.isBlank()) 
-                && session.getHistory().size() == 1;
-        
-        String actualMessage;
-        if (isFirstChat) {
-            // 首次对话：使用 initialInput
-            actualMessage = session.getHistory().get(0).content();
-            log.info("[agentChat] 首次对话，使用 initialInput: {}", actualMessage);
-        } else {
-            // 后续对话：使用新消息
-            actualMessage = userMessage;
+        // 处理用户消息（判断是首次对话还是后续对话）
+        boolean isFirstChat = isFirstChat(userMessage, session);
+        if (!isFirstChat) {
             session.addUserMessage(userMessage);
         }
 
-        UserModelConfig modelConfig = selectModel(session.getUserId(), session.getProvider());
+        log.info("┗━━ [{}] 阶段1完成: 创建Flux准备返回 (耗时 {}ms)", 
+                threadName, System.currentTimeMillis() - startTime);
 
-        // LLM 自动推断需要的 Skills
-        List<String> inferredSkillNames = skillSelectorService.inferRequiredSkills(actualMessage, modelConfig);
-        List<SkillMetadata> selectedSkills = skillRegistry.getSkillsByNames(inferredSkillNames);
-        log.info("[agentChat] LLM 自动推断需要 {} 个 Skill: {}",
-                selectedSkills.size(),
-                inferredSkillNames);
-
-        // 构建消息列表
-        String systemPrompt = buildAgentSystemPrompt(session);
-        List<Map<String, Object>> messages = new ArrayList<>();
-        messages.add(Map.of("role", "system", "content", systemPrompt));
-        
-        // 首次对话：只发送 initialInput；后续对话：发送完整历史
-        if (isFirstChat) {
-            messages.add(Map.of("role", "user", "content", actualMessage));
-        } else {
-            messages.add(Map.of("role", "user", "content", buildUserMessageWithHistory(session)));
-        }
-
-        // 构建执行上下文
-        Map<String, Object> context = Map.of(
-                "userId", session.getUserId(),
-                "sessionId", sessionId,
-                "phase", session.getCurrentPhase().name());
-
+        // ====== 阶段2：创建异步流（立即返回，不阻塞 Tomcat 线程）======
         return Flux.create(sink -> {
             CompletableFuture.runAsync(() -> {
+                String asyncThread = Thread.currentThread().getName();
+                long asyncStart = System.currentTimeMillis();
+                log.info("┏━━ [{}] 阶段2: 异步线程接手业务逻辑", asyncThread);
+                
                 try {
-                    String response;
-                    if (skillRegistry.hasSkills() && !selectedSkills.isEmpty()) {
-                        // 全功能模式：使用 FunctionCallingClient，并传递事件回调
-                        response = functionCallingClient.chat(modelConfig, messages, selectedSkills, context,
-                                (event) -> {
-                                    // event 格式: "event: TYPE\ndata: CONTENT\n\n"
-                                    // 我们把它作为特殊消息推送给前端
-                                    // 前端收到后会是: data: event: TYPE\ndata: CONTENT\n\n\n\n
-                                    sink.next(event);
-                                });
-                    } else {
-                        // 降级模式：纯文本生成
-                        log.info("[agentChat] 无可用 Skill，使用降级模式");
-                        StringBuilder result = new StringBuilder();
-                        llmFactory.generateStream(modelConfig, buildAgentPrompt(session))
-                                .toIterable()
-                                .forEach(chunk -> {
-                                    result.append(chunk);
-                                    // 流式返回文本内容
-                                    sink.next(chunk);
-                                });
-                        response = result.toString();
-                    }
-
-                    // 最终保存
-                    session.addAssistantMessage(response);
-                    try {
-                        parseAndUpdateSession(session, response);
-                    } catch (Exception e) {
-                        log.warn("[agentChat] 解析状态失败", e);
-                    }
-                    sessionRepository.save(session);
-                    log.info("[agentChat] 对话完成，长度: {}", response.length());
-
-                    // 发送结束信号 (Agent模式下 FunctionCallingClient 返回的是完整文本，所以这里发最后一次)
-                    // 如果是降级模式，前面已经流式发过chunk了。
-                    // 为了统一，如果 response 不为空且是 Agent 模式（sink还没发过文本内容，只发过事件），
-                    // 我们应该把 response 发出去。
-                    // 但 FunctionCallingClient 返回的是最终完整回复。
-                    // 我们约定：事件以 event: 开头，普通回复直接发文本。
-
-                    if (skillRegistry.hasSkills() && !selectedSkills.isEmpty()) {
-                        sink.next(response);
-                    }
-
-                    sink.complete();
+                    // 所有耗时操作都在这个异步线程中执行
+                    executeAgentChat(session, userMessage, sessionId, isFirstChat, sink);
+                    
+                    log.info("┗━━ [{}] 阶段2完成: 业务逻辑执行完毕 (耗时 {}ms)", 
+                            asyncThread, System.currentTimeMillis() - asyncStart);
                 } catch (Exception e) {
                     log.error("[agentChat] 对话失败: {}", e.getMessage(), e);
                     sink.error(e);
                 }
             });
         });
+        // Tomcat 线程在这里立即返回，可以处理其他请求 ✅
+    }
+
+    /**
+     * 执行 Agent 对话的核心逻辑（在异步线程中执行）
+     * 
+     * @param session     会话对象
+     * @param userMessage 用户消息
+     * @param sessionId   会话ID
+     * @param isFirstChat 是否首次对话
+     * @param sink        Flux 发射器，用于推送数据
+     */
+    private void executeAgentChat(PromptCoachSession session, String userMessage, 
+                                   String sessionId, boolean isFirstChat, 
+                                   reactor.core.publisher.FluxSink<String> sink) {
+        // ====== 步骤1：获取实际消息内容 ======
+        String actualMessage = getActualMessage(session, userMessage, isFirstChat);
+        
+        // ====== 步骤2：选择 AI 模型 ======
+        UserModelConfig modelConfig = selectModel(session.getUserId(), session.getProvider());
+
+        // ====== 步骤3：推断所需 Skill（耗时操作，但在异步线程中执行）======
+        List<String> inferredSkillNames = skillSelectorService.inferRequiredSkills(actualMessage, modelConfig);
+        List<SkillMetadata> selectedSkills = skillRegistry.getSkillsByNames(inferredSkillNames);
+        log.info("[agentChat] LLM 自动推断需要 {} 个 Skill: {}", selectedSkills.size(), inferredSkillNames);
+
+        // ====== 步骤4：构建消息列表 ======
+        List<Map<String, Object>> messages = buildMessages(session, actualMessage, isFirstChat);
+
+        // ====== 步骤5：构建执行上下文 ======
+        Map<String, Object> context = buildContext(session, sessionId);
+
+        // ====== 步骤6：执行对话（全功能模式或降级模式）======
+        String response = executeChat(modelConfig, messages, selectedSkills, context, session, sink);
+
+        // ====== 步骤7：保存会话状态 ======
+        saveSessionResult(session, response);
+
+        // ====== 步骤8：推送最终结果并结束流 ======
+        String currentThread = Thread.currentThread().getName();
+        if (skillRegistry.hasSkills() && !selectedSkills.isEmpty()) {
+            log.info("    [{}] 步骤8: 推送最终回复 ({} 字符)", currentThread, response.length());
+            // 全功能模式：推送最终完整回复
+            sink.next(response);
+        }
+        // 降级模式已经在 executeChat 中流式推送过了
+        
+        log.info("    [{}] 步骤9: 调用 sink.complete() 结束流", currentThread);
+        sink.complete();
+        log.info("[agentChat] 对话完成，总长度: {} 字符", response.length());
+    }
+
+    /**
+     * 判断是否为首次对话
+     */
+    private boolean isFirstChat(String userMessage, PromptCoachSession session) {
+        return (userMessage == null || userMessage.isBlank()) && session.getHistory().size() == 1;
+    }
+
+    /**
+     * 获取实际要发送给 AI 的消息内容
+     */
+    private String getActualMessage(PromptCoachSession session, String userMessage, boolean isFirstChat) {
+        if (isFirstChat) {
+            String initialInput = session.getHistory().get(0).content();
+            log.info("[agentChat] 首次对话，使用 initialInput: {}", initialInput);
+            return initialInput;
+        } else {
+            return userMessage;
+        }
+    }
+
+    /**
+     * 构建发送给 AI 的消息列表
+     */
+    private List<Map<String, Object>> buildMessages(PromptCoachSession session, 
+                                                     String actualMessage, 
+                                                     boolean isFirstChat) {
+        List<Map<String, Object>> messages = new ArrayList<>();
+        
+        // 添加系统提示词
+        String systemPrompt = buildAgentSystemPrompt(session);
+        messages.add(Map.of("role", "system", "content", systemPrompt));
+        
+        // 添加用户消息
+        if (isFirstChat) {
+            // 首次对话：只发送 initialInput
+            messages.add(Map.of("role", "user", "content", actualMessage));
+        } else {
+            // 后续对话：发送完整历史
+            messages.add(Map.of("role", "user", "content", buildUserMessageWithHistory(session)));
+        }
+        
+        return messages;
+    }
+
+    /**
+     * 构建执行上下文
+     */
+    private Map<String, Object> buildContext(PromptCoachSession session, String sessionId) {
+        return Map.of(
+                "userId", session.getUserId(),
+                "sessionId", sessionId,
+                "phase", session.getCurrentPhase().name()
+        );
+    }
+
+    /**
+     * 执行对话（根据是否有 Skill 选择全功能模式或降级模式）
+     * 
+     * @return AI 的完整回复文本
+     */
+    private String executeChat(UserModelConfig modelConfig,
+                               List<Map<String, Object>> messages,
+                               List<SkillMetadata> selectedSkills,
+                               Map<String, Object> context,
+                               PromptCoachSession session,
+                               reactor.core.publisher.FluxSink<String> sink) {
+        if (skillRegistry.hasSkills() && !selectedSkills.isEmpty()) {
+            // 全功能模式：使用 Function Calling
+            return executeFunctionCallingMode(modelConfig, messages, selectedSkills, context, sink);
+        } else {
+            // 降级模式：纯文本生成
+            return executeFallbackMode(modelConfig, session, sink);
+        }
+    }
+
+    /**
+     * 全功能模式：使用 Function Calling，支持工具调用
+     */
+    private String executeFunctionCallingMode(UserModelConfig modelConfig,
+                                              List<Map<String, Object>> messages,
+                                              List<SkillMetadata> selectedSkills,
+                                              Map<String, Object> context,
+                                              reactor.core.publisher.FluxSink<String> sink) {
+        return functionCallingClient.chat(modelConfig, messages, selectedSkills, context, (event) -> {
+            // 实时推送工具执行进度事件
+            // 事件格式：__SSE_EVENT__:THOUGHT:正在思考...
+            //         __SSE_EVENT__:TOOL_START:开始执行工具
+            //         __SSE_EVENT__:TOOL_END:工具执行完成
+            sink.next(event);
+        });
+    }
+
+    /**
+     * 降级模式：纯文本流式生成（无工具调用能力）
+     */
+    private String executeFallbackMode(UserModelConfig modelConfig,
+                                       PromptCoachSession session,
+                                       reactor.core.publisher.FluxSink<String> sink) {
+        String threadName = Thread.currentThread().getName();
+        log.info("    [{}] 降级模式：开始纯文本流式生成", threadName);
+        
+        StringBuilder result = new StringBuilder();
+        llmFactory.generateStream(modelConfig, buildAgentPrompt(session))
+                .toIterable()
+                .forEach(chunk -> {
+                    result.append(chunk);
+                    sink.next(chunk); // 流式推送每个文本块
+                });
+        
+        log.info("    [{}] 降级模式完成，总计 {} 字符", threadName, result.length());
+        return result.toString();
+    }
+
+    /**
+     * 保存会话结果（包括 AI 回复和状态更新）
+     */
+    private void saveSessionResult(PromptCoachSession session, String response) {
+        // 添加 AI 回复到历史记录
+        session.addAssistantMessage(response);
+        
+        // 解析并更新会话状态（检测 "---初版Prompt---" 等标记）
+        try {
+            parseAndUpdateSession(session, response);
+        } catch (Exception e) {
+            log.warn("[agentChat] 解析状态失败", e);
+        }
+        
+        // 持久化到数据库
+        sessionRepository.save(session);
     }
 
     /**
@@ -275,7 +398,12 @@ public class AgentCoachService {
                 - 有没有漏掉的要求？
                 ```
                 
-                注意：使用中文回复。
+                **重要规则：**
+                - 使用中文回复
+                - 直接输出最终答案，不要输出你的思考过程
+                - 不要输出英文的推理步骤（如 "The user says..."）
+                - 不要输出中文的自我分析（如 "好的，用户让我..."）
+                - 如果需要调用工具，直接调用即可，不要先描述你的计划
                 """.formatted(
                 session.getCurrentPhase().getDescription(),
                 session.getHistory().size() / 2, // 对话轮数

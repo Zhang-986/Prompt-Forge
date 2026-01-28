@@ -102,7 +102,8 @@ public class DynamicLlmClientFactory {
         String baseUrl = config.getEffectiveBaseUrl();
         String model = config.getEffectiveModelName();
 
-        log.info("[{}] 调用 API: model={}", config.getProvider(), model);
+        log.info("[{}] [{}] 调用 API: model={}", 
+                Thread.currentThread().getName(), config.getProvider(), model);
 
         // 构建请求体
         Map<String, Object> requestBody = new java.util.HashMap<>();
@@ -160,11 +161,13 @@ public class DynamicLlmClientFactory {
                             });
                 })
                 .bodyToFlux(String.class)
+                .doOnSubscribe(sub -> log.info("    [{}] WebClient开始接收流式数据", Thread.currentThread().getName()))
                 .retryWhen(reactor.util.retry.Retry.backoff(2, java.time.Duration.ofSeconds(2))
                         .filter(e -> e.getMessage() != null && e.getMessage().contains("429")))
                 .filter(chunk -> !chunk.equals("[DONE]") && !chunk.trim().isEmpty())
                 .map(this::parseOpenAIContent)
-                .filter(content -> content != null && !content.isEmpty());
+                .filter(content -> content != null && !content.isEmpty())
+                .doOnComplete(() -> log.info("    [{}] WebClient流式接收完成", Thread.currentThread().getName()));
     }
 
     /**

@@ -114,8 +114,12 @@ public class FunctionCallingClient {
 
         // 只有有 Skill 时才添加 tools
         if (skills != null && !skills.isEmpty()) {
-            requestBody.put("tools", skillRegistry.toOpenAiTools(skills));
+            List<Map<String, Object>> tools = skillRegistry.toOpenAiTools(skills);
+            requestBody.put("tools", tools);
             requestBody.put("tool_choice", "auto");
+            
+            // 🔍 DEBUG: 打印发送给 LLM 的 tools 定义
+            log.info("[FunctionCallingClient] 发送给LLM的tools定义: {}", JSON.toJSONString(tools));
         }
 
         LocalDateTime startTime = LocalDateTime.now();
@@ -161,8 +165,13 @@ public class FunctionCallingClient {
 
         // 检查是否有 tool_calls
         JSONArray toolCalls = message.getJSONArray("tool_calls");
+        
+        // 🔍 DEBUG: 打印完整的 message 对象，看看 LLM 实际返回了什么
+        log.info("[FunctionCallingClient] LLM返回的message内容: {}", message.toJSONString());
+        log.info("[FunctionCallingClient] tool_calls字段: {}", toolCalls != null ? toolCalls.toJSONString() : "null");
+        
         if (toolCalls != null && !toolCalls.isEmpty()) {
-            log.info("[FunctionCallingClient] 检测到 {} 个工具调用", toolCalls.size());
+            log.info("[FunctionCallingClient] ✅ 检测到 {} 个工具调用", toolCalls.size());
 
             // 构建新的消息列表
             List<Map<String, Object>> newMessages = new ArrayList<>(messages);
