@@ -4,20 +4,26 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.zzk.domain.model.entity.UserModelConfig;
+import com.zzk.infrastructure.ai.strategy.LlmStreamStrategy;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 动态 LLM 客户端工厂
  * 
- * <p>
- * 根据用户配置动态创建 LLM 调用客户端
+ * <p>设计模式：工厂模式 + 策略模式
+ * - 工厂模式：根据 provider 选择合适的策略
+ * - 策略模式：不同厂商的 API 调用逻辑封装为独立策略类
+ * 
+ * <p>职责分离：
+ * - Factory（本类）：负责策略选择和路由
+ * - Strategy（策略类）：负责具体厂商的 API 调用实现
  * 
  * @author zzk
  * @since 1.0.0
@@ -27,314 +33,64 @@ import java.util.Map;
 public class DynamicLlmClientFactory {
 
     private final WebClient.Builder webClientBuilder;
+    private final Map<String, LlmStreamStrategy> strategyMap = new ConcurrentHashMap<>();
 
-    public DynamicLlmClientFactory(WebClient.Builder webClientBuilder) {
+    /**
+     * 构造函数：自动注册所有策略实现
+     * 
+     * @param webClientBuilder WebClient 构建器
+     * @param strategies Spring 容器中的所有策略实现（自动注入）
+     */
+    public DynamicLlmClientFactory(WebClient.Builder webClientBuilder, 
+                                   List<LlmStreamStrategy> strategies) {
         this.webClientBuilder = webClientBuilder;
+        
+        // 注册所有策略到映射表
+        strategies.forEach(strategy -> {
+            for (String provider : strategy.getSupportedProviders()) {
+                strategyMap.put(provider, strategy);
+                log.debug("[DynamicLlmClientFactory] 注册策略: {} -> {}", 
+                        provider, strategy.getClass().getSimpleName());
+            }
+        });
+        
+        log.info("[DynamicLlmClientFactory] 初始化完成，已注册 {} 个厂商策略", 
+                strategyMap.size());
     }
 
     /**
      * 使用用户配置创建流式生成
+     * 
+     * <p>工厂方法：根据 provider 从策略映射中选择对应策略
+     * 
+     * @param config 用户模型配置
+     * @param prompt 用户提示词
+     * @return 响应式文本流
      */
     public Flux<String> generateStream(UserModelConfig config, String prompt) {
-        return switch (config.getProvider()) {
-            case "google" -> generateGoogleStream(config, prompt);
-            case "anthropic", "claude" -> generateClaudeStream(config, prompt);
-            // OpenAI 兼容厂商 (绝大多数)
-            case "openai", "zhipu", "deepseek", "aliyun", "qwen", "moonshot", "cloudflare", "github", "hunyuan",
-                    "azure", "bedrock", "baichuan", "minimax", "stepfun", "yi", "sensenova",
-                    "mistral", "perplexity", "groq", "cohere", "novita", "togetherai",
-                    "ollama", "openrouter" ->
-                generateOpenAICompatibleStream(config, prompt);
-            default -> {
-                log.warn("未知提供商 '{}', 尝试使用 OpenAI 兼容模式", config.getProvider());
-                yield generateOpenAICompatibleStream(config, prompt); // 默认尝试 OpenAI 兼容
-            }
-        };
-    }
-
-    /**
-     * Google Gemini 流式生成
-     */
-    private Flux<String> generateGoogleStream(UserModelConfig config, String prompt) {
-        String baseUrl = config.getEffectiveBaseUrl();
-        String model = config.getEffectiveModelName();
-        String url = String.format("%s/v1beta/models/%s:streamGenerateContent?key=%s&alt=sse",
-                baseUrl, model, config.getApiKey());
-
-        log.info("[Google] 调用 API: model={}", model);
-
-        JSONObject requestBody = new JSONObject();
-        JSONObject part = new JSONObject();
-        part.put("text", prompt);
-        JSONObject content = new JSONObject();
-        content.put("parts", List.of(part));
-        requestBody.put("contents", List.of(content));
-
-        return webClientBuilder.build()
-                .post()
-                .uri(url)
-                .bodyValue(requestBody)
-                .retrieve()
-                .onStatus(status -> status.value() == 429, response -> {
-                    log.warn("[Google] 触发速率限制 (429)，请稍后重试");
-                    return response.bodyToMono(String.class)
-                            .flatMap(body -> reactor.core.publisher.Mono.error(
-                                    new RuntimeException("API 请求过于频繁，请等待几秒后重试")));
-                })
-                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(), response -> {
-                    return response.bodyToMono(String.class)
-                            .flatMap(body -> {
-                                log.error("[Google] API 错误: status={}, body={}", response.statusCode(), body);
-                                return reactor.core.publisher.Mono.error(
-                                        new RuntimeException("API 调用失败: " + response.statusCode() + " - " + body));
-                            });
-                })
-                .bodyToFlux(String.class)
-                .retryWhen(reactor.util.retry.Retry.backoff(3, java.time.Duration.ofSeconds(5))
-                        .filter(e -> e.getMessage() != null && e.getMessage().contains("429")))
-                .flatMap(this::parseGoogleResponse);
-    }
-
-    /**
-     * OpenAI 兼容格式流式生成 (适用于 Zhipu, DeepSeek, OpenAI)
-     */
-    private Flux<String> generateOpenAICompatibleStream(UserModelConfig config, String prompt) {
-        String baseUrl = config.getEffectiveBaseUrl();
-        String model = config.getEffectiveModelName();
-
-        log.info("[{}] [{}] 调用 API: model={}", 
-                Thread.currentThread().getName(), config.getProvider(), model);
-
-        // 构建请求体
-        Map<String, Object> requestBody = new java.util.HashMap<>();
-        requestBody.put("model", model);
-        requestBody.put("messages", List.of(Map.of("role", "user", "content", prompt)));
-        requestBody.put("stream", true);
-
-        // Cloudflare 默认 max_tokens 较小，需要显式设置
-        if (config.getProvider().equals("cloudflare")) {
-            requestBody.put("max_tokens", 4096);
-        }
-
-        // 根据 Provider 和 Base URL 确定正确的聊天端点
-        String chatEndpoint;
         String provider = config.getProvider();
-
-        // 这些厂商的 Base URL 已包含版本路径，直接追加 /chat/completions
-        if (List.of("openai", "deepseek", "zhipu", "aliyun", "qwen", "moonshot", "cloudflare", "hunyuan",
-                "baichuan", "minimax", "stepfun", "yi", "sensenova",
-                "mistral", "perplexity", "groq", "cohere", "novita", "togetherai",
-                "ollama", "openrouter").contains(provider)) {
-            chatEndpoint = "/chat/completions";
-        } else if (provider.equals("github")) {
-            chatEndpoint = "/chat/completions?api-version=2024-12-01-preview"; // Azure 风格
-        } else if (provider.equals("azure")) {
-            chatEndpoint = "/openai/deployments/" + model + "/chat/completions?api-version=2024-02-01";
-        } else if (provider.equals("bedrock")) {
-            chatEndpoint = "/model/" + model + "/invoke"; // AWS Bedrock 特殊路径
-        } else {
-            chatEndpoint = "/chat/completions"; // 默认使用不带 /v1 的路径（假设 baseUrl 已包含版本）
+        
+        // 从策略映射中获取对应策略
+        LlmStreamStrategy strategy = strategyMap.get(provider);
+        
+        if (strategy == null) {
+            log.warn("未找到厂商 '{}' 的策略实现，尝试使用 OpenAI 兼容模式", provider);
+            // 降级策略：使用 OpenAI 兼容策略（大多数厂商都兼容）
+            strategy = strategyMap.get("openai");
         }
-
-        return webClientBuilder.build()
-                .post()
-                .uri(baseUrl + chatEndpoint)
-                .header("Authorization", "Bearer " + config.getApiKey())
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(requestBody)
-                .retrieve()
-                .onStatus(status -> status.value() == 429, response -> {
-                    log.warn("[{}] 触发速率限制 (429)", config.getProvider());
-                    return response.bodyToMono(String.class)
-                            .flatMap(body -> reactor.core.publisher.Mono.error(
-                                    new RuntimeException("API 请求过于频繁，请等待几秒后重试")));
-                })
-                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(), response -> {
-                    return response.bodyToMono(String.class)
-                            .flatMap(body -> {
-                                log.error("[{}] API 错误: status={}, body={}", config.getProvider(),
-                                        response.statusCode(), body);
-                                // 对错误信息进行脱敏，返回用户友好的消息
-                                String userFriendlyMessage = sanitizeApiError(response.statusCode().value(), body);
-                                return reactor.core.publisher.Mono.error(
-                                        new RuntimeException(userFriendlyMessage));
-                            });
-                })
-                .bodyToFlux(String.class)
-                .doOnSubscribe(sub -> log.info("    [{}] WebClient开始接收流式数据", Thread.currentThread().getName()))
-                .retryWhen(reactor.util.retry.Retry.backoff(2, java.time.Duration.ofSeconds(2))
-                        .filter(e -> e.getMessage() != null && e.getMessage().contains("429")))
-                .filter(chunk -> !chunk.equals("[DONE]") && !chunk.trim().isEmpty())
-                .map(this::parseOpenAIContent)
-                .filter(content -> content != null && !content.isEmpty())
-                .doOnComplete(() -> log.info("    [{}] WebClient流式接收完成", Thread.currentThread().getName()));
-    }
-
-    /**
-     * Claude 流式生成
-     */
-    private Flux<String> generateClaudeStream(UserModelConfig config, String prompt) {
-        String baseUrl = config.getEffectiveBaseUrl();
-        String model = config.getEffectiveModelName();
-
-        log.info("[Claude] 调用 API: model={}", model);
-
-        Map<String, Object> requestBody = Map.of(
-                "model", model,
-                "messages", List.of(Map.of("role", "user", "content", prompt)),
-                "max_tokens", 4096,
-                "stream", true);
-
-        return webClientBuilder.build()
-                .post()
-                .uri(baseUrl + "/v1/messages")
-                .header("x-api-key", config.getApiKey())
-                .header("anthropic-version", "2023-06-01")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(requestBody)
-                .retrieve()
-                .onStatus(status -> status.value() == 429, response -> {
-                    log.warn("[Claude] 触发速率限制 (429)");
-                    return response.bodyToMono(String.class)
-                            .flatMap(body -> reactor.core.publisher.Mono.error(
-                                    new RuntimeException("API 请求过于频繁，请等待几秒后重试")));
-                })
-                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(), response -> {
-                    return response.bodyToMono(String.class)
-                            .flatMap(body -> {
-                                log.error("[Claude] API 错误: status={}, body={}", response.statusCode(), body);
-                                return reactor.core.publisher.Mono.error(
-                                        new RuntimeException("API 调用失败: " + response.statusCode() + " - " + body));
-                            });
-                })
-                .bodyToFlux(String.class)
-                .retryWhen(reactor.util.retry.Retry.backoff(2, java.time.Duration.ofSeconds(2))
-                        .filter(e -> e.getMessage() != null && e.getMessage().contains("429")))
-                .filter(chunk -> !chunk.trim().isEmpty())
-                .map(this::parseClaudeContent)
-                .filter(content -> content != null && !content.isEmpty());
-    }
-
-    /**
-     * 解析 Google 响应
-     */
-    private Flux<String> parseGoogleResponse(String chunk) {
-        if (chunk == null || chunk.isEmpty()) {
-            return Flux.empty();
+        
+        if (strategy == null) {
+            return Flux.error(new RuntimeException("无法找到合适的 AI 调用策略"));
         }
-
-        String trimmed = chunk.trim();
-        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-            String content = extractGoogleContent(trimmed);
-            return content.isEmpty() ? Flux.empty() : Flux.just(content);
-        }
-
-        // SSE 格式
-        String[] lines = chunk.split("\n");
-        return Flux.fromArray(lines)
-                .map(String::trim)
-                .filter(line -> line.startsWith("data:"))
-                .map(line -> line.substring(5).trim())
-                .filter(json -> !json.equals("[DONE]"))
-                .map(this::extractGoogleContent)
-                .filter(content -> !content.isEmpty());
-    }
-
-    private String extractGoogleContent(String jsonResponse) {
-        try {
-            if (jsonResponse.trim().startsWith("{")) {
-                JSONObject response = JSON.parseObject(jsonResponse);
-                JSONArray candidates = response.getJSONArray("candidates");
-                if (candidates != null && !candidates.isEmpty()) {
-                    JSONObject candidate = candidates.getJSONObject(0);
-                    JSONObject content = candidate.getJSONObject("content");
-                    if (content != null) {
-                        JSONArray parts = content.getJSONArray("parts");
-                        if (parts != null && !parts.isEmpty()) {
-                            return parts.getJSONObject(0).getString("text");
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.warn("解析 Google 响应失败: {}", e.getMessage());
-        }
-        return "";
-    }
-
-    /**
-     * 解析 OpenAI 兼容格式响应
-     */
-    private String parseOpenAIContent(String chunk) {
-        try {
-            String jsonStr = chunk;
-            if (chunk.startsWith("data:")) {
-                jsonStr = chunk.substring(5).trim();
-            }
-            if (jsonStr.isEmpty() || jsonStr.equals("[DONE]")) {
-                return "";
-            }
-
-            JSONObject json = JSON.parseObject(jsonStr);
-            JSONArray choices = json.getJSONArray("choices");
-            if (choices != null && !choices.isEmpty()) {
-                JSONObject delta = choices.getJSONObject(0).getJSONObject("delta");
-                if (delta != null) {
-                    StringBuilder sb = new StringBuilder();
-
-                    // 支持 DeepSeek R1 的推理内容
-                    if (delta.containsKey("reasoning_content")) {
-                        String reasoning = delta.getString("reasoning_content");
-                        if (reasoning != null) {
-                            sb.append(reasoning);
-                        }
-                    }
-
-                    // 标准内容
-                    if (delta.containsKey("content")) {
-                        String content = delta.getString("content");
-                        if (content != null) {
-                            sb.append(content);
-                        }
-                    }
-                    return sb.toString();
-                }
-            }
-        } catch (Exception e) {
-            log.warn("解析 OpenAI 响应失败: {}", e.getMessage());
-        }
-        return "";
-    }
-
-    /**
-     * 解析 Claude 响应
-     */
-    private String parseClaudeContent(String chunk) {
-        try {
-            String jsonStr = chunk;
-            if (chunk.startsWith("data:")) {
-                jsonStr = chunk.substring(5).trim();
-            }
-            if (jsonStr.isEmpty()) {
-                return "";
-            }
-
-            JSONObject json = JSON.parseObject(jsonStr);
-            String type = json.getString("type");
-            if ("content_block_delta".equals(type)) {
-                JSONObject delta = json.getJSONObject("delta");
-                if (delta != null) {
-                    return delta.getString("text");
-                }
-            }
-        } catch (Exception e) {
-            log.warn("解析 Claude 响应失败: {}", e.getMessage());
-        }
-        return "";
+        
+        // 委托给具体策略执行
+        return strategy.generateStream(config, prompt);
     }
 
     /**
      * 获取可用模型列表 (仅限 OpenAI 兼容接口)
+     * 
+     * <p>注意：此方法未使用策略模式，因为只有少数厂商支持模型列表 API
      */
     public List<String> fetchAvailableModels(UserModelConfig config) {
         String baseUrl = config.getEffectiveBaseUrl();
@@ -361,33 +117,5 @@ public class DynamicLlmClientFactory {
                     .toList();
         }
         return List.of();
-    }
-
-    /**
-     * 对 API 错误信息进行脱敏处理，避免泄露 API Key 等敏感信息到前端
-     */
-    private String sanitizeApiError(int statusCode, String rawBody) {
-        // 根据状态码返回用户友好的消息
-        switch (statusCode) {
-            case 401:
-                return "API Key 无效或已过期，请在「模型配置」中检查您的 API Key";
-            case 403:
-                return "API Key 权限不足，请确认是否已开通对应模型的访问权限";
-            case 404:
-                // 检查是否是模型不存在
-                if (rawBody != null && rawBody.contains("model")) {
-                    return "请求的模型不存在或未开通，请检查模型配置";
-                }
-                return "API 接口不存在，请检查配置的 Base URL 是否正确";
-            case 429:
-                return "API 请求过于频繁，请稍后再试";
-            case 500:
-            case 502:
-            case 503:
-                return "AI 服务暂时不可用，请稍后再试";
-            default:
-                // 对于其他错误，只返回状态码，不暴露原始错误内容
-                return "AI 服务调用失败 (错误码: " + statusCode + ")，请稍后重试或联系管理员";
-        }
     }
 }

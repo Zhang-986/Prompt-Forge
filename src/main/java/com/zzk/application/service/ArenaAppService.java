@@ -19,8 +19,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.FileWriter;
@@ -253,6 +256,259 @@ public class ArenaAppService {
 
         return emitter;
     }
+
+    // ======================== 纯 WebFlux 响应式版本 ========================
+
+    /**
+     * 竞技场 SSE 事件数据结构
+     */
+    public record ArenaEventData(
+            String modelId,
+            String type,      // session, start, content, finish, error, complete
+            String content,
+            int sequence,
+            boolean finished,
+            Long sessionId
+    ) {
+        public static ArenaEventData session(Long sessionId) {
+            return new ArenaEventData(null, "session", null, 0, false, sessionId);
+        }
+
+        public static ArenaEventData start(String modelId) {
+            return new ArenaEventData(modelId, "start", "", 0, false, null);
+        }
+
+        public static ArenaEventData content(String modelId, String content, int seq) {
+            return new ArenaEventData(modelId, "content", content, seq, false, null);
+        }
+
+        public static ArenaEventData finish(String modelId, int seq) {
+            return new ArenaEventData(modelId, "finish", "", seq, true, null);
+        }
+
+        public static ArenaEventData error(String modelId, String errorMsg) {
+            return new ArenaEventData(modelId, "error", errorMsg, 0, true, null);
+        }
+
+        public static ArenaEventData complete() {
+            return new ArenaEventData(null, "complete", "所有模型已完成", 0, true, null);
+        }
+    }
+
+    /**
+     * 启动竞技场对比（纯 WebFlux 响应式版本）
+     * 
+     * <p>使用 Flux.merge 并行调用多个模型，完全非阻塞
+     * 
+     * @param promptVersionId Prompt 版本 ID
+     * @param variables       变量替换 Map
+     * @param modelIds        要对比的模型 ID 列表
+     * @param userId          用户 ID
+     * @return SSE 事件流
+     */
+    public Flux<ServerSentEvent<ArenaEventData>> competeReactive(
+            Long promptVersionId, 
+            Map<String, Object> variables,
+            List<String> modelIds, 
+            Long userId) {
+        
+        log.info("[Reactive] 启动竞技场对比: versionId={}, models={}, userId={}", 
+                promptVersionId, modelIds, userId);
+
+        // 1. 获取 Prompt 版本
+        PromptVersion version = versionRepository.findById(promptVersionId)
+                .orElseThrow(() -> new BusinessException("Prompt 版本不存在: " + promptVersionId));
+
+        // 2. 渲染 Prompt 模板
+        String finalPrompt = arenaDomainService.renderPrompt(version.getContent(), variables);
+
+        // 3. 获取用户配置
+        Map<String, UserModelConfig> userConfigs = userConfigRepository.findEnabledByUserId(userId)
+                .stream()
+                .collect(Collectors.toMap(UserModelConfig::getProvider, c -> c));
+
+        // 4. 保存竞技会话
+        Long sessionId = saveArenaSession(promptVersionId, finalPrompt, variables, modelIds, userId);
+
+        // 5. 用于收集每个模型的完整输出（保存到数据库用）
+        Map<String, StringBuilder> resultBuffers = new ConcurrentHashMap<>();
+        Map<String, Long> startTimes = new ConcurrentHashMap<>();
+
+        // 6. 构建每个模型的响应流
+        List<Flux<ServerSentEvent<ArenaEventData>>> modelFluxes = modelIds.stream()
+                .map(modelId -> createModelFlux(modelId, finalPrompt, userConfigs, 
+                        sessionId, resultBuffers, startTimes))
+                .toList();
+
+        // 7. 先发送 Session ID，然后合并所有模型的流，最后发送完成事件
+        Flux<ServerSentEvent<ArenaEventData>> sessionEvent = Flux.just(
+                ServerSentEvent.<ArenaEventData>builder()
+                        .event("message")
+                        .data(ArenaEventData.session(sessionId))
+                        .build()
+        );
+
+        Flux<ServerSentEvent<ArenaEventData>> mergedModelFlux = Flux.merge(modelFluxes)
+                .subscribeOn(Schedulers.boundedElastic());
+
+        Flux<ServerSentEvent<ArenaEventData>> completeEvent = Flux.defer(() -> {
+            arenaSessionRepository.updateStatus(sessionId, "COMPLETED");
+            log.info("[Reactive] 竞技场对比完成: sessionId={}", sessionId);
+            return Flux.just(
+                    ServerSentEvent.<ArenaEventData>builder()
+                            .event("complete")
+                            .data(ArenaEventData.complete())
+                            .build()
+            );
+        });
+
+        return Flux.concat(sessionEvent, mergedModelFlux, completeEvent)
+                .doOnError(e -> {
+                    log.error("[Reactive] 竞技场执行异常: {}", e.getMessage());
+                    arenaSessionRepository.updateStatus(sessionId, "FAILED");
+                });
+    }
+
+    /**
+     * 保存竞技会话并返回 ID
+     */
+    private Long saveArenaSession(Long promptVersionId, String finalPrompt,
+            Map<String, Object> variables, List<String> modelIds, Long userId) {
+        String variablesJson = "{}";
+        String modelsJson = "[]";
+        try {
+            variablesJson = objectMapper.writeValueAsString(variables);
+            modelsJson = objectMapper.writeValueAsString(modelIds);
+        } catch (Exception e) {
+            log.warn("序列化变量/模型失败", e);
+        }
+
+        ArenaSession session = ArenaSession.builder()
+                .promptVersionId(promptVersionId)
+                .finalPrompt(finalPrompt)
+                .variables(variablesJson)
+                .models(modelsJson)
+                .status("RUNNING")
+                .creatorId(userId)
+                .createdAt(LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai")))
+                .build();
+        arenaSessionRepository.save(session);
+        log.info("[Reactive] 创建竞技会话: sessionId={}", session.getId());
+        return session.getId();
+    }
+
+    /**
+     * 为单个模型创建响应式流
+     */
+    private Flux<ServerSentEvent<ArenaEventData>> createModelFlux(
+            String modelId,
+            String finalPrompt,
+            Map<String, UserModelConfig> userConfigs,
+            Long sessionId,
+            Map<String, StringBuilder> resultBuffers,
+            Map<String, Long> startTimes) {
+
+        // 解析 modelId 格式: provider:modelName 或纯 provider
+        String provider;
+        String specificModel = null;
+        if (modelId.contains(":")) {
+            String[] parts = modelId.split(":", 2);
+            provider = parts[0];
+            specificModel = parts[1];
+        } else {
+            provider = modelId;
+        }
+
+        UserModelConfig userConfig = userConfigs.get(provider);
+        if (userConfig == null) {
+            // 用户未配置该模型
+            log.warn("[Reactive] 用户未配置模型: {}", provider);
+            saveArenaResult(sessionId, modelId, null, System.currentTimeMillis(),
+                    "FAILED", "用户未配置该模型的 API Key");
+            return Flux.just(
+                    ServerSentEvent.<ArenaEventData>builder()
+                            .event("error")
+                            .data(ArenaEventData.error(modelId, "您没有配置该模型的 API Key"))
+                            .build()
+            );
+        }
+
+        // 构建有效配置
+        UserModelConfig effectiveConfig = userConfig;
+        if (specificModel != null && !specificModel.isEmpty()) {
+            effectiveConfig = UserModelConfig.builder()
+                    .id(userConfig.getId())
+                    .userId(userConfig.getUserId())
+                    .provider(userConfig.getProvider())
+                    .apiKey(userConfig.getApiKey())
+                    .baseUrl(userConfig.getBaseUrl())
+                    .modelName(specificModel)
+                    .enabled(userConfig.getEnabled())
+                    .availableModels(userConfig.getAvailableModels())
+                    .build();
+        }
+
+        // 初始化缓冲区和计时
+        StringBuilder buffer = new StringBuilder();
+        resultBuffers.put(modelId, buffer);
+        startTimes.put(modelId, System.currentTimeMillis());
+        AtomicInteger sequence = new AtomicInteger(0);
+
+        // 构建模型调用流
+        Flux<ServerSentEvent<ArenaEventData>> startEvent = Flux.just(
+                ServerSentEvent.<ArenaEventData>builder()
+                        .event("message")
+                        .data(ArenaEventData.start(modelId))
+                        .build()
+        );
+
+        final UserModelConfig finalConfig = effectiveConfig;
+        Flux<ServerSentEvent<ArenaEventData>> contentFlux = dynamicLlmFactory
+                .generateStream(finalConfig, finalPrompt)
+                .publishOn(Schedulers.boundedElastic())  // 切换到弹性线程池处理后续操作
+                .map(content -> {
+                    buffer.append(content);
+                    return ServerSentEvent.<ArenaEventData>builder()
+                            .event("message")
+                            .data(ArenaEventData.content(modelId, content, sequence.incrementAndGet()))
+                            .build();
+                })
+                .doOnComplete(() -> {
+                    long latencyMs = System.currentTimeMillis() - startTimes.get(modelId);
+                    log.info("[Reactive] 模型 {} 完成，耗时 {}ms", modelId, latencyMs);
+                    // 异步保存，不阻塞响应式流
+                    Mono.fromRunnable(() -> saveArenaResult(sessionId, modelId, buffer.toString(),
+                            startTimes.get(modelId), "SUCCESS", null))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .subscribe();
+                })
+                .doOnError(e -> {
+                    long latencyMs = System.currentTimeMillis() - startTimes.get(modelId);
+                    log.error("[Reactive] 模型 {} 调用失败: {}", modelId, e.getMessage());
+                    // 异步保存，不阻塞响应式流
+                    Mono.fromRunnable(() -> saveArenaResult(sessionId, modelId, null,
+                            startTimes.get(modelId), "FAILED", e.getMessage()))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .subscribe();
+                })
+                .onErrorResume(e -> Flux.just(
+                        ServerSentEvent.<ArenaEventData>builder()
+                                .event("error")
+                                .data(ArenaEventData.error(modelId, e.getMessage()))
+                                .build()
+                ));
+
+        Flux<ServerSentEvent<ArenaEventData>> finishEvent = Flux.defer(() -> Flux.just(
+                ServerSentEvent.<ArenaEventData>builder()
+                        .event("message")
+                        .data(ArenaEventData.finish(modelId, sequence.get()))
+                        .build()
+        ));
+
+        return Flux.concat(startEvent, contentFlux, finishEvent);
+    }
+
+    // ======================== 纯 WebFlux 响应式版本结束 ========================
 
     /**
      * 保存竞技结果

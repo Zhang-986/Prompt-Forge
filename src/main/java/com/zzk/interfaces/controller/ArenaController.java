@@ -10,8 +10,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Map;
@@ -56,6 +58,35 @@ public class ArenaController {
                 request.getPromptVersionId(), request.getModelIds(), userId);
 
         return arenaAppService.compete(
+                request.getPromptVersionId(),
+                request.getVariables(),
+                request.getModelIds(),
+                userId);
+    }
+
+    /**
+     * 启动竞技场对比（纯 WebFlux 响应式版本）
+     * 
+     * <p>使用 Flux.merge 并行调用多个模型，完全非阻塞，无需线程池
+     * 
+     * <p>前端连接示例：
+     * <pre>
+     * const eventSource = new EventSource('/api/arena/compete/reactive');
+     * eventSource.onmessage = (event) => {
+     *     const data = JSON.parse(event.data);
+     *     console.log(data.modelId, data.content);
+     * };
+     * </pre>
+     */
+    @PostMapping(value = "/compete/reactive", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "启动竞技场对比(响应式)", description = "使用 WebFlux 并行调用多个 AI 模型，SSE 流式返回结果")
+    public Flux<ServerSentEvent<ArenaAppService.ArenaEventData>> competeReactive(
+            @RequestAttribute("userId") Long userId,
+            @Valid @RequestBody ArenaCompeteRequest request) {
+        log.info("[Reactive] 收到竞技场对比请求: versionId={}, models={}, userId={}",
+                request.getPromptVersionId(), request.getModelIds(), userId);
+
+        return arenaAppService.competeReactive(
                 request.getPromptVersionId(),
                 request.getVariables(),
                 request.getModelIds(),
