@@ -106,6 +106,7 @@ export const sendAgentMessage = async (
                     }
 
                     // 传递事件类型和数据
+                    // 支持的事件类型: THOUGHT, TOOL_START, TOOL_END, REASONING, CONTENT
                     if (currentEvent) {
                         onChunk(`__EVENT__:${currentEvent}:${data}`)
                     } else {

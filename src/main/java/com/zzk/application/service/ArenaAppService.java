@@ -264,12 +264,11 @@ public class ArenaAppService {
      */
     public record ArenaEventData(
             String modelId,
-            String type,      // session, start, content, finish, error, complete
+            String type, // session, start, content, finish, error, complete
             String content,
             int sequence,
             boolean finished,
-            Long sessionId
-    ) {
+            Long sessionId) {
         public static ArenaEventData session(Long sessionId) {
             return new ArenaEventData(null, "session", null, 0, false, sessionId);
         }
@@ -286,6 +285,10 @@ public class ArenaAppService {
             return new ArenaEventData(modelId, "finish", "", seq, true, null);
         }
 
+        public static ArenaEventData reasoning(String modelId, String content, int seq) {
+            return new ArenaEventData(modelId, "reasoning", content, seq, false, null);
+        }
+
         public static ArenaEventData error(String modelId, String errorMsg) {
             return new ArenaEventData(modelId, "error", errorMsg, 0, true, null);
         }
@@ -298,7 +301,8 @@ public class ArenaAppService {
     /**
      * 启动竞技场对比（纯 WebFlux 响应式版本）
      * 
-     * <p>使用 Flux.merge 并行调用多个模型，完全非阻塞
+     * <p>
+     * 使用 Flux.merge 并行调用多个模型，完全非阻塞
      * 
      * @param promptVersionId Prompt 版本 ID
      * @param variables       变量替换 Map
@@ -307,12 +311,12 @@ public class ArenaAppService {
      * @return SSE 事件流
      */
     public Flux<ServerSentEvent<ArenaEventData>> competeReactive(
-            Long promptVersionId, 
+            Long promptVersionId,
             Map<String, Object> variables,
-            List<String> modelIds, 
+            List<String> modelIds,
             Long userId) {
-        
-        log.info("[Reactive] 启动竞技场对比: versionId={}, models={}, userId={}", 
+
+        log.info("[Reactive] 启动竞技场对比: versionId={}, models={}, userId={}",
                 promptVersionId, modelIds, userId);
 
         // 1. 获取 Prompt 版本
@@ -336,7 +340,7 @@ public class ArenaAppService {
 
         // 6. 构建每个模型的响应流
         List<Flux<ServerSentEvent<ArenaEventData>>> modelFluxes = modelIds.stream()
-                .map(modelId -> createModelFlux(modelId, finalPrompt, userConfigs, 
+                .map(modelId -> createModelFlux(modelId, finalPrompt, userConfigs,
                         sessionId, resultBuffers, startTimes))
                 .toList();
 
@@ -345,8 +349,7 @@ public class ArenaAppService {
                 ServerSentEvent.<ArenaEventData>builder()
                         .event("message")
                         .data(ArenaEventData.session(sessionId))
-                        .build()
-        );
+                        .build());
 
         Flux<ServerSentEvent<ArenaEventData>> mergedModelFlux = Flux.merge(modelFluxes)
                 .subscribeOn(Schedulers.boundedElastic());
@@ -358,8 +361,7 @@ public class ArenaAppService {
                     ServerSentEvent.<ArenaEventData>builder()
                             .event("complete")
                             .data(ArenaEventData.complete())
-                            .build()
-            );
+                            .build());
         });
 
         return Flux.concat(sessionEvent, mergedModelFlux, completeEvent)
@@ -429,8 +431,7 @@ public class ArenaAppService {
                     ServerSentEvent.<ArenaEventData>builder()
                             .event("error")
                             .data(ArenaEventData.error(modelId, "您没有配置该模型的 API Key"))
-                            .build()
-            );
+                            .build());
         }
 
         // 构建有效配置
@@ -459,18 +460,30 @@ public class ArenaAppService {
                 ServerSentEvent.<ArenaEventData>builder()
                         .event("message")
                         .data(ArenaEventData.start(modelId))
-                        .build()
-        );
+                        .build());
 
         final UserModelConfig finalConfig = effectiveConfig;
         Flux<ServerSentEvent<ArenaEventData>> contentFlux = dynamicLlmFactory
-                .generateStream(finalConfig, finalPrompt)
-                .publishOn(Schedulers.boundedElastic())  // 切换到弹性线程池处理后续操作
-                .map(content -> {
-                    buffer.append(content);
+                .generateStreamChunks(finalConfig, finalPrompt)
+                .publishOn(Schedulers.boundedElastic()) // 切换到弹性线程池处理后续操作
+                .filter(chunk -> chunk.type() != com.zzk.infrastructure.ai.adapter.StreamChunk.ChunkType.DONE)
+                .map(chunk -> {
+                    // 仅将 CONTENT 类型内容追加到最终结果（REASONING 不计入最终输出）
+                    if (chunk.type() == com.zzk.infrastructure.ai.adapter.StreamChunk.ChunkType.CONTENT) {
+                        buffer.append(chunk.content());
+                    }
+                    // 根据 chunk 类型生成对应的 SSE 事件
+                    ArenaEventData eventData = switch (chunk.type()) {
+                        case REASONING ->
+                            ArenaEventData.reasoning(modelId, chunk.content(), sequence.incrementAndGet());
+                        case CONTENT -> ArenaEventData.content(modelId, chunk.content(), sequence.incrementAndGet());
+                        case TOOL_CALL -> ArenaEventData.content(modelId, "[Tool Call: " + chunk.content() + "]",
+                                sequence.incrementAndGet());
+                        case DONE -> null; // 已被过滤
+                    };
                     return ServerSentEvent.<ArenaEventData>builder()
                             .event("message")
-                            .data(ArenaEventData.content(modelId, content, sequence.incrementAndGet()))
+                            .data(eventData)
                             .build();
                 })
                 .doOnComplete(() -> {
@@ -495,15 +508,13 @@ public class ArenaAppService {
                         ServerSentEvent.<ArenaEventData>builder()
                                 .event("error")
                                 .data(ArenaEventData.error(modelId, e.getMessage()))
-                                .build()
-                ));
+                                .build()));
 
         Flux<ServerSentEvent<ArenaEventData>> finishEvent = Flux.defer(() -> Flux.just(
                 ServerSentEvent.<ArenaEventData>builder()
                         .event("message")
                         .data(ArenaEventData.finish(modelId, sequence.get()))
-                        .build()
-        ));
+                        .build()));
 
         return Flux.concat(startEvent, contentFlux, finishEvent);
     }
@@ -563,11 +574,22 @@ public class ArenaAppService {
 
         sendEvent(emitter, modelId, "start", "", sequence.get(), false);
 
-        dynamicLlmFactory.generateStream(config, prompt)
+        dynamicLlmFactory.generateStreamChunks(config, prompt)
                 .subscribeOn(Schedulers.boundedElastic())
-                .doOnNext(content -> {
-                    buffer.append(content);
-                    sendEvent(emitter, modelId, "content", content, sequence.incrementAndGet(), false);
+                .doOnNext(chunk -> {
+                    // 根据 chunk 类型发送不同事件
+                    String eventType = switch (chunk.type()) {
+                        case REASONING -> "reasoning";
+                        case CONTENT -> {
+                            buffer.append(chunk.content()); // 仅 CONTENT 追加到最终结果
+                            yield "content";
+                        }
+                        case TOOL_CALL -> "content"; // TOOL_CALL 作为 content 发送
+                        case DONE -> null;
+                    };
+                    if (eventType != null && chunk.hasContent()) {
+                        sendEvent(emitter, modelId, eventType, chunk.content(), sequence.incrementAndGet(), false);
+                    }
                 })
                 .doOnComplete(() -> {
                     long latency = System.currentTimeMillis() - startTime;

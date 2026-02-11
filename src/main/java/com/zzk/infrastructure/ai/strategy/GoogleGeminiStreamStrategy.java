@@ -4,6 +4,9 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.zzk.domain.model.entity.UserModelConfig;
+import com.zzk.infrastructure.ai.adapter.StreamChunk;
+import com.zzk.infrastructure.ai.adapter.StreamChunkParser;
+import com.zzk.infrastructure.ai.adapter.StreamChunkParserRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -15,7 +18,8 @@ import java.util.List;
 /**
  * Google Gemini 流式生成策略
  * 
- * <p>Google Gemini 使用独特的 API 格式：
+ * <p>
+ * Google Gemini 使用独特的 API 格式：
  * - URL: /v1beta/models/{model}:streamGenerateContent
  * - 认证: Query String 传递 API Key
  * - 请求体: contents[{parts[{text}]}] 结构
@@ -30,6 +34,7 @@ import java.util.List;
 public class GoogleGeminiStreamStrategy implements LlmStreamStrategy {
 
     private final WebClient.Builder webClientBuilder;
+    private final StreamChunkParserRegistry parserRegistry;
 
     @Override
     public Flux<String> generateStream(UserModelConfig config, String prompt) {
@@ -75,7 +80,68 @@ public class GoogleGeminiStreamStrategy implements LlmStreamStrategy {
 
     @Override
     public String[] getSupportedProviders() {
-        return new String[]{"google"};
+        return new String[] { "google", "gemini" };
+    }
+
+    @Override
+    public Flux<StreamChunk> generateStreamChunks(UserModelConfig config, String prompt) {
+        String baseUrl = config.getEffectiveBaseUrl();
+        String model = config.getEffectiveModelName();
+        String provider = config.getProvider();
+        String url = String.format("%s/v1beta/models/%s:streamGenerateContent?key=%s&alt=sse",
+                baseUrl, model, config.getApiKey());
+
+        log.info("[Google] 调用 API (StreamChunk): model={}", model);
+
+        JSONObject requestBody = new JSONObject();
+        JSONObject part = new JSONObject();
+        part.put("text", prompt);
+        JSONObject content = new JSONObject();
+        content.put("parts", List.of(part));
+        requestBody.put("contents", List.of(content));
+
+        return webClientBuilder.build()
+                .post()
+                .uri(url)
+                .bodyValue(requestBody)
+                .retrieve()
+                .onStatus(status -> status.value() == 429, response -> response.bodyToMono(String.class)
+                        .flatMap(body -> reactor.core.publisher.Mono.error(
+                                new RuntimeException("API 请求过于频繁，请稍后再试"))))
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        response -> response.bodyToMono(String.class)
+                                .flatMap(body -> {
+                                    log.error("[Google] API 错误: status={}, body={}", response.statusCode(), body);
+                                    return reactor.core.publisher.Mono.error(
+                                            new RuntimeException("API 调用失败: " + response.statusCode() + " - " + body));
+                                }))
+                .bodyToFlux(String.class)
+                .retryWhen(reactor.util.retry.Retry.backoff(3, java.time.Duration.ofSeconds(5))
+                        .filter(e -> e.getMessage() != null && e.getMessage().contains("429")))
+                .flatMapIterable(this::parseRawToChunks)
+                .filter(StreamChunk::hasContent);
+    }
+
+    /**
+     * 将原始响应切分后使用 parser 解析
+     */
+    private List<StreamChunk> parseRawToChunks(String chunk) {
+        if (chunk == null || chunk.isEmpty()) {
+            return List.of();
+        }
+
+        String trimmed = chunk.trim();
+        if (trimmed.startsWith("data:")) {
+            trimmed = trimmed.substring(5).trim();
+        }
+
+        if (trimmed.isEmpty() || trimmed.equals("[DONE]")) {
+            return List.of();
+        }
+
+        // 复用注册表中的 GeminiChunkParser
+        StreamChunkParser parser = parserRegistry.getParser("google");
+        return parser.parse(trimmed);
     }
 
     /**

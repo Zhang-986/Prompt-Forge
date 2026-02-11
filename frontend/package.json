@@ -16,6 +16,7 @@
     "@ant-design/icons-vue": "^7.0.1",
     "ant-design-vue": "^4.2.6",
     "axios": "^1.13.2",
+    "dayjs": "^1.11.19",
     "element-plus": "^2.13.0",
     "marked": "^17.0.1",
     "pinia": "^3.0.4",

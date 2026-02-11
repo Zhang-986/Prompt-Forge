@@ -102,12 +102,13 @@ const currentSelectionId = computed(() => {
 // Output State
 interface ModelOutput {
   content: string
+  reasoning: string  // 深度思考内容
   finished: boolean
   error?: string
   time?: number
 }
-const outputA = ref<ModelOutput>({ content: '', finished: false })
-const outputB = ref<ModelOutput>({ content: '', finished: false })
+const outputA = ref<ModelOutput>({ content: '', reasoning: '', finished: false })
+const outputB = ref<ModelOutput>({ content: '', reasoning: '', finished: false })
 
 // Voting State
 const hasVoted = ref(false)
@@ -200,6 +201,7 @@ const restoreSession = async (historyItem: any) => {
 
       outputA.value = {
         content: resA?.content || '',
+        reasoning: '',
         finished: true,
         error: resA?.error,
         time: resA?.latencyMs
@@ -207,6 +209,7 @@ const restoreSession = async (historyItem: any) => {
 
       outputB.value = {
         content: resB?.content || '',
+        reasoning: '',
         finished: true,
         error: resB?.error,
         time: resB?.latencyMs
@@ -349,8 +352,8 @@ const startCompete = () => {
   if (modelA.value === modelB.value) return message.warning('请选择两个不同的模型进行对比')
 
   // Reset State
-  outputA.value = { content: '', finished: false }
-  outputB.value = { content: '', finished: false }
+  outputA.value = { content: '', reasoning: '', finished: false }
+  outputB.value = { content: '', reasoning: '', finished: false }
   hasVoted.value = false
   votedWinner.value = null
   isCompeting.value = true
@@ -436,6 +439,9 @@ const handleArenaEvent = (event: ArenaEvent) => {
 
   if (event.type === 'content') {
     target.content += event.content || ''
+  } else if (event.type === 'reasoning') {
+    // 深度思考内容
+    target.reasoning += event.content || ''
   } else if (event.type === 'finish') {
     target.finished = true
   } else if (event.type === 'error') {
@@ -605,15 +611,23 @@ onUnmounted(() => stopCompete())
           </div>
 
           <div class="chat-area">
-            <div v-if="!outputA.content && !outputA.error && !isCompeting" class="placeholder-state">
+            <div v-if="!outputA.content && !outputA.reasoning && !outputA.error && !isCompeting" class="placeholder-state">
               <div class="placeholder-icon">
                 <FireOutlined style="color: #9ca3af; opacity: 0.2" />
               </div>
             </div>
-            <div v-else class="message-bubble model-msg">
-              <div class="msg-content markdown-body" v-html="renderMarkdown(outputA.content)"></div>
-              <div v-if="outputA.error" class="error-text">Result Error: {{ outputA.error }}</div>
-              <div v-if="!outputA.finished && isCompeting" class="typing-cursor"></div>
+            <div v-else>
+              <!-- 深度思考 -->
+              <div v-if="outputA.reasoning" class="reasoning-block">
+                <div class="reasoning-header">💭 思考过程</div>
+                <div class="reasoning-text">{{ outputA.reasoning }}</div>
+              </div>
+              <!-- 正式回答 -->
+              <div class="message-bubble model-msg">
+                <div class="msg-content markdown-body" v-html="renderMarkdown(outputA.content)"></div>
+                <div v-if="outputA.error" class="error-text">Result Error: {{ outputA.error }}</div>
+                <div v-if="!outputA.finished && isCompeting" class="typing-cursor"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -641,15 +655,23 @@ onUnmounted(() => stopCompete())
           </div>
 
           <div class="chat-area">
-            <div v-if="!outputB.content && !outputB.error && !isCompeting" class="placeholder-state">
+            <div v-if="!outputB.content && !outputB.reasoning && !outputB.error && !isCompeting" class="placeholder-state">
               <div class="placeholder-icon">
                 <ThunderboltOutlined style="color: #9ca3af; opacity: 0.2" />
               </div>
             </div>
-            <div v-else class="message-bubble model-msg">
-              <div class="msg-content markdown-body" v-html="renderMarkdown(outputB.content)"></div>
-              <div v-if="outputB.error" class="error-text">Result Error: {{ outputB.error }}</div>
-              <div v-if="!outputB.finished && isCompeting" class="typing-cursor"></div>
+            <div v-else>
+              <!-- 深度思考 -->
+              <div v-if="outputB.reasoning" class="reasoning-block">
+                <div class="reasoning-header">💭 思考过程</div>
+                <div class="reasoning-text">{{ outputB.reasoning }}</div>
+              </div>
+              <!-- 正式回答 -->
+              <div class="message-bubble model-msg">
+                <div class="msg-content markdown-body" v-html="renderMarkdown(outputB.content)"></div>
+                <div v-if="outputB.error" class="error-text">Result Error: {{ outputB.error }}</div>
+                <div v-if="!outputB.finished && isCompeting" class="typing-cursor"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -1250,5 +1272,32 @@ onUnmounted(() => stopCompete())
 .trigger-arrow {
   font-size: 10px;
   color: #9ca3af;
+}
+
+/* Reasoning Block (Deep Thinking) */
+.reasoning-block {
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-left: 3px solid #f59e0b;
+  border-radius: 8px;
+}
+
+.reasoning-block .reasoning-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.reasoning-block .reasoning-text {
+  font-size: 13px;
+  color: #6b7280;
+  font-style: italic;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 150px;
+  overflow-y: auto;
 }
 </style>

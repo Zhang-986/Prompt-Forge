@@ -29,7 +29,7 @@ export const buildCompeteUrl = (params: {
 
 export interface ArenaEvent {
     modelId?: string
-    type: 'start' | 'content' | 'finish' | 'error' | 'session'
+    type: 'start' | 'content' | 'reasoning' | 'finish' | 'error' | 'session'
     content?: string
     sequence?: number
     finished?: boolean

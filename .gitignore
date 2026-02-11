@@ -85,6 +85,7 @@ yarn-error.log
 src/main/resources/application.yml
 src/main/resources/application.yml
 项目场第一版.md
+*.md
 remind.md
 docs/Feishu_vs_NotebookLM_Interview_Guide.md
 docs/Interview_Version_Control_Challenges.md

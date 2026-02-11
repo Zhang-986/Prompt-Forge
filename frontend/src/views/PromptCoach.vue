@@ -31,6 +31,7 @@ const sending = ref(false)
 const session = ref<CoachSession | null>(null)
 const userInput = ref('')
 const currentAiResponse = ref('')
+const currentReasoning = ref('')  // 深度思考内容 (REASONING)
 const chatContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<any>(null)  // Ant Design Vue textarea ref
 
@@ -138,6 +139,7 @@ const startChat = async () => {
 
     sending.value = true
     currentAiResponse.value = ''
+    currentReasoning.value = ''
     scrollToBottom()
 
     try {
@@ -206,6 +208,10 @@ const handleSSEChunk = (chunk: string) => {
             case 'THOUGHT':
                 thoughtProcess.value.push({ type: 'thought', content: data })
                 break
+            case 'REASONING':
+                // 深度思考内容 - 追加到思考过程区域
+                currentReasoning.value += data
+                break
             case 'TOOL_START':
                 try {
                     const toolInfo = JSON.parse(data)
@@ -242,6 +248,10 @@ const handleSSEChunk = (chunk: string) => {
         switch (eventType) {
             case 'THOUGHT':
                 thoughtProcess.value.push({ type: 'thought', content: data })
+                break
+            case 'REASONING':
+                // 深度思考内容
+                currentReasoning.value += data
                 break
             case 'TOOL_START':
                 try {
@@ -286,6 +296,7 @@ const sendMessage = async () => {
 
     sending.value = true
     currentAiResponse.value = ''
+    currentReasoning.value = ''
     thoughtProcess.value = []
 
     session.value.history.push({
@@ -540,6 +551,17 @@ const handleKeydown = async (e: KeyboardEvent) => {
                                 <span v-if="step.preview" class="step-preview">{{ step.preview }}</span>
                             </div>
                         </template>
+                    </div>
+                </div>
+
+                <!-- 深度思考过程 (REASONING) -->
+                <div v-if="currentReasoning" class="reasoning-section">
+                    <div class="reasoning-header">
+                        <span class="reasoning-icon">💭</span>
+                        <span>思考过程</span>
+                    </div>
+                    <div class="reasoning-content">
+                        {{ currentReasoning }}
                     </div>
                 </div>
 
@@ -922,6 +944,37 @@ const handleKeydown = async (e: KeyboardEvent) => {
     100% {
         opacity: 0;
     }
+}
+
+/* 深度思考区域 (REASONING) */
+.reasoning-section {
+    margin: var(--space-3) 0;
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border-light);
+    border-left: 3px solid var(--color-warning);
+    border-radius: var(--radius-md);
+}
+
+.reasoning-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-2);
+}
+
+.reasoning-icon {
+    font-size: var(--text-base);
+}
+
+.reasoning-content {
+    font-size: var(--text-sm);
+    color: var(--color-text-tertiary);
+    font-style: italic;
+    line-height: 1.6;
+    white-space: pre-wrap;
 }
 
 /* 生成的 Prompt */

@@ -4,6 +4,9 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.zzk.domain.model.entity.UserModelConfig;
+import com.zzk.infrastructure.ai.adapter.StreamChunk;
+import com.zzk.infrastructure.ai.adapter.StreamChunkParser;
+import com.zzk.infrastructure.ai.adapter.StreamChunkParserRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -17,7 +20,8 @@ import java.util.Map;
 /**
  * OpenAI 兼容格式流式生成策略
  * 
- * <p>适用于所有遵循 OpenAI API 规范的厂商：
+ * <p>
+ * 适用于所有遵循 OpenAI API 规范的厂商：
  * - OpenAI (GPT-4, GPT-3.5)
  * - 智谱 AI (GLM-4)
  * - DeepSeek
@@ -34,6 +38,7 @@ import java.util.Map;
 public class OpenAICompatibleStreamStrategy implements LlmStreamStrategy {
 
     private final WebClient.Builder webClientBuilder;
+    private final StreamChunkParserRegistry parserRegistry;
 
     @Override
     public Flux<String> generateStream(UserModelConfig config, String prompt) {
@@ -41,7 +46,7 @@ public class OpenAICompatibleStreamStrategy implements LlmStreamStrategy {
         String model = config.getEffectiveModelName();
         String provider = config.getProvider();
 
-        log.info("[{}] [{}] 调用 API: model={}", 
+        log.info("[{}] [{}] 调用 API: model={}",
                 Thread.currentThread().getName(), provider, model);
 
         // 构建请求体
@@ -92,12 +97,60 @@ public class OpenAICompatibleStreamStrategy implements LlmStreamStrategy {
     }
 
     @Override
+    public Flux<StreamChunk> generateStreamChunks(UserModelConfig config, String prompt) {
+        String baseUrl = config.getEffectiveBaseUrl();
+        String model = config.getEffectiveModelName();
+        String provider = config.getProvider();
+
+        log.info("[{}] [{}] 调用 API (StreamChunk): model={}",
+                Thread.currentThread().getName(), provider, model);
+
+        Map<String, Object> requestBody = new java.util.HashMap<>();
+        requestBody.put("model", model);
+        requestBody.put("messages", List.of(Map.of("role", "user", "content", prompt)));
+        requestBody.put("stream", true);
+
+        if ("cloudflare".equals(provider)) {
+            requestBody.put("max_tokens", 4096);
+        }
+
+        String chatEndpoint = determineChatEndpoint(provider, model);
+        StreamChunkParser parser = parserRegistry.getParser(provider);
+
+        return webClientBuilder.build()
+                .post()
+                .uri(baseUrl + chatEndpoint)
+                .header("Authorization", "Bearer " + config.getApiKey())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .onStatus(status -> status.value() == 429, response -> response.bodyToMono(String.class)
+                        .flatMap(body -> reactor.core.publisher.Mono.error(
+                                new RuntimeException("API 请求过于频繁，请等待几秒后重试"))))
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        response -> response.bodyToMono(String.class)
+                                .flatMap(body -> {
+                                    log.error("[{}] API 错误: status={}, body={}", provider,
+                                            response.statusCode(), body);
+                                    String userFriendlyMessage = sanitizeApiError(response.statusCode().value(), body);
+                                    return reactor.core.publisher.Mono.error(
+                                            new RuntimeException(userFriendlyMessage));
+                                }))
+                .bodyToFlux(String.class)
+                .retryWhen(reactor.util.retry.Retry.backoff(2, java.time.Duration.ofSeconds(2))
+                        .filter(e -> e.getMessage() != null && e.getMessage().contains("429")))
+                .filter(chunk -> !chunk.equals("[DONE]") && !chunk.trim().isEmpty())
+                .flatMapIterable(parser::parse)
+                .filter(StreamChunk::hasContent);
+    }
+
+    @Override
     public String[] getSupportedProviders() {
-        return new String[]{
-                "openai", "zhipu", "deepseek", "aliyun", "qwen", "moonshot", 
-                "cloudflare", "github", "hunyuan", "azure", "bedrock", 
+        return new String[] {
+                "openai", "zhipu", "deepseek", "aliyun", "qwen", "moonshot",
+                "cloudflare", "github", "hunyuan", "azure", "bedrock",
                 "baichuan", "minimax", "stepfun", "yi", "sensenova",
-                "mistral", "perplexity", "groq", "cohere", "novita", 
+                "mistral", "perplexity", "groq", "cohere", "novita",
                 "togetherai", "ollama", "openrouter"
         };
     }
