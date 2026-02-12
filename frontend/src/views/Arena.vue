@@ -364,7 +364,7 @@ const startCompete = () => {
   const token = localStorage.getItem('token')
   const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
 
-  fetch(`${baseUrl}/arena/compete`, {
+  fetch(`${baseUrl}/ai/arena/compete`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -611,7 +611,8 @@ onUnmounted(() => stopCompete())
           </div>
 
           <div class="chat-area">
-            <div v-if="!outputA.content && !outputA.reasoning && !outputA.error && !isCompeting" class="placeholder-state">
+            <div v-if="!outputA.content && !outputA.reasoning && !outputA.error && !isCompeting"
+              class="placeholder-state">
               <div class="placeholder-icon">
                 <FireOutlined style="color: #9ca3af; opacity: 0.2" />
               </div>
@@ -655,7 +656,8 @@ onUnmounted(() => stopCompete())
           </div>
 
           <div class="chat-area">
-            <div v-if="!outputB.content && !outputB.reasoning && !outputB.error && !isCompeting" class="placeholder-state">
+            <div v-if="!outputB.content && !outputB.reasoning && !outputB.error && !isCompeting"
+              class="placeholder-state">
               <div class="placeholder-icon">
                 <ThunderboltOutlined style="color: #9ca3af; opacity: 0.2" />
               </div>
@@ -690,7 +692,7 @@ onUnmounted(() => stopCompete())
           <div class="vote-result" v-else>
             <span v-if="votedWinner === 'tie'">🤝 It's a Tie!</span>
             <span v-else>🎉 You voted for: <strong>{{ restoreWinnerName || getModelDisplayName(votedWinner!)
-            }}</strong></span>
+                }}</strong></span>
           </div>
         </div>
       </div>

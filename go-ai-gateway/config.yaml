@@ -1,0 +1,14 @@
+# Go AI Gateway 配置文件
+server:
+  port: 8081
+  grpc_port: 9090
+
+database:
+  host: 10.147.17.199
+  port: 3306
+  user: root
+  password: "1234"
+  dbname: prompt_forge
+
+jwt:
+  secret: "PromptForge2024SecretKeyForJWTTokenGenerationMustBeLongEnough"

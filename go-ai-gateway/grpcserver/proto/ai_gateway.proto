@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package ai_gateway;
+
+option go_package = "go-ai-gateway/grpcserver/proto";
+
+// AiGateway gRPC 服务定义
+// 供 Java 服务内部调用 Go AI Gateway 的 AI 能力
+service AiGateway {
+  // 流式生成：Java 调用 Go 获取 AI 流式结果
+  rpc GenerateStream(StreamRequest) returns (stream StreamChunk);
+
+  // 获取用户可用模型列表
+  rpc FetchAvailableModels(ModelsRequest) returns (ModelsResponse);
+
+  // 模型连通性验证
+  rpc ValidateModel(ValidateRequest) returns (ValidateResponse);
+}
+
+// StreamRequest 流式生成请求
+message StreamRequest {
+  int64 user_id = 1;
+  string provider = 2;
+  string prompt = 3;
+  int64 config_id = 4;  // 可选，指定配置 ID
+}
+
+// StreamChunk 流式响应的单个文本片段
+message StreamChunk {
+  string content = 1;
+}
+
+// ModelsRequest 获取可用模型请求
+message ModelsRequest {
+  int64 config_id = 1;
+}
+
+// ModelsResponse 可用模型响应
+message ModelsResponse {
+  repeated string models = 1;
+}
+
+// ValidateRequest 模型验证请求
+message ValidateRequest {
+  int64 config_id = 1;
+}
+
+// ValidateResponse 模型验证响应
+message ValidateResponse {
+  bool success = 1;
+  string message = 2;
+}

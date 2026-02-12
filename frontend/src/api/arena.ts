@@ -24,7 +24,8 @@ export const buildCompeteUrl = (params: {
     queryParams.append('promptVersionId', params.promptVersionId.toString())
     queryParams.append('variables', JSON.stringify(params.variables))
     queryParams.append('modelIds', params.modelIds.join(','))
-    return `${baseUrl}/arena/compete?${queryParams.toString()}`
+    // Changed to point to Go AI Gateway path via Nginx proxy
+    return `${baseUrl}/ai/arena/compete?${queryParams.toString()}`
 }
 
 export interface ArenaEvent {

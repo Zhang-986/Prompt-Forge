@@ -51,7 +51,7 @@
           class="sidebar-promo-card">
           <div class="promo-content">
             <div class="promo-badge">NEW</div>
-            <div class="promo-title">GLM-4.7 已上线</div>
+            <div class="promo-title">GLM-5.0 已上线</div>
             <div class="promo-desc">免费领 2000万 Tokens &rarr;</div>
           </div>
           <div class="promo-shine"></div>

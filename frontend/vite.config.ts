@@ -18,7 +18,12 @@ export default defineConfig({
       'pf.nmcp.tech' // 允许你的域名访问
     ],
     proxy: {
-      // 代理 /api 到后端
+      // 优先匹配 /api/ai (Go Service)
+      '/api/ai': {
+        target: 'http://localhost:8081',
+        changeOrigin: true
+      },
+      // 默认代理 /api 到后端 (Java Service)
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true
