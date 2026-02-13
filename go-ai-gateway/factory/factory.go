@@ -38,7 +38,7 @@ func NewFactory(strategies ...strategy.LlmStreamStrategy) *DynamicLlmClientFacto
 // GenerateStream 使用用户配置创建流式生成
 //
 // 工厂方法：根据 provider 从策略映射中选择对应策略
-func (f *DynamicLlmClientFactory) GenerateStream(ctx context.Context, config *model.UserModelConfig, prompt string) (<-chan string, <-chan error) {
+func (f *DynamicLlmClientFactory) GenerateStream(ctx context.Context, config *model.UserModelConfig, prompt string) (<-chan strategy.StreamChunk, <-chan error) {
 	provider := config.Provider
 
 	s, ok := f.strategies[provider]
@@ -52,7 +52,7 @@ func (f *DynamicLlmClientFactory) GenerateStream(ctx context.Context, config *mo
 		errCh := make(chan error, 1)
 		errCh <- fmt.Errorf("无法找到合适的 AI 调用策略: provider=%s", provider)
 		close(errCh)
-		ch := make(chan string)
+		ch := make(chan strategy.StreamChunk)
 		close(ch)
 		return ch, errCh
 	}

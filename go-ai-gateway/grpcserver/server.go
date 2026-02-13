@@ -51,9 +51,9 @@ func (s *AiGatewayServer) GenerateStream(req *pb.StreamRequest, stream grpc.Serv
 	contentCh, errCh := s.factory.GenerateStream(ctx, cfg, req.Prompt)
 
 	// 逐 chunk 发送
-	for content := range contentCh {
-		chunk := &pb.StreamChunk{Content: content}
-		if err := stream.SendMsg(chunk); err != nil {
+	for chunk := range contentCh {
+		grpcChunk := &pb.StreamChunk{Content: chunk.Content}
+		if err := stream.SendMsg(grpcChunk); err != nil {
 			return status.Errorf(codes.Internal, "发送流数据失败: %v", err)
 		}
 	}

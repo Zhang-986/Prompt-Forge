@@ -38,24 +38,24 @@ func (s *GeminiStrategy) SupportedProviders() []string {
 	return []string{"google"}
 }
 
-func (s *GeminiStrategy) GenerateStream(ctx context.Context, config *model.UserModelConfig, prompt string) (<-chan string, <-chan error) {
-	contentCh := make(chan string, 64)
+func (s *GeminiStrategy) GenerateStream(ctx context.Context, config *model.UserModelConfig, prompt string) (<-chan StreamChunk, <-chan error) {
+	chunkCh := make(chan StreamChunk, 64)
 	errCh := make(chan error, 1)
 
 	go func() {
-		defer close(contentCh)
+		defer close(chunkCh)
 		defer close(errCh)
 
-		err := s.doStreamWithRetry(ctx, config, prompt, contentCh)
+		err := s.doStreamWithRetry(ctx, config, prompt, chunkCh)
 		if err != nil {
 			errCh <- err
 		}
 	}()
 
-	return contentCh, errCh
+	return chunkCh, errCh
 }
 
-func (s *GeminiStrategy) doStreamWithRetry(ctx context.Context, config *model.UserModelConfig, prompt string, ch chan<- string) error {
+func (s *GeminiStrategy) doStreamWithRetry(ctx context.Context, config *model.UserModelConfig, prompt string, ch chan<- StreamChunk) error {
 	maxRetries := 3
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		err := s.doStream(ctx, config, prompt, ch)
@@ -76,7 +76,7 @@ func (s *GeminiStrategy) doStreamWithRetry(ctx context.Context, config *model.Us
 	return nil
 }
 
-func (s *GeminiStrategy) doStream(ctx context.Context, config *model.UserModelConfig, prompt string, ch chan<- string) error {
+func (s *GeminiStrategy) doStream(ctx context.Context, config *model.UserModelConfig, prompt string, ch chan<- StreamChunk) error {
 	baseURL := config.GetEffectiveBaseURL()
 	modelName := config.GetEffectiveModelName()
 
@@ -146,22 +146,28 @@ func (s *GeminiStrategy) doStream(ctx context.Context, config *model.UserModelCo
 			continue
 		}
 
-		content := extractGeminiContent(jsonStr)
-		if content != "" {
-			ch <- content
+		chunks := extractGeminiChunks(jsonStr)
+		for _, chunk := range chunks {
+			ch <- chunk
 		}
 	}
 
 	return scanner.Err()
 }
 
-// extractGeminiContent 从 Gemini 响应中提取文本
-func extractGeminiContent(data string) string {
+// extractGeminiChunks 从 Gemini 响应中提取 StreamChunk
+// 支持 thought (Gemini 2.0 Flash Thinking) 和 text 分离
+func extractGeminiChunks(data string) []StreamChunk {
 	var payload struct {
 		Candidates []struct {
 			Content struct {
 				Parts []struct {
-					Text string `json:"text"`
+					Text         string `json:"text"`
+					Thought      string `json:"thought"`
+					FunctionCall *struct {
+						Name string                 `json:"name"`
+						Args map[string]interface{} `json:"args"`
+					} `json:"functionCall"`
 				} `json:"parts"`
 			} `json:"content"`
 		} `json:"candidates"`
@@ -169,13 +175,33 @@ func extractGeminiContent(data string) string {
 
 	if err := json.Unmarshal([]byte(data), &payload); err != nil {
 		log.Printf("解析 Gemini 响应失败: %v", err)
-		return ""
+		return nil
 	}
 
-	if len(payload.Candidates) > 0 &&
-		len(payload.Candidates[0].Content.Parts) > 0 {
-		return payload.Candidates[0].Content.Parts[0].Text
+	if len(payload.Candidates) == 0 {
+		return nil
 	}
 
-	return ""
+	var chunks []StreamChunk
+	parts := payload.Candidates[0].Content.Parts
+
+	for _, part := range parts {
+		// 深度思考 (Gemini 2.0 Flash Thinking)
+		if part.Thought != "" {
+			chunks = append(chunks, Reasoning(part.Thought))
+		}
+
+		// 正式回答
+		if part.Text != "" {
+			chunks = append(chunks, Content(part.Text))
+		}
+
+		// 函数调用
+		if part.FunctionCall != nil {
+			toolJSON, _ := json.Marshal(part.FunctionCall)
+			chunks = append(chunks, ToolCall(string(toolJSON)))
+		}
+	}
+
+	return chunks
 }

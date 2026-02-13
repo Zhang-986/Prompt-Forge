@@ -38,24 +38,24 @@ func (s *ClaudeStrategy) SupportedProviders() []string {
 	return []string{"claude", "anthropic"}
 }
 
-func (s *ClaudeStrategy) GenerateStream(ctx context.Context, config *model.UserModelConfig, prompt string) (<-chan string, <-chan error) {
-	contentCh := make(chan string, 64)
+func (s *ClaudeStrategy) GenerateStream(ctx context.Context, config *model.UserModelConfig, prompt string) (<-chan StreamChunk, <-chan error) {
+	chunkCh := make(chan StreamChunk, 64)
 	errCh := make(chan error, 1)
 
 	go func() {
-		defer close(contentCh)
+		defer close(chunkCh)
 		defer close(errCh)
 
-		err := s.doStreamWithRetry(ctx, config, prompt, contentCh)
+		err := s.doStreamWithRetry(ctx, config, prompt, chunkCh)
 		if err != nil {
 			errCh <- err
 		}
 	}()
 
-	return contentCh, errCh
+	return chunkCh, errCh
 }
 
-func (s *ClaudeStrategy) doStreamWithRetry(ctx context.Context, config *model.UserModelConfig, prompt string, ch chan<- string) error {
+func (s *ClaudeStrategy) doStreamWithRetry(ctx context.Context, config *model.UserModelConfig, prompt string, ch chan<- StreamChunk) error {
 	maxRetries := 2
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		err := s.doStream(ctx, config, prompt, ch)
@@ -76,7 +76,7 @@ func (s *ClaudeStrategy) doStreamWithRetry(ctx context.Context, config *model.Us
 	return nil
 }
 
-func (s *ClaudeStrategy) doStream(ctx context.Context, config *model.UserModelConfig, prompt string, ch chan<- string) error {
+func (s *ClaudeStrategy) doStream(ctx context.Context, config *model.UserModelConfig, prompt string, ch chan<- StreamChunk) error {
 	baseURL := config.GetEffectiveBaseURL()
 	modelName := config.GetEffectiveModelName()
 
@@ -137,33 +137,55 @@ func (s *ClaudeStrategy) doStream(ctx context.Context, config *model.UserModelCo
 			continue
 		}
 
-		content := parseClaudeContent(data)
-		if content != "" {
-			ch <- content
+		chunks := parseClaudeChunks(data)
+		for _, chunk := range chunks {
+			ch <- chunk
 		}
 	}
 
 	return scanner.Err()
 }
 
-// parseClaudeContent 解析 Claude SSE 响应
-// Claude 使用 content_block_delta 事件传递内容
-func parseClaudeContent(data string) string {
+// parseClaudeChunks 解析 Claude SSE 响应
+// 支持 content_block_delta 事件中的 thinking_delta / text_delta / input_json_delta
+func parseClaudeChunks(data string) []StreamChunk {
 	var payload struct {
 		Type  string `json:"type"`
 		Delta struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
+			Type        string `json:"type"`
+			Text        string `json:"text"`
+			Thinking    string `json:"thinking"`
+			PartialJSON string `json:"partial_json"`
 		} `json:"delta"`
 	}
 
 	if err := json.Unmarshal([]byte(data), &payload); err != nil {
-		return ""
+		return nil
 	}
 
-	if payload.Type == "content_block_delta" {
-		return payload.Delta.Text
+	if payload.Type != "content_block_delta" {
+		return nil
 	}
 
-	return ""
+	var chunks []StreamChunk
+
+	switch payload.Delta.Type {
+	case "thinking_delta":
+		// Claude Extended Thinking 深度思考
+		if payload.Delta.Thinking != "" {
+			chunks = append(chunks, Reasoning(payload.Delta.Thinking))
+		}
+	case "text_delta":
+		// 正式回答
+		if payload.Delta.Text != "" {
+			chunks = append(chunks, Content(payload.Delta.Text))
+		}
+	case "input_json_delta":
+		// 工具调用参数
+		if payload.Delta.PartialJSON != "" {
+			chunks = append(chunks, ToolCall(payload.Delta.PartialJSON))
+		}
+	}
+
+	return chunks
 }

@@ -41,25 +41,25 @@ func (s *OpenAIStrategy) SupportedProviders() []string {
 	}
 }
 
-func (s *OpenAIStrategy) GenerateStream(ctx context.Context, config *model.UserModelConfig, prompt string) (<-chan string, <-chan error) {
-	contentCh := make(chan string, 64)
+func (s *OpenAIStrategy) GenerateStream(ctx context.Context, config *model.UserModelConfig, prompt string) (<-chan StreamChunk, <-chan error) {
+	chunkCh := make(chan StreamChunk, 64)
 	errCh := make(chan error, 1)
 
 	go func() {
-		defer close(contentCh)
+		defer close(chunkCh)
 		defer close(errCh)
 
-		err := s.doStreamWithRetry(ctx, config, prompt, contentCh)
+		err := s.doStreamWithRetry(ctx, config, prompt, chunkCh)
 		if err != nil {
 			errCh <- err
 		}
 	}()
 
-	return contentCh, errCh
+	return chunkCh, errCh
 }
 
 // doStreamWithRetry 带 429 退避重试的流式请求
-func (s *OpenAIStrategy) doStreamWithRetry(ctx context.Context, config *model.UserModelConfig, prompt string, ch chan<- string) error {
+func (s *OpenAIStrategy) doStreamWithRetry(ctx context.Context, config *model.UserModelConfig, prompt string, ch chan<- StreamChunk) error {
 	maxRetries := 2
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		err := s.doStream(ctx, config, prompt, ch)
@@ -86,7 +86,7 @@ func (s *OpenAIStrategy) doStreamWithRetry(ctx context.Context, config *model.Us
 }
 
 // doStream 执行单次流式请求
-func (s *OpenAIStrategy) doStream(ctx context.Context, config *model.UserModelConfig, prompt string, ch chan<- string) error {
+func (s *OpenAIStrategy) doStream(ctx context.Context, config *model.UserModelConfig, prompt string, ch chan<- StreamChunk) error {
 	baseURL := config.GetEffectiveBaseURL()
 	modelName := config.GetEffectiveModelName()
 	provider := config.Provider
@@ -155,9 +155,9 @@ func (s *OpenAIStrategy) doStream(ctx context.Context, config *model.UserModelCo
 			continue
 		}
 
-		content := parseOpenAIContent(data)
-		if content != "" {
-			ch <- content
+		chunks := parseOpenAIChunks(data)
+		for _, chunk := range chunks {
+			ch <- chunk
 		}
 	}
 
@@ -178,39 +178,55 @@ func (s *OpenAIStrategy) determineChatEndpoint(provider, modelName string) strin
 	}
 }
 
-// parseOpenAIContent 解析 OpenAI 格式的流式响应
-func parseOpenAIContent(data string) string {
+// parseOpenAIChunks 解析 OpenAI 格式的流式响应
+// 支持 reasoning_content (DeepSeek R1, OpenAI o1/o3) 和 content 分离
+func parseOpenAIChunks(data string) []StreamChunk {
 	var payload struct {
 		Choices []struct {
 			Delta struct {
 				Content          *string `json:"content"`
 				ReasoningContent *string `json:"reasoning_content"`
+				Reasoning        *string `json:"reasoning"`
+				ToolCalls        []struct {
+					Function struct {
+						Arguments string `json:"arguments"`
+					} `json:"function"`
+				} `json:"tool_calls"`
 			} `json:"delta"`
 		} `json:"choices"`
 	}
 
 	if err := json.Unmarshal([]byte(data), &payload); err != nil {
 		log.Printf("解析 OpenAI 响应失败: %v", err)
-		return ""
+		return nil
 	}
 
 	if len(payload.Choices) == 0 {
-		return ""
+		return nil
 	}
 
-	var sb strings.Builder
+	var chunks []StreamChunk
 	delta := payload.Choices[0].Delta
 
-	// DeepSeek R1 推理内容
-	if delta.ReasoningContent != nil {
-		sb.WriteString(*delta.ReasoningContent)
-	}
-	// 标准内容
-	if delta.Content != nil {
-		sb.WriteString(*delta.Content)
+	// DeepSeek R1 / OpenAI o1 推理内容
+	if delta.ReasoningContent != nil && *delta.ReasoningContent != "" {
+		chunks = append(chunks, Reasoning(*delta.ReasoningContent))
+	} else if delta.Reasoning != nil && *delta.Reasoning != "" {
+		chunks = append(chunks, Reasoning(*delta.Reasoning))
 	}
 
-	return sb.String()
+	// 标准内容
+	if delta.Content != nil && *delta.Content != "" {
+		chunks = append(chunks, Content(*delta.Content))
+	}
+
+	// 工具调用
+	if len(delta.ToolCalls) > 0 {
+		toolJSON, _ := json.Marshal(delta.ToolCalls)
+		chunks = append(chunks, ToolCall(string(toolJSON)))
+	}
+
+	return chunks
 }
 
 // sanitizeAPIError 对 API 错误信息进行脱敏处理

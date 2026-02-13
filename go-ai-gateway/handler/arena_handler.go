@@ -155,7 +155,7 @@ func processModel(ctx context.Context, f *factory.DynamicLlmClientFactory, repo 
 	}
 
 	// 调用 AI
-	contentCh, errCh := f.GenerateStream(ctx, &effectiveConfig, prompt)
+	chunkCh, errCh := f.GenerateStream(ctx, &effectiveConfig, prompt)
 
 	fullContent := ""
 	sequence := 0
@@ -166,15 +166,15 @@ func processModel(ctx context.Context, f *factory.DynamicLlmClientFactory, repo 
 		"modelId": modelID,
 	}
 
-	for content := range contentCh {
+	for chunk := range chunkCh {
 		sequence++
-		fullContent += content
+		fullContent += chunk.Content
 
-		// 发送 content 事件
+		// 发送事件，区分 reasoning / content / tool_call
 		eventChan <- map[string]interface{}{
-			"type":     "content",
+			"type":     string(chunk.Type), // "reasoning" / "content" / "tool_call"
 			"modelId":  modelID,
-			"content":  content,
+			"content":  chunk.Content,
 			"sequence": sequence,
 		}
 	}

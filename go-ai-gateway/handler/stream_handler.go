@@ -54,13 +54,16 @@ func StreamHandler(f *factory.DynamicLlmClientFactory, repo *repository.ConfigRe
 		c.Header("X-Accel-Buffering", "no") // Nginx SSE 必需
 
 		ctx := c.Request.Context()
-		contentCh, errCh := f.GenerateStream(ctx, config, req.Prompt)
+		chunkCh, errCh := f.GenerateStream(ctx, config, req.Prompt)
 
 		flusher := c.Writer
 
-		// 逐 chunk 推送 SSE
-		for content := range contentCh {
-			data, _ := json.Marshal(content)
+		// 逐 chunk 推送 SSE，区分 reasoning 和 content
+		for chunk := range chunkCh {
+			data, _ := json.Marshal(map[string]string{
+				"type":    string(chunk.Type),
+				"content": chunk.Content,
+			})
 			fmt.Fprintf(flusher, "data: %s\n\n", data)
 			flusher.Flush()
 		}
