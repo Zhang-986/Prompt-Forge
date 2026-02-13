@@ -241,3 +241,9 @@ tavily:
 
 github:
   token: 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
+
+# ==================== Go AI Gateway gRPC 配置 ====================
+go-ai-gateway:
+  grpc:
+    host: localhost
+    port: 9090

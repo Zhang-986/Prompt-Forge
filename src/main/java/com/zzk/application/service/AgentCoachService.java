@@ -8,6 +8,7 @@ import com.zzk.domain.repository.PromptCoachSessionRepository;
 import com.zzk.domain.repository.UserModelConfigRepository;
 import com.zzk.domain.repository.UserPreferenceRepository;
 import com.zzk.infrastructure.ai.client.FunctionCallingClient;
+import com.zzk.infrastructure.ai.client.GoAiGatewayGrpcClient;
 import com.zzk.infrastructure.ai.factory.DynamicLlmClientFactory;
 import com.zzk.infrastructure.ai.skill.core.SkillMetadata;
 import com.zzk.infrastructure.ai.skill.registry.SkillRegistry;
@@ -42,6 +43,7 @@ public class AgentCoachService {
     private final UserPreferenceRepository preferenceRepository;
     private final UserModelConfigRepository userConfigRepository;
     private final DynamicLlmClientFactory llmFactory;
+    private final GoAiGatewayGrpcClient goGrpcClient;
     private final SkillRegistry skillRegistry;
     private final FunctionCallingClient functionCallingClient;
     private final SkillSelectorService skillSelectorService;
@@ -50,6 +52,7 @@ public class AgentCoachService {
             UserPreferenceRepository preferenceRepository,
             UserModelConfigRepository userConfigRepository,
             DynamicLlmClientFactory llmFactory,
+            GoAiGatewayGrpcClient goGrpcClient,
             SkillRegistry skillRegistry,
             FunctionCallingClient functionCallingClient,
             SkillSelectorService skillSelectorService) {
@@ -57,6 +60,7 @@ public class AgentCoachService {
         this.preferenceRepository = preferenceRepository;
         this.userConfigRepository = userConfigRepository;
         this.llmFactory = llmFactory;
+        this.goGrpcClient = goGrpcClient;
         this.skillRegistry = skillRegistry;
         this.functionCallingClient = functionCallingClient;
         this.skillSelectorService = skillSelectorService;
@@ -301,22 +305,23 @@ public class AgentCoachService {
 
     /**
      * 降级模式：纯文本流式生成（无工具调用能力）
+     * 通过 gRPC 调用 Go AI Gateway 获取 AI 流式结果
      */
     private String executeFallbackMode(UserModelConfig modelConfig,
             PromptCoachSession session,
             reactor.core.publisher.FluxSink<String> sink) {
         String threadName = Thread.currentThread().getName();
-        log.info("    [{}] 降级模式：开始纯文本流式生成", threadName);
+        log.info("    [{}] 降级模式：通过 gRPC 调用 Go AI Gateway", threadName);
 
         StringBuilder result = new StringBuilder();
-        llmFactory.generateStream(modelConfig, buildAgentPrompt(session))
+        goGrpcClient.generateStream(modelConfig.getId(), buildAgentPrompt(session))
                 .toIterable()
                 .forEach(chunk -> {
                     result.append(chunk);
                     sink.next(chunk); // 流式推送每个文本块
                 });
 
-        log.info("    [{}] 降级模式完成，总计 {} 字符", threadName, result.length());
+        log.info("    [{}] 降级模式完成（via gRPC），总计 {} 字符", threadName, result.length());
         return result.toString();
     }
 

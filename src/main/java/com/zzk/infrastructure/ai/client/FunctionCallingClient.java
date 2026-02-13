@@ -10,9 +10,7 @@ import com.zzk.infrastructure.ai.skill.core.SkillMetadata;
 import com.zzk.infrastructure.ai.skill.registry.SkillRegistry;
 import com.zzk.infrastructure.ai.skill.core.SkillResult;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -30,16 +28,16 @@ import java.util.*;
 @Component
 public class FunctionCallingClient {
 
-    private final WebClient.Builder webClientBuilder;
+    private final GoAiGatewayGrpcClient goGrpcClient;
     private final SkillRegistry skillRegistry;
     private final AgentMonitorService monitorService;
 
     private static final int MAX_TOOL_CALL_ROUNDS = 5; // 防止无限循环
 
-    public FunctionCallingClient(WebClient.Builder webClientBuilder,
-                                 SkillRegistry skillRegistry,
-                                 AgentMonitorService monitorService) {
-        this.webClientBuilder = webClientBuilder;
+    public FunctionCallingClient(GoAiGatewayGrpcClient goGrpcClient,
+            SkillRegistry skillRegistry,
+            AgentMonitorService monitorService) {
+        this.goGrpcClient = goGrpcClient;
         this.skillRegistry = skillRegistry;
         this.monitorService = monitorService;
     }
@@ -54,9 +52,9 @@ public class FunctionCallingClient {
      * @return AI 最终回复
      */
     public String chat(UserModelConfig config,
-                       List<Map<String, Object>> messages,
-                       List<SkillMetadata> skills,
-                       Map<String, Object> context) {
+            List<Map<String, Object>> messages,
+            List<SkillMetadata> skills,
+            Map<String, Object> context) {
         return chat(config, messages, skills, context, null);
     }
 
@@ -71,10 +69,10 @@ public class FunctionCallingClient {
      * @return AI 最终回复
      */
     public String chat(UserModelConfig config,
-                       List<Map<String, Object>> messages,
-                       List<SkillMetadata> skills,
-                       Map<String, Object> context,
-                       java.util.function.Consumer<String> eventCallback) {
+            List<Map<String, Object>> messages,
+            List<SkillMetadata> skills,
+            Map<String, Object> context,
+            java.util.function.Consumer<String> eventCallback) {
         return chatWithRounds(config, messages, skills, context, 0, eventCallback);
     }
 
@@ -82,20 +80,17 @@ public class FunctionCallingClient {
      * 递归调用（带轮次限制）
      */
     private String chatWithRounds(UserModelConfig config,
-                                  List<Map<String, Object>> messages,
-                                  List<SkillMetadata> skills,
-                                  Map<String, Object> context,
-                                  int round,
-                                  java.util.function.Consumer<String> eventCallback) {
+            List<Map<String, Object>> messages,
+            List<SkillMetadata> skills,
+            Map<String, Object> context,
+            int round,
+            java.util.function.Consumer<String> eventCallback) {
         if (round >= MAX_TOOL_CALL_ROUNDS) {
             log.warn("[FunctionCallingClient] 达到最大工具调用轮次 {}", MAX_TOOL_CALL_ROUNDS);
             return "抱歉，工具调用次数过多，请尝试简化请求。";
         }
 
-        String baseUrl = config.getEffectiveBaseUrl();
         String model = config.getEffectiveModelName();
-        String chatPath = determineChatPath(config.getProvider());
-        String fullUrl = normalizeUrl(baseUrl) + chatPath;
 
         log.info("[FunctionCallingClient] round={}, provider={}, model={}, skills={}",
                 round, config.getProvider(), model, skills.stream().map(SkillMetadata::getName).toList());
@@ -117,7 +112,7 @@ public class FunctionCallingClient {
             List<Map<String, Object>> tools = skillRegistry.toOpenAiTools(skills);
             requestBody.put("tools", tools);
             requestBody.put("tool_choice", "auto");
-            
+
             // 🔍 DEBUG: 打印发送给 LLM 的 tools 定义
             log.info("[FunctionCallingClient] 发送给LLM的tools定义: {}", JSON.toJSONString(tools));
         }
@@ -127,7 +122,7 @@ public class FunctionCallingClient {
         // 发送请求
         String response;
         try {
-            response = callApi(fullUrl, config.getApiKey(), config.getProvider(), requestBody);
+            response = callApi(config.getId(), requestBody);
         } catch (Exception e) {
             log.error("[FunctionCallingClient] API 调用失败: {}", e.getMessage(), e);
             monitorService.logLlmCall(getUserId(context), getSessionId(context), model,
@@ -165,11 +160,11 @@ public class FunctionCallingClient {
 
         // 检查是否有 tool_calls
         JSONArray toolCalls = message.getJSONArray("tool_calls");
-        
+
         // 🔍 DEBUG: 打印完整的 message 对象，看看 LLM 实际返回了什么
         log.info("[FunctionCallingClient] LLM返回的message内容: {}", message.toJSONString());
         log.info("[FunctionCallingClient] tool_calls字段: {}", toolCalls != null ? toolCalls.toJSONString() : "null");
-        
+
         if (toolCalls != null && !toolCalls.isEmpty()) {
             log.info("[FunctionCallingClient] ✅ 检测到 {} 个工具调用", toolCalls.size());
 
@@ -314,63 +309,16 @@ public class FunctionCallingClient {
     }
 
     /**
-     * 根据厂商确定正确的 API 路径
+     * 通过 gRPC 调用 Go AI Gateway 转发 Chat Completion 请求
+     * Go 端负责查配置（apiKey/baseUrl）、构建 URL、设置认证头并转发 HTTP 请求
      */
-    private String determineChatPath(String provider) {
-        if (provider == null) {
-            return "/v1/chat/completions";
-        }
+    private String callApi(long configId, Map<String, Object> body) {
+        String requestBodyJson = JSON.toJSONString(body);
+        log.debug("[FunctionCallingClient] 通过 gRPC 转发 Chat Completion: configId={}", configId);
 
-        return switch (provider.toLowerCase()) {
-            // 这些厂商的 baseUrl 已包含版本路径，直接用 /chat/completions
-            case "zhipu", "hunyuan", "baichuan", "moonshot", "qwen", "aliyun",
-                 "deepseek", "minimax", "stepfun", "spark", "yi", "sensenova",
-                 "mistral", "perplexity", "groq", "cohere", "novita", "togetherai",
-                 "ollama", "openrouter" -> "/chat/completions";
-            // Azure 风格
-            case "github" -> "/chat/completions?api-version=2024-12-01-preview";
-            // 标准 OpenAI 格式
-            default -> "/v1/chat/completions";
-        };
-    }
+        String response = goGrpcClient.forwardChatCompletion(configId, requestBodyJson);
 
-    /**
-     * 标准化 URL（移除尾部斜杠）
-     */
-    private String normalizeUrl(String url) {
-        if (url == null) {
-            return "https://api.openai.com";
-        }
-        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
-    }
-
-    /**
-     * 调用 API
-     */
-    private String callApi(String url, String apiKey, String provider, Map<String, Object> body) {
-        log.debug("[FunctionCallingClient] 调用 API: {}", url);
-
-        WebClient.RequestBodySpec request = webClientBuilder.build()
-                .post()
-                .uri(url)
-                .contentType(MediaType.APPLICATION_JSON);
-
-        // 根据厂商设置认证头
-        if ("anthropic".equalsIgnoreCase(provider) || "claude".equalsIgnoreCase(provider)) {
-            request = (WebClient.RequestBodySpec) request
-                    .header("x-api-key", apiKey)
-                    .header("anthropic-version", "2023-06-01");
-        } else {
-            request = (WebClient.RequestBodySpec) request.header("Authorization", "Bearer " + apiKey);
-        }
-
-        String response = request
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
-
-        log.debug("[FunctionCallingClient] API 响应: {} chars", response != null ? response.length() : 0);
+        log.debug("[FunctionCallingClient] gRPC 响应: {} chars", response != null ? response.length() : 0);
         return response;
     }
 

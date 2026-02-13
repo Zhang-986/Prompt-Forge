@@ -2,7 +2,9 @@ syntax = "proto3";
 
 package ai_gateway;
 
-option go_package = "go-ai-gateway/grpcserver/pb";
+option java_multiple_files = true;
+option java_package = "com.zzk.infrastructure.ai.grpc.proto";
+option java_outer_classname = "AiGatewayProto";
 
 // AiGateway gRPC 服务定义
 // 供 Java 服务内部调用 Go AI Gateway 的 AI 能力

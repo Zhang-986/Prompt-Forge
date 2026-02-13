@@ -6,7 +6,7 @@ type ListNode struct {
 }
 
 func getIntersectionNode(headA, headB *ListNode) *ListNode {
-	// 快慢指针
+	// 指针走完，然后同时从两个不同的出发点出发
 	slow, fast := headA, headB
 	for slow != fast {
 		if slow == nil {
