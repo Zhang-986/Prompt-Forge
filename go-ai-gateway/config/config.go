@@ -2,9 +2,8 @@ package config
 
 import (
 	"fmt"
-	"os"
-
 	"gopkg.in/yaml.v3"
+	"os"
 )
 
 // Config 应用配置
@@ -49,7 +48,10 @@ func Load(path string) (*Config, error) {
 
 	cfg := &Config{
 		// 默认值
-		Server: ServerConfig{Port: 8081, GRPCPort: 9090},
+		Server: ServerConfig{
+			Port:     8081,
+			GRPCPort: 9090,
+		},
 		Database: DatabaseConfig{
 			Host:     "10.147.17.199",
 			Port:     3306,
@@ -72,7 +74,10 @@ func Load(path string) (*Config, error) {
 // LoadDefault 使用默认配置（当配置文件不存在时）
 func LoadDefault() *Config {
 	return &Config{
-		Server: ServerConfig{Port: 8081, GRPCPort: 9090},
+		Server: ServerConfig{
+			Port:     8081,
+			GRPCPort: 9090,
+		},
 		Database: DatabaseConfig{
 			Host:     "10.147.17.199",
 			Port:     3306,

@@ -1,8 +1,6 @@
 package middleware
 
-import (
-	"github.com/gin-gonic/gin"
-)
+import "github.com/gin-gonic/gin"
 
 // CORS 跨域中间件
 func CORS() gin.HandlerFunc {
